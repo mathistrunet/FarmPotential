@@ -1,0 +1,7 @@
+html, body {
+  margin: 0;     /* <- enlève les 8px qui créent souvent la barre en plus */
+  height: 100%;
+}
+#root {
+  height: 100%;
+}
