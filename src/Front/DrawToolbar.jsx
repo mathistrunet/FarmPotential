@@ -11,6 +11,19 @@ const IconSquare  = () => <svg viewBox="0 0 24 24" style={iconStyle}><rect x="5"
 const IconTrash   = () => <svg viewBox="0 0 24 24" style={iconStyle}><path d="M6 7h12l-1 13H7L6 7zm3-3h6l1 2H8l1-2z" fill="currentColor"/></svg>;
 const IconEdit    = () => <svg viewBox="0 0 24 24" style={iconStyle}><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" fill="currentColor"/></svg>;
 const IconCheck   = () => <svg viewBox="0 0 24 24" style={iconStyle}><path d="M9 16.2l-3.5-3.5L4 14.2l5 5 11-11-1.4-1.4z" fill="currentColor"/></svg>;
+const IconSelectBox = () => (
+  <svg viewBox="0 0 24 24" style={iconStyle}>
+    <rect
+      x="4"
+      y="4"
+      width="16"
+      height="16"
+      fill="none"
+      stroke="currentColor"
+      strokeDasharray="3 2"
+    />
+  </svg>
+);
 
 /**
  * Barre d'outils de dessin (autonome)
@@ -164,6 +177,14 @@ export default function DrawToolbar({
     setFeatures?.(polys);
   }
 
+  /** Basculer entre sélection simple et multiple */
+  function toggleMultipleSelection() {
+    const draw = drawRef?.current;
+    if (!draw) return;
+    const next = mode === "multiple_selection" ? "simple_select" : "multiple_selection";
+    draw.changeMode(next);
+  }
+
   /**
    * Sync auto: quand Draw crée / met à jour / supprime, on met à jour la liste.
    * (Les events 'draw.create|update|delete' viennent de map, pas de draw.)
@@ -229,6 +250,17 @@ export default function DrawToolbar({
 
       <button onClick={stopEdit} style={btn} title="Terminer l’édition et revenir à la sélection">
         <IconCheck /> {label("Terminer")}
+      </button>
+
+      <button
+        onClick={toggleMultipleSelection}
+        style={{
+          ...btn,
+          background: mode === "multiple_selection" ? "#eef6ff" : "#fff",
+        }}
+        title="Sélection multiple"
+      >
+        <IconSelectBox /> {label("Multi-sélection")}
       </button>
 
       <button onClick={addSquareAtCenter} style={btn} title="Ajouter un carré au centre">
