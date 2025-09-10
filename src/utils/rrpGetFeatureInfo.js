@@ -1,9 +1,12 @@
 import proj4 from "proj4";
 
-const BASE_URL = import.meta.env.VITE_IGN_WMS_R_BASE || "https://data.geopf.fr/wms-r/wms";
+const BASE_URL =
+  import.meta.env.VITE_IGN_WMS_R_BASE || "https://data.geopf.fr/wms-r/wms";
 const LAYER = "INRA.CARTE.SOLS";
 const INFO_FORMAT = "application/json";
 const CRS = "EPSG:3857";
+const VERSION = "1.3.0";
+
 
 export function buildGetFeatureInfoURL(map, pointPx) {
   const bounds = map.getBounds();
@@ -12,29 +15,36 @@ export function buildGetFeatureInfoURL(map, pointPx) {
   const bbox = `${sw[0]},${sw[1]},${ne[0]},${ne[1]}`;
 
   const canvas = map.getCanvas();
-  const rect = canvas.getBoundingClientRect();
-  const width = canvas.width;
-  const height = canvas.height;
-  const x = Math.round(pointPx.x * (width / rect.width));
-  const y = Math.round(pointPx.y * (height / rect.height));
+  const width = canvas.clientWidth;
+  const height = canvas.clientHeight;
+  const x = Math.round(pointPx.x);
+  const y = Math.round(pointPx.y);
+
+  const crsParam = VERSION === "1.3.0" ? "CRS" : "SRS";
+  const xyParamX = VERSION === "1.3.0" ? "I" : "X";
+  const xyParamY = VERSION === "1.3.0" ? "J" : "Y";
 
   const params = new URLSearchParams({
-    service: "WMS",
-    request: "GetFeatureInfo",
-    version: "1.3.0",
-    layers: LAYER,
-    query_layers: LAYER,
-    info_format: INFO_FORMAT,
-    crs: CRS,
-    bbox,
-    width: String(width),
-    height: String(height),
-    i: String(x),
-    j: String(y),
-    styles: "",
+    SERVICE: "WMS",
+    REQUEST: "GetFeatureInfo",
+    VERSION,
+    LAYERS: LAYER,
+    QUERY_LAYERS: LAYER,
+    INFO_FORMAT: INFO_FORMAT,
+    STYLES: "",
+    [crsParam]: CRS,
+    WIDTH: String(width),
+    HEIGHT: String(height),
+    BBOX: bbox,
+    [xyParamX]: String(x),
+    [xyParamY]: String(y),
   });
 
-  return `${BASE_URL}?${params.toString()}`;
+  // Preserve commas in the BBOX parameter
+  let query = params.toString();
+  query = query.replace(`BBOX=${encodeURIComponent(bbox)}`, `BBOX=${bbox}`);
+  return `${BASE_URL}?${query}`;
+
 }
 
 export async function getRrpAtPoint(map, pointPx, { signal } = {}) {
