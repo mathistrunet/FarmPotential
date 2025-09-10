@@ -1,3 +1,4 @@
+
 import MapboxDraw from "@mapbox/mapbox-gl-draw";
 
 // Base simple_select mode from Mapbox Draw
@@ -13,13 +14,16 @@ function isActiveFeature(e) {
   );
 }
 
+
 // Custom simple_select mode enabling box selection with left mouse drag
 const CustomSimpleSelect = { ...SimpleSelect };
 
 // Start box selection on left mouse down (no shift required)
 CustomSimpleSelect.onMouseDown = function (state, e) {
   state.initialDragPanState = this.map.dragPan.isEnabled();
+
   if (isActiveFeature(e)) return this.startOnActiveFeature(state, e);
+
   if (this.drawConfig.boxSelect && e.originalEvent && e.originalEvent.button === 0) {
     return this.startBoxSelect(state, e);
   }
