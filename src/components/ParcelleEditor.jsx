@@ -77,6 +77,9 @@ export default function ParcelleEditor({ features, setFeatures, selectedId, onSe
                 </span>
               )}
             </div>
+            <div style={{ fontSize: 12, color: "#555", marginBottom: 6 }}>
+              Surface : {surfaceHa.toFixed(2)} ha
+            </div>
 
             {/* Ligne 1 : Îlot + Numéro parcelle (compacts) */}
             <div style={{ display: "flex", gap: 4, marginBottom: 6 }}>

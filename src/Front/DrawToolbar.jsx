@@ -200,8 +200,10 @@ export default function DrawToolbar({
       map.off("draw.delete", refreshFromDraw);
       map.off("draw.modechange", onMode);
     };
+
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapRef?.current, drawRef?.current, setFeatures, enlargeVertexHitbox]);
+
 
   return (
     <div className={className} style={{ display:"flex", alignItems:"center", gap: 10 }}>
