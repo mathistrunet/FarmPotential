@@ -1,49 +1,51 @@
-import proj4 from "proj4";
-
 const BASE_URL =
-  import.meta.env.VITE_IGN_WMS_R_BASE || "https://data.geopf.fr/wms-r/wms";
+  import.meta.env.VITE_IGN_WMTS_BASE || "https://data.geopf.fr/private/wmts";
+const API_KEY = import.meta.env.VITE_IGN_API_KEY || "geoportail";
 const LAYER = "INRA.CARTE.SOLS";
+const STYLE = "CARTE DES SOLS";
 const INFO_FORMAT = "application/json";
-const CRS = "EPSG:3857";
-const VERSION = "1.3.0";
+const TILEMATRIXSET = "PM";
 
-
+// Build a WMTS GetFeatureInfo URL using tile coordinates
 export function buildGetFeatureInfoURL(map, pointPx) {
-  const bounds = map.getBounds();
-  const sw = proj4("EPSG:4326", CRS, [bounds.getWest(), bounds.getSouth()]);
-  const ne = proj4("EPSG:4326", CRS, [bounds.getEast(), bounds.getNorth()]);
-  const bbox = `${sw[0]},${sw[1]},${ne[0]},${ne[1]}`;
+  const lngLat = map.unproject(pointPx);
+  const zoom = Math.floor(map.getZoom());
+  const n = 2 ** zoom;
 
-  const canvas = map.getCanvas();
-  const width = canvas.clientWidth;
-  const height = canvas.clientHeight;
-  const x = Math.round(pointPx.x);
-  const y = Math.round(pointPx.y);
+  const xtile = ((lngLat.lng + 180) / 360) * n;
+  const ytile =
+    ((1 -
+      Math.log(
+        Math.tan((lngLat.lat * Math.PI) / 180) +
+          1 / Math.cos((lngLat.lat * Math.PI) / 180)
+      ) /
+        Math.PI) /
+      2) *
+    n;
 
-  const crsParam = VERSION === "1.3.0" ? "CRS" : "SRS";
-  const xyParamX = VERSION === "1.3.0" ? "I" : "X";
-  const xyParamY = VERSION === "1.3.0" ? "J" : "Y";
+  const tilecol = Math.floor(xtile);
+  const tilerow = Math.floor(ytile);
+  const i = Math.floor((xtile - tilecol) * 256);
+  const j = Math.floor((ytile - tilerow) * 256);
 
   const params = new URLSearchParams({
-    SERVICE: "WMS",
+    SERVICE: "WMTS",
     REQUEST: "GetFeatureInfo",
-    VERSION,
-    LAYERS: LAYER,
-    QUERY_LAYERS: LAYER,
-    INFO_FORMAT: INFO_FORMAT,
-    STYLES: "",
-    [crsParam]: CRS,
-    WIDTH: String(width),
-    HEIGHT: String(height),
-    BBOX: bbox,
-    [xyParamX]: String(x),
-    [xyParamY]: String(y),
+    VERSION: "1.0.0",
+    LAYER,
+    STYLE,
+    TILEMATRIXSET,
+    TILEMATRIX: String(zoom),
+    TILECOL: String(tilecol),
+    TILEROW: String(tilerow),
+    FORMAT: "image/png",
+    INFOFORMAT: INFO_FORMAT,
+    I: String(i),
+    J: String(j),
+    apikey: API_KEY,
   });
 
-  // Preserve commas in the BBOX parameter
-  let query = params.toString();
-  query = query.replace(`BBOX=${encodeURIComponent(bbox)}`, `BBOX=${bbox}`);
-  return `${BASE_URL}?${query}`;
+  return `${BASE_URL}?${params.toString()}`;
 
 }
 
