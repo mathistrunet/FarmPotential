@@ -137,7 +137,7 @@ export function useMapInitialization() {
     return () => {
       try {
         map.remove();
-      } catch (e) {
+      } catch {
         // ignore
       }
     };
