@@ -1,6 +1,7 @@
 // src/features/draw/DrawToolbar.jsx
 import React, { useCallback, useEffect, useState } from "react";
 
+
 /** Petite lib d’icônes inline, légères */
 const iconStyle = { width: 18, height: 18, display: "inline-block", verticalAlign: "-3px" };
 const IconTarget  = () => <svg viewBox="0 0 24 24" style={iconStyle}><path d="M12 8a4 4 0 104 4h2a6 6 0 11-6-6v2zM11 2h2v4h-2V2zm0 16h2v4h-2v-4zM2 11h4v2H2v-2zm16 0h4v2H18v-2z" fill="currentColor"/></svg>;
@@ -176,6 +177,13 @@ export default function DrawToolbar({
     const refreshFromDraw = () => {
       const arr = draw.getAll()?.features ?? [];
       const polys = arr.filter((f) => f.geometry?.type === "Polygon");
+      polys.forEach((f) => {
+        const ring = f.geometry?.coordinates?.[0];
+        if (ring) {
+          const ha = ringAreaM2(ring) / 10000;
+          f.properties = { ...f.properties, surfaceHa: ha };
+        }
+      });
       setFeatures?.(polys);
     };
 
@@ -202,6 +210,7 @@ export default function DrawToolbar({
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapRef?.current, drawRef?.current, setFeatures, enlargeVertexHitbox]);
+
 
   return (
     <div className={className} style={{ display:"flex", alignItems:"center", gap: 10 }}>

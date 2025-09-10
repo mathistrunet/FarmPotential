@@ -55,6 +55,7 @@ export default function ParcelleEditor({ features, setFeatures, selectedId, onSe
         const ring = f.geometry?.coordinates?.[0];
         const surfaceHa = ring ? ringAreaM2(ring) / 10000 : null;
 
+
         return (
           <div
             key={id}
@@ -70,6 +71,14 @@ export default function ParcelleEditor({ features, setFeatures, selectedId, onSe
           >
             <div style={{ fontWeight: 600, marginBottom: 6 }}>
               Parcelle {titre}
+              {surfaceHa != null && !Number.isNaN(surfaceHa) && (
+                <span style={{ marginLeft: 8, fontWeight: 400, color: "#555" }}>
+                  ({surfaceHa.toFixed(2)} ha)
+                </span>
+              )}
+            </div>
+            <div style={{ fontSize: 12, color: "#555", marginBottom: 6 }}>
+              Surface : {surfaceHa.toFixed(2)} ha
             </div>
             {surfaceHa != null && !Number.isNaN(surfaceHa) && (
               <div style={{ fontSize: 12, marginBottom: 6 }}>
