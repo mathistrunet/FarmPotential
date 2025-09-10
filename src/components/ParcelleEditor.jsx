@@ -52,12 +52,8 @@ export default function ParcelleEditor({ features, setFeatures, selectedId, onSe
         const num  = (f.properties?.numero ?? "").toString().trim();
         const titre = ilot && num ? `${ilot}.${num}` : (ilot || num || "");
 
-        const surfaceHa =
-          f.properties?.surfaceHa != null
-            ? f.properties.surfaceHa
-            : f.geometry?.coordinates?.[0]
-              ? ringAreaM2(f.geometry.coordinates[0]) / 10000
-              : null;
+        const ring = f.geometry?.coordinates?.[0];
+        const surfaceHa = ring ? ringAreaM2(ring) / 10000 : null;
 
 
         return (
