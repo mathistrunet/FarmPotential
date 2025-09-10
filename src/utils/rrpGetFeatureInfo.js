@@ -7,6 +7,7 @@ const INFO_FORMAT = "application/json";
 const CRS = "EPSG:3857";
 const VERSION = "1.3.0";
 
+
 export function buildGetFeatureInfoURL(map, pointPx) {
   const bounds = map.getBounds();
   const sw = proj4("EPSG:4326", CRS, [bounds.getWest(), bounds.getSouth()]);
@@ -43,6 +44,7 @@ export function buildGetFeatureInfoURL(map, pointPx) {
   let query = params.toString();
   query = query.replace(`BBOX=${encodeURIComponent(bbox)}`, `BBOX=${bbox}`);
   return `${BASE_URL}?${query}`;
+
 }
 
 export async function getRrpAtPoint(map, pointPx, { signal } = {}) {
