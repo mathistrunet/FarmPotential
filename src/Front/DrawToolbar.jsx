@@ -211,6 +211,7 @@ export default function DrawToolbar({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapRef?.current, drawRef?.current, setFeatures, enlargeVertexHitbox]);
 
+
   return (
     <div className={className} style={{ display:"flex", alignItems:"center", gap: 10 }}>
       <button onClick={recenterOnFeatures} style={btn} title="Recentrer sur les parcelles">
