@@ -98,7 +98,9 @@ export default function ImportTelepacButton({
               ],
               { padding: 40 }
             );
-          } catch {}
+          } catch {
+            /* ignore fitBounds errors */
+          }
         }
       }
 
