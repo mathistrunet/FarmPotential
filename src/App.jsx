@@ -1,5 +1,5 @@
 // src/App.jsx
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 import RasterToggles from "./components/RasterToggles";
 import ParcelleEditor from "./components/ParcelleEditor";
@@ -13,6 +13,8 @@ import RpgFeature from "./Front/useRpgLayer";
 import DrawToolbar from "./Front/DrawToolbar";
 // ✅ Import/Export Télépac (chemin corrigé)
 import ImportTelepacButton, { ExportTelepacButton } from "./Front/TelepacButton";
+import SoilInfoPanel from "./components/SoilInfoPanel";
+import { getRrpAtPoint } from "./utils/rrpGetFeatureInfo";
 
 export default function App() {
   const {
@@ -35,6 +37,33 @@ export default function App() {
   const [sideOpen, setSideOpen] = useState(true);          // panneau latéral ouvert/fermé
   const [activeTab, setActiveTab] = useState("parcelles"); // "parcelles" | "calques"
   const [compact, setCompact] = useState(false);
+
+  const [soilInfo, setSoilInfo] = useState(null);
+  const soilAbortRef = useRef(null);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const handleClick = (e) => {
+      if (soilAbortRef.current) soilAbortRef.current.abort();
+      const controller = new AbortController();
+      soilAbortRef.current = controller;
+      setSoilInfo({ loading: true });
+      getRrpAtPoint(map, e.point, { signal: controller.signal })
+        .then((data) => setSoilInfo({ loading: false, ...data }))
+        .catch((err) => {
+          if (err.name === "AbortError") return;
+          setSoilInfo({ loading: false, error: true });
+        });
+    };
+
+    map.on("click", handleClick);
+    return () => {
+      map.off("click", handleClick);
+      if (soilAbortRef.current) soilAbortRef.current.abort();
+    };
+  }, [mapRef]);
 
   // ---- Styles de la barre d’outils bas
   const barBase = {
@@ -97,6 +126,7 @@ export default function App() {
     <div style={layoutStyle}>
       {/* Carte */}
       <div id="map" style={{ height: "100dvh", width: "100%" }} />
+      <SoilInfoPanel info={soilInfo} />
 
       {/* Panneau latéral (onglets + repliable) */}
       <div
