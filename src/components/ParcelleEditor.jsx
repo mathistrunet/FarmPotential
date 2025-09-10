@@ -52,9 +52,13 @@ export default function ParcelleEditor({ features, setFeatures, selectedId, onSe
         const num  = (f.properties?.numero ?? "").toString().trim();
         const titre = ilot && num ? `${ilot}.${num}` : (ilot || num || "");
 
-        const surfaceHa = f.geometry?.coordinates?.[0]
-          ? ringAreaM2(f.geometry.coordinates[0]) / 10000
-          : null;
+        const surfaceHa =
+          f.properties?.surfaceHa != null
+            ? f.properties.surfaceHa
+            : f.geometry?.coordinates?.[0]
+              ? ringAreaM2(f.geometry.coordinates[0]) / 10000
+              : null;
+
 
         return (
           <div
@@ -80,6 +84,11 @@ export default function ParcelleEditor({ features, setFeatures, selectedId, onSe
             <div style={{ fontSize: 12, color: "#555", marginBottom: 6 }}>
               Surface : {surfaceHa.toFixed(2)} ha
             </div>
+            {surfaceHa != null && !Number.isNaN(surfaceHa) && (
+              <div style={{ fontSize: 12, marginBottom: 6 }}>
+                Surface : {surfaceHa.toFixed(2)} ha
+              </div>
+            )}
 
             {/* Ligne 1 : Îlot + Numéro parcelle (compacts) */}
             <div style={{ display: "flex", gap: 4, marginBottom: 6 }}>

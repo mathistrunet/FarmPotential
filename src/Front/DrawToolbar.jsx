@@ -1,5 +1,6 @@
 // src/features/draw/DrawToolbar.jsx
 import React, { useCallback, useEffect, useState } from "react";
+import { ringAreaM2 } from "../utils/geometry";
 
 /** Petite lib d’icônes inline, légères */
 const iconStyle = { width: 18, height: 18, display: "inline-block", verticalAlign: "-3px" };
@@ -176,6 +177,13 @@ export default function DrawToolbar({
     const refreshFromDraw = () => {
       const arr = draw.getAll()?.features ?? [];
       const polys = arr.filter((f) => f.geometry?.type === "Polygon");
+      polys.forEach((f) => {
+        const ring = f.geometry?.coordinates?.[0];
+        if (ring) {
+          const ha = ringAreaM2(ring) / 10000;
+          f.properties = { ...f.properties, surfaceHa: ha };
+        }
+      });
       setFeatures?.(polys);
     };
 
@@ -200,7 +208,6 @@ export default function DrawToolbar({
       map.off("draw.delete", refreshFromDraw);
       map.off("draw.modechange", onMode);
     };
-
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapRef?.current, drawRef?.current, setFeatures, enlargeVertexHitbox]);
 
