@@ -46,6 +46,7 @@ export function buildGetFeatureInfoURL(map, pointPx) {
   });
 
   return `${BASE_URL}?${params.toString()}`;
+
 }
 
 export async function getRrpAtPoint(map, pointPx, { signal } = {}) {
