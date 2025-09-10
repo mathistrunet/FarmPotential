@@ -3,6 +3,7 @@ import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import MapboxDraw from "@mapbox/mapbox-gl-draw";
 import "@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css";
+import CustomSimpleSelect from "./customSimpleSelect.js";
 import { useRasterLayers } from "./useRasterLayers";
 
 if (typeof window !== "undefined") window.mapboxgl = maplibregl;
@@ -71,6 +72,7 @@ export function useMapInitialization() {
         displayControlsDefault: false,
         controls: {},
         defaultMode: "simple_select",
+        modes: { ...MapboxDraw.modes, simple_select: CustomSimpleSelect },
         styles: [
           {
             id: "draw-polygon-fill-inactive",
