@@ -1,5 +1,5 @@
 // src/features/draw/DrawToolbar.jsx
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 
 /** Petite lib d’icônes inline, légères */
 const iconStyle = { width: 18, height: 18, display: "inline-block", verticalAlign: "-3px" };
@@ -39,7 +39,7 @@ export default function DrawToolbar({
   const label = (t) => (compact ? null : <span>{t}</span>);
 
   /** 🔎 Agrandit les "poignées" (sommets/milieux) de Mapbox Draw pour faciliter la sélection */
-  function enlargeVertexHitbox(radius = 8, strokeWidth = 3) {
+  const enlargeVertexHitbox = useCallback((radius = 8, strokeWidth = 3) => {
     const map = mapRef?.current;
     if (!map || typeof map.getStyle !== "function") return;
     const style = map.getStyle();
@@ -48,11 +48,15 @@ export default function DrawToolbar({
       const id = ly.id || "";
       // Cible les calques de points de Draw : vertex & midpoint (actifs/inactifs)
       if (/gl-draw.*(vertex|midpoint)/.test(id)) {
-        try { map.setPaintProperty(id, "circle-radius", radius); } catch {}
-        try { map.setPaintProperty(id, "circle-stroke-width", strokeWidth); } catch {}
+        try { map.setPaintProperty(id, "circle-radius", radius); } catch {
+          /* ignore errors when updating vertex radius */
+        }
+        try { map.setPaintProperty(id, "circle-stroke-width", strokeWidth); } catch {
+          /* ignore errors when updating vertex stroke */
+        }
       }
     });
-  }
+  }, [mapRef]);
 
   /** Recentrer la vue sur les features (polygones) existantes */
   function recenterOnFeatures() {
@@ -105,7 +109,9 @@ export default function DrawToolbar({
           map.fitBounds([[Math.min(...xs), Math.min(...ys)], [Math.max(...xs), Math.max(...ys)]], { padding: 60 });
         }
       }
-    } catch {}
+    } catch {
+      /* ignore map fitting errors */
+    }
   }
 
   /** Quitter l’édition (retour en sélection simple) */
@@ -194,7 +200,8 @@ export default function DrawToolbar({
       map.off("draw.delete", refreshFromDraw);
       map.off("draw.modechange", onMode);
     };
-  }, [mapRef, drawRef, setFeatures]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapRef?.current, drawRef?.current, setFeatures, enlargeVertexHitbox]);
 
   return (
     <div className={className} style={{ display:"flex", alignItems:"center", gap: 10 }}>

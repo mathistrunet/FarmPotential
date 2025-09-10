@@ -1,6 +1,7 @@
 // src/components/ParcelleEditor.jsx
 import React, { useEffect, useRef, useState } from "react";
 import { entriesCodebook, labelFromCode, codeFromLabel } from "../utils/cultureLabels";
+import { ringAreaM2 } from "../utils/geometry";
 
 export default function ParcelleEditor({ features, setFeatures, selectedId, onSelect }) {
   const options = entriesCodebook();                 // [[code,label], ...]
@@ -51,6 +52,10 @@ export default function ParcelleEditor({ features, setFeatures, selectedId, onSe
         const num  = (f.properties?.numero ?? "").toString().trim();
         const titre = ilot && num ? `${ilot}.${num}` : (ilot || num || "");
 
+        const surfaceHa = f.geometry?.coordinates?.[0]
+          ? ringAreaM2(f.geometry.coordinates[0]) / 10000
+          : null;
+
         return (
           <div
             key={id}
@@ -66,6 +71,11 @@ export default function ParcelleEditor({ features, setFeatures, selectedId, onSe
           >
             <div style={{ fontWeight: 600, marginBottom: 6 }}>
               Parcelle {titre}
+              {surfaceHa != null && !Number.isNaN(surfaceHa) && (
+                <span style={{ marginLeft: 8, fontWeight: 400, color: "#555" }}>
+                  ({surfaceHa.toFixed(2)} ha)
+                </span>
+              )}
             </div>
 
             {/* Ligne 1 : Îlot + Numéro parcelle (compacts) */}
