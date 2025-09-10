@@ -1,5 +1,6 @@
 // src/features/draw/DrawToolbar.jsx
 import React, { useCallback, useEffect, useState } from "react";
+import { ringAreaM2 } from "../utils/geometry";
 
 
 /** Petite lib d’icônes inline, légères */
