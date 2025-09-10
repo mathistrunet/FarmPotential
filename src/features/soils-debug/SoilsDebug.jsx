@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 function buildWmsTileTemplate({ base, layer, version = "1.3.0" }) {
-  const common = `SERVICE=WMS&REQUEST=GetMap&VERSION=${encodeURIComponent(version)}&FORMAT=image/png&TRANSPARENT=true&LAYERS=${encodeURIComponent(layer)}&STYLES=`;
+  const common = `SERVICE=WMS&REQUEST=GetMap&VERSION=${encodeURIComponent(version)}&FORMAT=image/png&TRANSPARENT=true&LAYERS=${layer}&STYLES=`;
   if (version === "1.3.0") {
     return `${base}?${common}&CRS=EPSG:3857&WIDTH=256&HEIGHT=256&BBOX={bbox-epsg-3857}`;
   }

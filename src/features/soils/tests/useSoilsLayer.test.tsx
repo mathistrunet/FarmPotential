@@ -54,5 +54,6 @@ describe("useSoilsLayer", () => {
     expect(adapterSpy).toHaveBeenCalled();
 
     act(() => toggle());
+    expect(map.off).toHaveBeenCalledWith("click", clickHandler);
   });
 });

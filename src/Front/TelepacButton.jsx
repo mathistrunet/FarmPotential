@@ -1,4 +1,4 @@
-// src/features/importExport/TelepacButton.jsx
+// src/Front/TelepacButton.jsx
 import React, { useRef, useState } from "react";
 import { parseTelepacXmlToFeatures, buildTelepacXML } from "../services/telepacXml";
 
@@ -25,7 +25,7 @@ export default function ImportTelepacButton({
   buttonStyle,
   disabled = false,
   fileAccept = ".xml",
-  // mode = "append", Si on veut réactiver la fonction replace à l'import d'un parcelllaire
+  // mode = "append", Si on veut réactiver la fonction replace à l'import d'un parcellaire
   zoomOnImport = true,
   labelImport,
   onImported,

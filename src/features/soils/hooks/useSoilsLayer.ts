@@ -46,9 +46,7 @@ export function useSoilsLayer(mapRef: any) {
         map.addSource(srcId, {
           type: "raster",
           tiles: [
-            `${cfg.wms!.url}?SERVICE=WMS&VERSION=${version}&REQUEST=GetMap&LAYERS=${encodeURIComponent(
-              cfg.wms!.layer
-            )}&STYLES=&FORMAT=image/png&TRANSPARENT=TRUE&${crsParam}=EPSG:3857&WIDTH=256&HEIGHT=256&BBOX={bbox-epsg-3857}`,
+            `${cfg.wms!.url}?SERVICE=WMS&VERSION=${version}&REQUEST=GetMap&LAYERS=${cfg.wms!.layer}&STYLES=&FORMAT=image/png&TRANSPARENT=TRUE&${crsParam}=EPSG:3857&WIDTH=256&HEIGHT=256&BBOX={bbox-epsg-3857}`,
           ],
           tileSize: 256,
           attribution: `<a href="${cfg.attribution.url}" target="_blank">${cfg.attribution.text}</a>`,
