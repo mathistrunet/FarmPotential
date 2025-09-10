@@ -1,52 +1,45 @@
 const BASE_URL =
-  import.meta.env.VITE_IGN_WMTS_BASE || "https://data.geopf.fr/private/wmts";
-const API_KEY = import.meta.env.VITE_IGN_API_KEY || "geoportail";
+  import.meta.env.VITE_IGN_WMS_R_BASE || "https://data.geopf.fr/wms-r/wms";
 const LAYER = "INRA.CARTE.SOLS";
-const STYLE = "CARTE DES SOLS";
 const INFO_FORMAT = "application/json";
-const TILEMATRIXSET = "PM";
 
-// Build a WMTS GetFeatureInfo URL using tile coordinates
+// Convert lon/lat (EPSG:4326) to WebMercator (EPSG:3857)
+function toMercator(lng, lat) {
+  const R = 6378137;
+  const x = (lng * Math.PI) / 180 * R;
+  const y =
+    Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360)) * R;
+  return [x, y];
+}
+
+// Build a WMS GetFeatureInfo URL
 export function buildGetFeatureInfoURL(map, pointPx) {
-  const lngLat = map.unproject(pointPx);
-  const zoom = Math.floor(map.getZoom());
-  const n = 2 ** zoom;
+  const bounds = map.getBounds();
+  const sw = bounds.getSouthWest();
+  const ne = bounds.getNorthEast();
+  const [minX, minY] = toMercator(sw.lng, sw.lat);
+  const [maxX, maxY] = toMercator(ne.lng, ne.lat);
+  const bbox = `${minX},${minY},${maxX},${maxY}`;
 
-  const xtile = ((lngLat.lng + 180) / 360) * n;
-  const ytile =
-    ((1 -
-      Math.log(
-        Math.tan((lngLat.lat * Math.PI) / 180) +
-          1 / Math.cos((lngLat.lat * Math.PI) / 180)
-      ) /
-        Math.PI) /
-      2) *
-    n;
-
-  const tilecol = Math.floor(xtile);
-  const tilerow = Math.floor(ytile);
-  const i = Math.floor((xtile - tilecol) * 256);
-  const j = Math.floor((ytile - tilerow) * 256);
-
+  const { width, height } = map.getCanvas();
   const params = new URLSearchParams({
-    SERVICE: "WMTS",
+    SERVICE: "WMS",
     REQUEST: "GetFeatureInfo",
-    VERSION: "1.0.0",
-    LAYER,
-    STYLE,
-    TILEMATRIXSET,
-    TILEMATRIX: String(zoom),
-    TILECOL: String(tilecol),
-    TILEROW: String(tilerow),
-    FORMAT: "image/png",
-    INFOFORMAT: INFO_FORMAT,
-    I: String(i),
-    J: String(j),
-    apikey: API_KEY,
+    VERSION: "1.3.0",
+    LAYERS: LAYER,
+    QUERY_LAYERS: LAYER,
+    STYLES: "",
+    CRS: "EPSG:3857",
+    WIDTH: String(width),
+    HEIGHT: String(height),
+    I: String(Math.round(pointPx.x)),
+    J: String(Math.round(pointPx.y)),
+    INFO_FORMAT: INFO_FORMAT,
   });
-
-  return `${BASE_URL}?${params.toString()}`;
-
+  params.set("BBOX", bbox);
+  // Preserve comma-separated bbox
+  const query = params.toString().replaceAll("%2C", ",");
+  return `${BASE_URL}?${query}`;
 }
 
 export async function getRrpAtPoint(map, pointPx, { signal } = {}) {
