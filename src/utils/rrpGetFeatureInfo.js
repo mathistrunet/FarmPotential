@@ -1,117 +1,67 @@
-// src/utils/rrpGetFeatureInfo.js
-const WMS_V_BASE = import.meta.env?.VITE_IGN_WMS_V_BASE ?? "https://data.geopf.fr/wms-v/ows";
-const WMS_R_BASE = import.meta.env?.VITE_IGN_WMS_R_BASE ?? "https://data.geopf.fr/wms-r/wms";
-
-// ⚠︎ En vecteur, la couche “sols” est suffixée :
-const LAYER_V = import.meta.env?.VITE_IGN_SOILS_LAYER_V ?? "INRA.CARTE.SOLS:geoportail_vf";
-// En raster on garde l’alias court :
-const LAYER_R = import.meta.env?.VITE_IGN_SOILS_LAYER_R ?? "INRA.CARTE.SOLS";
-
-const CRS = "EPSG:3857";
-const VERSION = "1.3.0";
+const BASE_URL =
+  import.meta.env.VITE_IGN_WMTS_BASE || "https://data.geopf.fr/private/wmts";
+const API_KEY = import.meta.env.VITE_IGN_API_KEY || "geoportail";
+const LAYER = "INRA.CARTE.SOLS";
+const STYLE = "CARTE DES SOLS";
 const INFO_FORMAT = "application/json";
-const IMAGE_FORMAT = "image/png";
+const TILEMATRIXSET = "PM";
 
-const R = 6378137;
-const toRad = (deg) => (deg * Math.PI) / 180;
-function lonLatTo3857(lon, lat) {
-  const clamped = Math.max(Math.min(lat, 85.05112878), -85.05112878);
-  return {
-    x: R * toRad(lon),
-    y: R * Math.log(Math.tan(Math.PI / 4 + toRad(clamped) / 2)),
-  };
-}
+// Build a WMTS GetFeatureInfo URL using tile coordinates
+export function buildGetFeatureInfoURL(map, pointPx) {
+  const lngLat = map.unproject(pointPx);
+  const zoom = Math.floor(map.getZoom());
+  const n = 2 ** zoom;
 
-function buildURL(base, layer, map, pointPx) {
-  // BBOX exact depuis les coins écran (gestion rotation éventuelle OK côté WMS : bbox axis-aligned)
-  const el = map.getCanvas();
-  const w = Math.round(el.clientWidth);
-  const h = Math.round(el.clientHeight);
+  const xtile = ((lngLat.lng + 180) / 360) * n;
+  const ytile =
+    ((1 -
+      Math.log(
+        Math.tan((lngLat.lat * Math.PI) / 180) +
+          1 / Math.cos((lngLat.lat * Math.PI) / 180)
+      ) /
+        Math.PI) /
+      2) *
+    n;
 
-  const tl = map.unproject([0, 0]);           // top-left
-  const br = map.unproject([w, h]);           // bottom-right
+  const tilecol = Math.floor(xtile);
+  const tilerow = Math.floor(ytile);
+  const i = Math.floor((xtile - tilecol) * 256);
+  const j = Math.floor((ytile - tilerow) * 256);
 
-  const tlm = lonLatTo3857(tl.lng, tl.lat);
-  const brm = lonLatTo3857(br.lng, br.lat);
-
-  const minx = Math.min(tlm.x, brm.x);
-  const miny = Math.min(tlm.y, brm.y);
-  const maxx = Math.max(tlm.x, brm.x);
-  const maxy = Math.max(tlm.y, brm.y);
-  const bbox = `${minx},${miny},${maxx},${maxy}`;
-
-  const I = Math.round(pointPx.x);
-  const J = Math.round(pointPx.y);
-
-  const p = new URLSearchParams({
-    SERVICE: "WMS",
+  const params = new URLSearchParams({
+    SERVICE: "WMTS",
     REQUEST: "GetFeatureInfo",
-    VERSION,
-    LAYERS: layer,
-    QUERY_LAYERS: layer,
-    STYLES: "",
-    FORMAT: IMAGE_FORMAT,
-    INFO_FORMAT,
-    CRS,
-    BBOX: bbox,
-    WIDTH: String(w),
-    HEIGHT: String(h),
-    I: String(I),
-    J: String(J),
-    FEATURE_COUNT: "5",
-    FI_POINT_TOLERANCE: "5",
+    VERSION: "1.0.0",
+    LAYER,
+    STYLE,
+    TILEMATRIXSET,
+    TILEMATRIX: String(zoom),
+    TILECOL: String(tilecol),
+    TILEROW: String(tilerow),
+    FORMAT: "image/png",
+    INFOFORMAT: INFO_FORMAT,
+    I: String(i),
+    J: String(j),
+    apikey: API_KEY,
   });
 
-  const qs = p.toString().replace(encodeURIComponent(bbox), bbox);
-  return `${base}?${qs}`;
-}
+  return `${BASE_URL}?${params.toString()}`;
 
-async function getAt(base, layer, map, pointPx, signal) {
-  const url = buildURL(base, layer, map, pointPx);
-  console.debug("[RRP] URL:", url);
-  const resp = await fetch(url, { mode: "cors", signal });
-  if (!resp.ok) {
-    const body = await resp.text().catch(() => "");
-    console.error("[RRP] HTTP", resp.status, body);
-    throw new Error(`WMS GetFeatureInfo ${resp.status}`);
-  }
-  // Affiche la structure brute pour debug si besoin
-  const json = await resp.json();
-  console.debug("[RRP] JSON keys:", Object.keys(json || {}));
-  return json;
-}
-
-function pickProps(json) {
-  // Supporte GeoJSON FeatureCollection (classique) et quelques variantes
-  const features =
-    json?.features ??
-    (json?.type === "FeatureCollection" ? [] : []) ?? [];
-  const props = features[0]?.properties ?? null;
-
-  const proportions = props
-    ? Object.fromEntries(
-        Object.entries(props).filter(([k]) =>
-          /pct|pourc|percent|prop|taux/i.test(k)
-        )
-      )
-    : null;
-
-  return { properties: props, proportions };
 }
 
 export async function getRrpAtPoint(map, pointPx, { signal } = {}) {
-  // 1) Essai sur WMS vecteur (renvoie les attributs attendus pour INRA.CARTE.SOLS:geoportail_vf)
-  let jsonV = null;
-  try {
-    jsonV = await getAt(WMS_V_BASE, LAYER_V, map, pointPx, signal);
-    const outV = pickProps(jsonV);
-    if (outV.properties) return outV;
-  } catch (e) {
-    if (e.name !== "AbortError") console.warn("[RRP] WMS-V fallback -> WMS-R");
-  }
-
-  // 2) Fallback raster
-  const jsonR = await getAt(WMS_R_BASE, LAYER_R, map, pointPx, signal);
-  const outR = pickProps(jsonR);
-  return outR;
+  const url = buildGetFeatureInfoURL(map, pointPx);
+  const res = await fetch(url, { signal });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const json = await res.json();
+  const feature = json?.features && json.features[0];
+  const properties = feature ? feature.properties || {} : null;
+  const proportions = properties
+    ? Object.fromEntries(
+        Object.entries(properties).filter(([k]) =>
+          /pct|pourc|prc|percent|taux/i.test(k)
+        )
+      )
+    : null;
+  return { properties, proportions };
 }
