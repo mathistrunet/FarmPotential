@@ -22,6 +22,7 @@ type Options = {
   lineLayerId?: string;
   labelLayerId?: string;
   zIndex?: number;
+  visible?: boolean;
 };
 
 export function useSoilLayerLocal({
@@ -32,9 +33,18 @@ export function useSoilLayerLocal({
   lineLayerId = "soils-rrp-outline",
   labelLayerId = "soils-rrp-label",
   zIndex = 10,
+  visible = true,
 }: Options) {
   useEffect(() => {
     if (!map) return;
+
+    if (!visible) {
+      if (map.getLayer(labelLayerId)) map.removeLayer(labelLayerId);
+      if (map.getLayer(lineLayerId)) map.removeLayer(lineLayerId);
+      if (map.getLayer(fillLayerId)) map.removeLayer(fillLayerId);
+      if (map.getSource(sourceId)) map.removeSource(sourceId);
+      return;
+    }
     let aborted = false;
 
     async function add() {
@@ -156,7 +166,7 @@ export function useSoilLayerLocal({
     return () => {
       aborted = true;
     };
-  }, [map, zipUrl, sourceId, fillLayerId, lineLayerId, labelLayerId, zIndex]);
+  }, [map, visible, zipUrl, sourceId, fillLayerId, lineLayerId, labelLayerId, zIndex]);
 }
 
 function getLayerIdBelow(map: maplibregl.Map, zIndex: number): string | null {
