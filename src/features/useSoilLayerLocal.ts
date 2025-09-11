@@ -2,11 +2,10 @@ import { useEffect } from "react";
 import type maplibregl from "maplibre-gl";
 
 // ⬇️ imports RELATIFS (plus d'alias "@")
-import { loadLocalRrpZip, pickProp } from "../services/rrpLocal";
+import { loadLocalRrpZip } from "../services/rrpLocal";
 import {
   FIELD_UCS,
   FIELD_TEXTURE,
-  FIELD_PROF,
   FIELD_LIB,
   TEXTURE_COLORS,
   DEFAULT_FILL,
@@ -132,19 +131,16 @@ export function useSoilLayerLocal({
         map.on("click", fillLayerId, (e) => {
           const f = e.features?.[0];
           if (!f) return;
-          const p: any = f.properties ?? {};
-          const ucs = pickProp<string>(p, FIELD_UCS, "UCS ?");
-          const tex = pickProp<string>(p, FIELD_TEXTURE, "—");
-          const prof = pickProp<string>(p, FIELD_PROF, "—");
-          const lib = pickProp<string>(p, FIELD_LIB, "");
-          const html = `
-            <div style="font: 12px/1.4 system-ui, sans-serif">
-              <div><b>UCS</b> : ${escapeHtml(String(ucs))}</div>
-              <div><b>Texture</b> : ${escapeHtml(String(tex))}</div>
-              <div><b>Profondeur</b> : ${escapeHtml(String(prof))}</div>
-              ${lib ? `<div><b>Libellé</b> : ${escapeHtml(String(lib))}</div>` : ""}
-            </div>
-          `;
+          const p: Record<string, any> = f.properties ?? {};
+          const htmlFields = Object.entries(p)
+            .map(
+              ([key, value]) =>
+                `<div><b>${escapeHtml(String(key))}</b> : ${escapeHtml(
+                  value == null ? "—" : String(value)
+                )}</div>`
+            )
+            .join("");
+          const html = `<div style="font: 12px/1.4 system-ui, sans-serif">${htmlFields}</div>`;
           new (window as any).maplibregl.Popup({ closeButton: true })
             .setLngLat(e.lngLat as any)
             .setHTML(html)
