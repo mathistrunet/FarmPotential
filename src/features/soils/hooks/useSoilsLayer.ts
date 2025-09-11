@@ -19,11 +19,22 @@ export function useSoilsLayer(mapRef: any) {
     const clickHandler = (e: maplibregl.MapMouseEvent) => {
       getInfoAtPoint(map, e.lngLat, cfg)
         .then((info) => {
-          const html = info
-            ? `<strong>${info.title}</strong><br/>` +
-              Object.entries(info.attributes)
+          const attrsHtml = info
+            ? Object.entries(info.attributes)
+                .filter(([k]) => !(info.proportions && k in info.proportions))
                 .map(([k, v]) => `${k}: ${v}`)
                 .join("<br/>")
+            : "";
+          const propHtml =
+            info?.proportions && Object.keys(info.proportions).length
+              ? `<br/><strong>Proportions</strong><br/>` +
+                Object.entries(info.proportions)
+                  .map(([k, v]) => `${k}: ${v}`)
+                  .join("<br/>")
+              : "";
+          const coordHtml = `<br/>[${e.lngLat.lng.toFixed(5)}, ${e.lngLat.lat.toFixed(5)}]`;
+          const html = info
+            ? `<strong>${info.title}</strong><br/>${attrsHtml}${propHtml}${coordHtml}`
             : "<em>Aucune donnée</em>";
           new maplibregl.Popup().setLngLat(e.lngLat).setHTML(html).addTo(map);
         })
