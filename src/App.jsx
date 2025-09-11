@@ -1,20 +1,26 @@
 // src/App.jsx
 import React, { useEffect, useRef, useState } from "react";
+import maplibregl from "maplibre-gl";
 
 import RasterToggles from "./components/RasterToggles";
 import ParcelleEditor from "./components/ParcelleEditor";
 import { useMapInitialization } from "./features/map/useMapInitialization";
-import SoilsControl from "./features/soils/components/SoilsControl";
-import { useSoilsLayer } from "./features/soils/hooks/useSoilsLayer";
 
-// ✅ composant RPG autonome (chemin corrigé)
+// ⛔️ retirés car liés aux calques/queries en ligne (Géoportail)
+// import SoilsControl from "./features/soils/components/SoilsControl";
+// import { useSoilsLayer } from "./features/soils/hooks/useSoilsLayer";
+// import SoilInfoPanel from "./components/SoilInfoPanel";
+// import { getRrpAtPoint } from "./utils/rrpGetFeatureInfo";
+
+// ✅ composant RPG autonome (chemin conservé)
 import RpgFeature from "./Front/useRpgLayer";
-// ✅ composant Dessin autonome (chemin corrigé)
+// ✅ composant Dessin autonome (chemin conservé)
 import DrawToolbar from "./Front/DrawToolbar";
-// ✅ Import/Export Télépac (chemin corrigé)
+// ✅ Import/Export Télépac (chemin conservé)
 import ImportTelepacButton, { ExportTelepacButton } from "./Front/TelepacButton";
-import SoilInfoPanel from "./components/SoilInfoPanel";
-import { getRrpAtPoint } from "./utils/rrpGetFeatureInfo";
+
+// ✅ NOUVEAU : hook d’affichage RRP local (depuis un ZIP placé dans /public/data)
+import { useSoilLayerLocal } from "./features/useSoilLayerLocal";
 
 export default function App() {
   const {
@@ -26,44 +32,27 @@ export default function App() {
     selectFeatureOnMap,
   } = useMapInitialization();
 
-  const {
-    visible: soilsVisible,
-    toggle: toggleSoils,
-    layerId: soilsLayerId,
-    setLayerId: setSoilsLayerId,
-  } = useSoilsLayer(mapRef);
-
   // Onglets + panneau latéral repliable
   const [sideOpen, setSideOpen] = useState(true);          // panneau latéral ouvert/fermé
   const [activeTab, setActiveTab] = useState("parcelles"); // "parcelles" | "calques"
   const [compact, setCompact] = useState(false);
 
-  const [soilInfo, setSoilInfo] = useState(null);
-  const soilAbortRef = useRef(null);
-
+  // ✅ expose maplibregl pour les popups utilisés par le hook local
   useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
+    (window).maplibregl = maplibregl;
+  }, []);
 
-    const handleClick = (e) => {
-      if (soilAbortRef.current) soilAbortRef.current.abort();
-      const controller = new AbortController();
-      soilAbortRef.current = controller;
-      setSoilInfo({ loading: true });
-      getRrpAtPoint(map, e.point, { signal: controller.signal })
-        .then((data) => setSoilInfo({ loading: false, ...data }))
-        .catch((err) => {
-          if (err.name === "AbortError") return;
-          setSoilInfo({ loading: false, error: true });
-        });
-    };
-
-    map.on("click", handleClick);
-    return () => {
-      map.off("click", handleClick);
-      if (soilAbortRef.current) soilAbortRef.current.abort();
-    };
-  }, [mapRef]);
+  // ✅ Charge la couche RRP depuis un ZIP local (placer le fichier dans /public/data/)
+  //    Exemple : public/data/rrp_occitanie.zip
+  useSoilLayerLocal({
+    map: mapRef.current,
+    zipUrl: "/data/rrp_occitanie.zip",
+    sourceId: "soils-rrp",
+    fillLayerId: "soils-rrp-fill",
+    lineLayerId: "soils-rrp-outline",
+    labelLayerId: "soils-rrp-label",
+    zIndex: 10,
+  });
 
   // ---- Styles de la barre d’outils bas
   const barBase = {
@@ -126,7 +115,9 @@ export default function App() {
     <div style={layoutStyle}>
       {/* Carte */}
       <div id="map" style={{ height: "100dvh", width: "100%" }} />
-      <SoilInfoPanel info={soilInfo} />
+
+      {/* ⛔️ retiré : panneau d’info sols alimenté par GetFeatureInfo distant */}
+      {/* <SoilInfoPanel info={soilInfo} /> */}
 
       {/* Panneau latéral (onglets + repliable) */}
       <div
@@ -188,7 +179,7 @@ export default function App() {
               cursor: "pointer",
             }}
           >
-            Calques en ligne
+            Calques
           </button>
         </div>
 
@@ -220,23 +211,25 @@ export default function App() {
           </>
         )}
 
-        {/* Calques en ligne */}
-        <div style={{ marginTop: 6 }}>
-          <span
-            style={{ cursor: "default", fontWeight: 600, padding: "6px 0" }}
-          >
-            Calques en ligne
-          </span>
-          <div style={{ marginTop: 8 }}>
-            <RasterToggles mapRef={mapRef} />
-            <SoilsControl
-              visible={soilsVisible}
-              toggle={toggleSoils}
-              layerId={soilsLayerId}
-              setLayerId={setSoilsLayerId}
-            />
+        {/* Calques (hors sols en ligne ; on garde les rasters/basemaps locaux ou tiers) */}
+        {activeTab === "calques" && (
+          <div style={{ marginTop: 6 }}>
+            <span
+              style={{ cursor: "default", fontWeight: 600, padding: "6px 0" }}
+            >
+              Calques
+            </span>
+            <div style={{ marginTop: 8 }}>
+              <RasterToggles mapRef={mapRef} />
+              {/* ⛔️ retiré : contrôle sols en ligne (WMS/WFS) */}
+              {/* <SoilsControl ... /> */}
+              <p style={{ color: "#666", fontSize: 12, marginTop: 8 }}>
+                Les types de sol RRP sont maintenant chargés depuis{" "}
+                <code>/public/data/rrp_occitanie.zip</code> (local).
+              </p>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Bouton flottant pour ouvrir le panneau quand il est fermé */}
@@ -263,7 +256,7 @@ export default function App() {
 
       {/* Barre d’outils bas */}
       <div style={barBase}>
-        {/* Import / Export Télépac : délégué aux nouveaux composants */}
+        {/* Import / Export Télépac */}
         <div style={groupStyle}>
           <ImportTelepacButton
             mapRef={mapRef}
@@ -280,7 +273,7 @@ export default function App() {
           />
         </div>
 
-        {/* Dessin : délégué au composant autonome */}
+        {/* Dessin */}
         <div style={{ ...groupStyle, borderRight: "none" }}>
           <DrawToolbar
             mapRef={mapRef}
