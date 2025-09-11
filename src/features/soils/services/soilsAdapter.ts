@@ -3,14 +3,15 @@ import type { SoilInfo, SoilsLayerConfig } from "../types/soils";
 import { getFeatureInfoWFS, getFeatureInfoWMS } from "./soilsService";
 
 function toSoilInfo(feature: any, cfg: SoilsLayerConfig): SoilInfo {
-  const attrs: Record<string, unknown> = {};
-  cfg.fields.attributes.forEach((f) => {
-    if (feature.properties && feature.properties[f] !== undefined) {
-      attrs[f] = feature.properties[f];
-    }
-  });
-  const title = feature.properties?.[cfg.fields.title] || "Sol";
-  return { title, attributes: attrs, geometry: feature.geometry };
+  const properties = feature.properties || {};
+  const attrs: Record<string, unknown> = { ...properties };
+  const proportions = Object.fromEntries(
+    Object.entries(properties).filter(([k]) =>
+      /pct|pourc|prc|percent|taux/i.test(k)
+    )
+  );
+  const title = properties?.[cfg.fields.title] || "Sol";
+  return { title, attributes: attrs, proportions, geometry: feature.geometry };
 }
 
 export async function getInfoAtPoint(map: Map, lngLat: LngLatLike, cfg: SoilsLayerConfig): Promise<SoilInfo | null> {

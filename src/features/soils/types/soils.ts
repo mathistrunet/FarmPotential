@@ -5,6 +5,7 @@ export interface SoilAttributes {
 export interface SoilInfo {
   title: string;
   attributes: SoilAttributes;
+  proportions?: SoilAttributes;
   geometry?: GeoJSON.Geometry;
 }
 
