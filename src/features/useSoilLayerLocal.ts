@@ -12,6 +12,13 @@ import {
   DEFAULT_OUTLINE,
   DEFAULT_FILL_OPACITY,
 } from "../config/soilsLocalConfig";
+import {
+  loadRrpLookup,
+  keyFromProps,
+  formatAreaHa,
+  centroidLonLat,
+} from "../lib/rrpLookup";
+import type { RrpEntry } from "../lib/rrpLookup";
 
 type Options = {
   map: maplibregl.Map | null;
@@ -128,19 +135,88 @@ export function useSoilLayerLocal({
           getLayerIdBelow(map, zIndex + 2) || undefined
         );
 
-        map.on("click", fillLayerId, (e) => {
+        map.on("click", fillLayerId, async (e) => {
           const f = e.features?.[0];
           if (!f) return;
-          const p: Record<string, any> = f.properties ?? {};
-          const htmlFields = Object.entries(p)
+          const props: Record<string, any> = f.properties ?? {};
+          const feature = {
+            type: "Feature",
+            geometry: f.geometry,
+            properties: {},
+          } as any;
+          const areaHa = formatAreaHa(feature);
+          const [lon, lat] = centroidLonLat(feature);
+
+          let lookupEntry: RrpEntry | undefined;
+          try {
+            const lookup = await loadRrpLookup();
+            lookupEntry = lookup[keyFromProps(props)];
+          } catch {
+            /* already logged */
+          }
+
+          const colorHex = lookupEntry?.color_hex;
+          const summaryRows = [
+            ["Étude", props.NO_ETUDE ?? "—"],
+            ["UCS", props.NO_UCS ?? "—"],
+            [
+              "Couleur",
+              `${props.code_coul ?? "—"}${
+                colorHex ? ` (${colorHex})` : ""
+              }`,
+            ],
+            ["Surface (ha)", areaHa],
+            ["Centroïde", `${lon}, ${lat}`],
+          ]
             .map(
-              ([key, value]) =>
-                `<div><b>${escapeHtml(String(key))}</b> : ${escapeHtml(
-                  value == null ? "—" : String(value)
-                )}</div>`
+              ([k, v]) =>
+                `<tr><th style="text-align:left;">${escapeHtml(String(
+                  k
+                ))}</th><td>${escapeHtml(String(v))}</td></tr>`
             )
             .join("");
-          const html = `<div style="font: 12px/1.4 system-ui, sans-serif">${htmlFields}</div>`;
+
+          let html = `<div style="font: 12px/1.4 system-ui, sans-serif; max-width:260px;">`;
+          html += `<h3 style="margin:0 0 4px">UCS ${escapeHtml(
+            String(props.NO_UCS ?? "—")
+          )} — Étude ${escapeHtml(String(props.NO_ETUDE ?? "—"))}</h3>`;
+          html += `<table style="border-collapse:collapse;margin:0 0 6px;"><tbody>${summaryRows}</tbody></table>`;
+
+          if (lookupEntry) {
+            html += `<div style="margin-top:4px"><b>Contexte UCS</b></div>`;
+            html += `<div>Nom : ${escapeHtml(
+              lookupEntry.nom_ucs ?? "—"
+            )}</div>`;
+            html += `<div>Région nat. : ${escapeHtml(
+              lookupEntry.reg_nat ?? "—"
+            )}</div>`;
+            html += `<div>Alt. min/mod/max : ${escapeHtml(
+              [
+                lookupEntry.alt_min ?? "—",
+                lookupEntry.alt_mod ?? "—",
+                lookupEntry.alt_max ?? "—",
+              ].join("/")
+            )}</div>`;
+            html += `<div>Nb UTS : ${escapeHtml(
+              String(lookupEntry.nb_uts ?? "—")
+            )}</div>`;
+            if (lookupEntry.uts?.length) {
+              const utsItems = lookupEntry.uts
+                .slice()
+                .sort((a, b) => b.pourcent - a.pourcent)
+                .map(
+                  (u) =>
+                    `<li>${escapeHtml(String(
+                      u.pourcent ?? "—"
+                    ))} — ${escapeHtml(u.rp_2008_nom ?? "—")}</li>`
+                )
+                .join("");
+              html += `<div style="margin-top:4px"><b>Composition UTS (%)</b></div><ul style="margin:4px 0 0 16px; padding:0;">${utsItems}</ul>`;
+            }
+          }
+
+          html += `</div>`;
+
           new (window as any).maplibregl.Popup({ closeButton: true })
             .setLngLat(e.lngLat as any)
             .setHTML(html)
