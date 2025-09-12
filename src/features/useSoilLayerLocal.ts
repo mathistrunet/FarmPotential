@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import type maplibregl from "maplibre-gl";
 
 // ⬇️ imports RELATIFS (plus d'alias "@")
-import { loadLocalRrpZip } from "../services/rrpLocal";
+import { loadLocalRrpZip, pickProp } from "../services/rrpLocal";
 import {
   FIELD_UCS,
   FIELD_TEXTURE,
@@ -182,26 +182,34 @@ export function useSoilLayerLocal({
           )} — Étude ${escapeHtml(String(props.NO_ETUDE ?? "—"))}</h3>`;
           html += `<table style="border-collapse:collapse;margin:0 0 6px;"><tbody>${summaryRows}</tbody></table>`;
 
-          if (lookupEntry) {
+          const nomUcs = lookupEntry?.nom_ucs ?? pickProp(props, ["NOM_UCS", "nom_ucs"]);
+          const regNat = lookupEntry?.reg_nat ?? pickProp(props, ["REG_NAT", "reg_nat"]);
+          const altMin = lookupEntry?.alt_min ?? pickProp(props, ["ALT_MIN", "alt_min"]);
+          const altMod = lookupEntry?.alt_mod ?? pickProp(props, ["ALT_MOD", "alt_mod"]);
+          const altMax = lookupEntry?.alt_max ?? pickProp(props, ["ALT_MAX", "alt_max"]);
+          const nbUts = lookupEntry?.nb_uts ?? pickProp(props, ["NB_UTS", "nb_uts"]);
+          const utsList = lookupEntry?.uts;
+
+          if (
+            nomUcs != null ||
+            regNat != null ||
+            altMin != null ||
+            altMod != null ||
+            altMax != null ||
+            nbUts != null ||
+            (utsList && utsList.length)
+          ) {
             html += `<div style="margin-top:4px"><b>Contexte UCS</b></div>`;
-            html += `<div>Nom : ${escapeHtml(
-              lookupEntry.nom_ucs ?? "—"
-            )}</div>`;
-            html += `<div>Région nat. : ${escapeHtml(
-              lookupEntry.reg_nat ?? "—"
-            )}</div>`;
-            html += `<div>Alt. min/mod/max : ${escapeHtml(
-              [
-                lookupEntry.alt_min ?? "—",
-                lookupEntry.alt_mod ?? "—",
-                lookupEntry.alt_max ?? "—",
-              ].join("/")
-            )}</div>`;
-            html += `<div>Nb UTS : ${escapeHtml(
-              String(lookupEntry.nb_uts ?? "—")
-            )}</div>`;
-            if (lookupEntry.uts?.length) {
-              const utsItems = lookupEntry.uts
+            html += `<div>Nom : ${escapeHtml(String(nomUcs ?? "—"))}</div>`;
+            html += `<div>Région nat. : ${escapeHtml(String(regNat ?? "—"))}</div>`;
+            html += `<div>Alt. min/mod/max : ${escapeHtml([
+              altMin ?? "—",
+              altMod ?? "—",
+              altMax ?? "—",
+            ].join("/"))}</div>`;
+            html += `<div>Nb UTS : ${escapeHtml(String(nbUts ?? "—"))}</div>`;
+            if (utsList?.length) {
+              const utsItems = utsList
                 .slice()
                 .sort((a, b) => b.pourcent - a.pourcent)
                 .map(
