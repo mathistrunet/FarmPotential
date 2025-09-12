@@ -12,10 +12,10 @@ export type RrpEntry = {
   alt_max: number;
   nb_uts: number;
   uts: { pourcent: number; rp_2008_nom: string }[];
-  color_hex?: string;
 };
 
 let cache: Record<string, RrpEntry> | null = null;
+let colorCache: Record<string, string> | null = null;
 
 export async function loadRrpLookup(): Promise<Record<string, RrpEntry>> {
   if (cache) return cache;
@@ -28,6 +28,19 @@ export async function loadRrpLookup(): Promise<Record<string, RrpEntry>> {
     cache = {};
   }
   return cache;
+}
+
+export async function loadRrpColors(): Promise<Record<string, string>> {
+  if (colorCache) return colorCache;
+  try {
+    const resp = await fetch("/rrp_colors.json");
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    colorCache = await resp.json();
+  } catch (err) {
+    console.warn("rrp_colors.json introuvable", err);
+    colorCache = {};
+  }
+  return colorCache;
 }
 
 export function keyFromProps(props: Record<string, any>): string {

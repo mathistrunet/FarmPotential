@@ -14,6 +14,7 @@ import {
 } from "../config/soilsLocalConfig";
 import {
   loadRrpLookup,
+  loadRrpColors,
   keyFromProps,
   formatAreaHa,
   centroidLonLat,
@@ -148,14 +149,17 @@ export function useSoilLayerLocal({
           const [lon, lat] = centroidLonLat(feature);
 
           let lookupEntry: RrpEntry | undefined;
+          let colorHex: string | undefined;
           try {
-            const lookup = await loadRrpLookup();
+            const [lookup, colors] = await Promise.all([
+              loadRrpLookup(),
+              loadRrpColors(),
+            ]);
             lookupEntry = lookup[keyFromProps(props)];
+            colorHex = colors[String(props.code_coul)] ?? undefined;
           } catch {
             /* already logged */
           }
-
-          const colorHex = lookupEntry?.color_hex;
           const summaryRows = [
             ["Étude", props.NO_ETUDE ?? "—"],
             ["UCS", props.NO_UCS ?? "—"],
