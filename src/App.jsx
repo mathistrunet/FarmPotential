@@ -5,6 +5,7 @@ import maplibregl from "maplibre-gl";
 import RasterToggles from "./components/RasterToggles";
 import ParcelleEditor from "./components/ParcelleEditor";
 import { useMapInitialization } from "./features/map/useMapInitialization";
+import { DEFAULT_FILL_OPACITY } from "./config/soilsLocalConfig";
 
 // ⛔️ retirés car liés aux calques/queries en ligne (Géoportail)
 // import SoilsControl from "./features/soils/components/SoilsControl";
@@ -37,6 +38,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState("parcelles"); // "parcelles" | "calques"
   const [compact, setCompact] = useState(false);
   const [rrpVisible, setRrpVisible] = useState(true);
+  const [rrpOpacity, setRrpOpacity] = useState(DEFAULT_FILL_OPACITY);
 
   // ✅ expose maplibregl pour les popups utilisés par le hook local
   useEffect(() => {
@@ -54,6 +56,7 @@ export default function App() {
     labelLayerId: "soils-rrp-label",
     zIndex: 10,
     visible: rrpVisible,
+    fillOpacity: rrpOpacity,
   });
 
   // ---- Styles de la barre d’outils bas
@@ -242,6 +245,30 @@ export default function App() {
                 <p style={{ color: "#666", fontSize: 12, marginTop: 8 }}>
                   Chargée depuis <code>/public/data/rrp_occitanie.zip</code>.
                 </p>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    marginTop: 6,
+                  }}
+                >
+                  <span style={{ fontSize: 12, color: "#666" }}>Opacité</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={rrpOpacity}
+                    onInput={(e) => {
+                      const v = parseFloat(e.currentTarget.value);
+                      setRrpOpacity(v);
+                      const map = mapRef.current;
+                      if (map) map.setPaintProperty("soils-rrp-fill", "fill-opacity", v);
+                    }}
+                    style={{ width: "100%" }}
+                  />
+                </div>
               </div>
               {/* ⛔️ retiré : contrôle sols en ligne (WMS/WFS) */}
               {/* <SoilsControl ... /> */}
