@@ -1,5 +1,5 @@
 // src/App.jsx
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import maplibregl from "maplibre-gl";
 
 import RasterToggles from "./components/RasterToggles";
@@ -36,6 +36,7 @@ export default function App() {
   const [sideOpen, setSideOpen] = useState(true);          // panneau latéral ouvert/fermé
   const [activeTab, setActiveTab] = useState("parcelles"); // "parcelles" | "calques"
   const [compact, setCompact] = useState(false);
+  const [rrpVisible, setRrpVisible] = useState(true);
 
   // ✅ expose maplibregl pour les popups utilisés par le hook local
   useEffect(() => {
@@ -52,6 +53,7 @@ export default function App() {
     lineLayerId: "soils-rrp-outline",
     labelLayerId: "soils-rrp-label",
     zIndex: 10,
+    visible: rrpVisible,
   });
 
   // ---- Styles de la barre d’outils bas
@@ -221,12 +223,28 @@ export default function App() {
             </span>
             <div style={{ marginTop: 8 }}>
               <RasterToggles mapRef={mapRef} />
+              <div
+                style={{
+                  border: "1px solid #eee",
+                  borderRadius: 8,
+                  padding: 8,
+                  marginTop: 8,
+                }}
+              >
+                <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <input
+                    type="checkbox"
+                    checked={rrpVisible}
+                    onChange={(e) => setRrpVisible(e.target.checked)}
+                  />
+                  <span>Carte des sols RRP Occitanie</span>
+                </label>
+                <p style={{ color: "#666", fontSize: 12, marginTop: 8 }}>
+                  Chargée depuis <code>/public/data/rrp_occitanie.zip</code>.
+                </p>
+              </div>
               {/* ⛔️ retiré : contrôle sols en ligne (WMS/WFS) */}
               {/* <SoilsControl ... /> */}
-              <p style={{ color: "#666", fontSize: 12, marginTop: 8 }}>
-                Les types de sol RRP sont maintenant chargés depuis{" "}
-                <code>/public/data/rrp_occitanie.zip</code> (local).
-              </p>
             </div>
           </div>
         )}
