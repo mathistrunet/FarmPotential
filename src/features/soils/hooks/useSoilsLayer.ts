@@ -4,6 +4,8 @@ import { SOILS_LAYERS } from "../config/soilsConfig";
 import { getInfoAtPoint } from "../services/soilsAdapter";
 
 const MAX_FEATURES = 1000;
+// limit number of requests to avoid overwhelming the browser
+const MAX_PAGES = 5;
 const MIN_ZOOM = 9;
 
 export function useSoilsLayer(mapRef: any) {
@@ -50,7 +52,7 @@ export function useSoilsLayer(mapRef: any) {
         });
     };
 
-    let update: (() => void) | undefined;
+    let update: (() => void | Promise<void>) | undefined;
 
     if (visible) {
       if (map.getLayer(lyrId)) map.removeLayer(lyrId);
@@ -87,7 +89,7 @@ export function useSoilsLayer(mapRef: any) {
         });
         map.on("click", lyrId, clickHandler);
 
-        update = () => {
+        update = async () => {
           if (map.getZoom() < MIN_ZOOM) {
             (map.getSource(srcId) as maplibregl.GeoJSONSource).setData({
               type: "FeatureCollection",
@@ -95,23 +97,30 @@ export function useSoilsLayer(mapRef: any) {
             });
             return;
           }
-          const b = map.getBounds();
-          const bbox = `${b.getWest()},${b.getSouth()},${b.getEast()},${b.getNorth()}`;
-          fetch(
-            `${cfg.wfs!.url}?service=WFS&version=2.0.0&request=GetFeature&typeName=${cfg.wfs!.typeName}&outputFormat=application/json&srsName=EPSG:4326&bbox=${bbox}&count=${MAX_FEATURES}`
-          )
-            .then((r) => r.json())
-            .then((geojson) => {
-              if (geojson?.features?.length > MAX_FEATURES) {
-                geojson.features = geojson.features.slice(0, MAX_FEATURES);
+          const all: any[] = [];
+          let start = 0;
+          for (let i = 0; i < MAX_PAGES; i++) {
+            try {
+              const url = `${cfg.wfs!.url}?service=WFS&version=2.0.0&request=GetFeature&typeName=${cfg.wfs!.typeName}&outputFormat=application/json&srsName=EPSG:4326&count=${MAX_FEATURES}&startIndex=${start}`;
+              const geojson = await fetch(url).then((r) => r.json());
+              if (geojson?.features?.length) {
+                all.push(...geojson.features);
+                if (geojson.features.length < MAX_FEATURES) break;
+              } else {
+                break;
               }
-              (map.getSource(srcId) as maplibregl.GeoJSONSource).setData(geojson);
-            })
-            .catch(() => {});
+            } catch {
+              break;
+            }
+            start += MAX_FEATURES;
+          }
+          (map.getSource(srcId) as maplibregl.GeoJSONSource).setData({
+            type: "FeatureCollection",
+            features: all,
+          });
         };
 
         update();
-        map.on("moveend", update);
         map.on("zoomend", update);
       }
     } else {
@@ -126,7 +135,6 @@ export function useSoilsLayer(mapRef: any) {
       map.off("click", clickHandler);
       map.off("click", lyrId, clickHandler as any);
       if (update) {
-        map.off("moveend", update as any);
         map.off("zoomend", update as any);
       }
     };
