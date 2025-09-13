@@ -19,6 +19,17 @@ const flipY = (yXYZ: number, z: number) => (1 << z) - 1 - yXYZ;
 const isGzip = (b: Uint8Array) => b.length >= 2 && b[0] === 0x1f && b[1] === 0x8b;
 const normalizeBytes = (b: Uint8Array) => (isGzip(b) ? ungzip(b) : b);
 
+export function pickProp<T = unknown>(
+  obj: Record<string, any>,
+  names: string[]
+): T | undefined {
+  for (const n of names) {
+    const v = obj?.[n];
+    if (v !== undefined && v !== null) return v as T;
+  }
+  return undefined;
+}
+
 /** Convert lon/lat in degrees to XYZ tile at zoom z */
 export function lonLatToTile(lon: number, lat: number, z: number): { x: number; y: number } {
   const x = Math.floor(((lon + 180) / 360) * (1 << z));
