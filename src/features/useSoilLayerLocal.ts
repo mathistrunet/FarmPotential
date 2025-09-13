@@ -5,9 +5,7 @@ import type maplibregl from "maplibre-gl";
 import { loadLocalRrpZip, pickProp } from "../services/rrpLocal";
 import {
   FIELD_UCS,
-  FIELD_TEXTURE,
   FIELD_LIB,
-  TEXTURE_COLORS,
   DEFAULT_FILL,
   DEFAULT_OUTLINE,
   DEFAULT_FILL_OPACITY,
@@ -30,6 +28,7 @@ type Options = {
   labelLayerId?: string;
   zIndex?: number;
   visible?: boolean;
+  fillOpacity?: number;
 };
 
 export function useSoilLayerLocal({
@@ -41,6 +40,7 @@ export function useSoilLayerLocal({
   labelLayerId = "soils-rrp-label",
   zIndex = 10,
   visible = true,
+  fillOpacity = DEFAULT_FILL_OPACITY,
 }: Options) {
   useEffect(() => {
     if (!map) return;
@@ -61,7 +61,10 @@ export function useSoilLayerLocal({
         if (map.getLayer(fillLayerId)) map.removeLayer(fillLayerId);
         if (map.getSource(sourceId)) map.removeSource(sourceId);
 
-        const gj = await loadLocalRrpZip(zipUrl);
+        const [gj, colors] = await Promise.all([
+          loadLocalRrpZip(zipUrl),
+          loadRrpColors(),
+        ]);
         if (aborted) return;
 
         map.addSource(sourceId, {
@@ -70,17 +73,12 @@ export function useSoilLayerLocal({
           promoteId: "id",
         });
 
-        const textureKey: any = [
-          "coalesce",
-          ["get", FIELD_TEXTURE[0]],
-          ["get", FIELD_TEXTURE[1] ?? FIELD_TEXTURE[0]],
-          ["get", FIELD_TEXTURE[2] ?? FIELD_TEXTURE[0]],
-          ["get", FIELD_TEXTURE[3] ?? FIELD_TEXTURE[0]],
+        const colorExpr: any[] = [
+          "match",
+          ["to-string", ["coalesce", ["get", "code_coul"], ["get", "CODE_COUL"]]],
         ];
-
-        const colorExpr: any[] = ["case"];
-        Object.entries(TEXTURE_COLORS).forEach(([tex, color]) => {
-          colorExpr.push(["==", ["downcase", textureKey], tex], color);
+        Object.entries(colors).forEach(([code, hex]) => {
+          colorExpr.push(code, hex);
         });
         colorExpr.push(DEFAULT_FILL);
 
@@ -91,7 +89,7 @@ export function useSoilLayerLocal({
             source: sourceId,
             paint: {
               "fill-color": colorExpr,
-              "fill-opacity": DEFAULT_FILL_OPACITY,
+              "fill-opacity": fillOpacity,
             },
           },
           getLayerIdBelow(map, zIndex) || undefined
@@ -251,6 +249,13 @@ export function useSoilLayerLocal({
       aborted = true;
     };
   }, [map, visible, zipUrl, sourceId, fillLayerId, lineLayerId, labelLayerId, zIndex]);
+
+  useEffect(() => {
+    if (!map) return;
+    if (map.getLayer(fillLayerId)) {
+      map.setPaintProperty(fillLayerId, "fill-opacity", fillOpacity);
+    }
+  }, [map, fillLayerId, fillOpacity]);
 }
 
 function getLayerIdBelow(map: maplibregl.Map, zIndex: number): string | null {
