@@ -134,29 +134,31 @@ export function useSoilLayerLocal({
         );
 
         update = () => {
-          const bounds = map.getBounds();
           const z = Math.floor(map.getZoom());
-          const nw = lonLatToTile(bounds.getWest(), bounds.getNorth(), z);
-          const se = lonLatToTile(bounds.getEast(), bounds.getSouth(), z);
+          const center = map.getCenter();
+          const { x, y } = lonLatToTile(center.lng, center.lat, z);
+          const tiles = [
+            { x, y },
+            { x: x + 1, y },
+            { x, y: y + 1 },
+            { x: x + 1, y: y + 1 },
+          ];
           const all: GeoJSON.Feature[] = [];
-          for (let x = nw.x; x <= se.x; x++) {
-            for (let y = nw.y; y <= se.y; y++) {
-              if ((x + y) % 4 !== 0) continue; // charge 1 tuile sur 4
-              const key = `${z}/${x}/${y}`;
-              let feats = tileCache.get(key);
-              if (!feats) {
-                let fc: GeoJSON.FeatureCollection | null = null;
-                try {
-                  fc = reader.getTileGeoJSON(z, x, y);
-                } catch {
-                  /* ignore tile parsing errors */
-                }
-                feats = fc ? fc.features : [];
-                tileCache.set(key, feats);
+          tiles.forEach(({ x, y }) => {
+            const key = `${z}/${x}/${y}`;
+            let feats = tileCache.get(key);
+            if (!feats) {
+              let fc: GeoJSON.FeatureCollection | null = null;
+              try {
+                fc = reader.getTileGeoJSON(z, x, y);
+              } catch {
+                /* ignore tile parsing errors */
               }
-              all.push(...feats);
+              feats = fc ? fc.features : [];
+              tileCache.set(key, feats);
             }
-          }
+            all.push(...feats);
+          });
           (map.getSource(sourceId) as maplibregl.GeoJSONSource).setData({
             type: "FeatureCollection",
             features: all,
