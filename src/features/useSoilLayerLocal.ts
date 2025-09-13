@@ -20,7 +20,7 @@ import {
 import type { RrpEntry } from "../lib/rrpLookup";
 
 const MAX_FEATURES = 1000;
-const MIN_ZOOM = 9;
+const MIN_ZOOM = 20;
 
 function bboxFromCoords(coords: any): [number, number, number, number] {
   let minX = Infinity;
