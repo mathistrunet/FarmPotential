@@ -47,7 +47,7 @@ export default function App() {
 
   // ✅ Charge la couche RRP France depuis un fichier MBTiles local (placer le fichier dans /public/data/)
   //    Exemple : public/data/02_Donnees_Travail.mbtiles
-  useSoilLayerLocal({
+  const { polygonsShown } = useSoilLayerLocal({
     map: mapRef.current,
     mbtilesUrl: "/data/02_Donnees_Travail.mbtiles",
     sourceId: "soils-rrp",
@@ -268,6 +268,9 @@ export default function App() {
                     }}
                     style={{ width: "100%" }}
                   />
+                </div>
+                <div style={{ fontSize: 12, color: "#666", marginTop: 4 }}>
+                  Polygones: {polygonsShown ? "affichés" : "non visibles"}
                 </div>
               </div>
               {/* ⛔️ retiré : contrôle sols en ligne (WMS/WFS) */}
