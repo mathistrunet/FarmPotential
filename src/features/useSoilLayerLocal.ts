@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import type maplibregl from "maplibre-gl";
 
 // ⬇️ imports RELATIFS (plus d'alias "@")
-import { loadLocalRrpZip, pickProp } from "../services/rrpLocal";
+import { loadLocalRrpMbtiles, pickProp } from "../services/rrpLocal";
 import {
   FIELD_UCS,
   FIELD_LIB,
@@ -19,7 +19,7 @@ import {
 } from "../lib/rrpLookup";
 import type { RrpEntry } from "../lib/rrpLookup";
 
-const MAX_FEATURES = 1000;
+const MAX_FEATURES = 100;
 const MIN_ZOOM = 20;
 
 function bboxFromCoords(coords: any): [number, number, number, number] {
@@ -48,7 +48,7 @@ function bboxIntersects(a: [number, number, number, number], b: [number, number,
 
 type Options = {
   map: maplibregl.Map | null;
-  zipUrl?: string;
+  mbtilesUrl?: string;
   sourceId?: string;
   fillLayerId?: string;
   lineLayerId?: string;
@@ -60,7 +60,7 @@ type Options = {
 
 export function useSoilLayerLocal({
   map,
-  zipUrl = "/data/rrp_occitanie.zip",
+  mbtilesUrl = "/data/02_Donnees_Travail.mbtiles",
   sourceId = "soils-rrp",
   fillLayerId = "soils-rrp-fill",
   lineLayerId = "soils-rrp-outline",
@@ -90,7 +90,7 @@ export function useSoilLayerLocal({
         if (map.getSource(sourceId)) map.removeSource(sourceId);
 
         const [gj, colors] = await Promise.all([
-          loadLocalRrpZip(zipUrl),
+          loadLocalRrpMbtiles(mbtilesUrl),
           loadRrpColors(),
         ]);
         if (aborted) return;
@@ -313,7 +313,7 @@ export function useSoilLayerLocal({
         map.off("zoomend", update);
       }
     };
-  }, [map, visible, zipUrl, sourceId, fillLayerId, lineLayerId, labelLayerId, zIndex]);
+  }, [map, visible, mbtilesUrl, sourceId, fillLayerId, lineLayerId, labelLayerId, zIndex]);
 
   useEffect(() => {
     if (!map) return;

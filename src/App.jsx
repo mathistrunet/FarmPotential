@@ -45,11 +45,11 @@ export default function App() {
     (window).maplibregl = maplibregl;
   }, []);
 
-  // ✅ Charge la couche RRP France depuis un ZIP local (placer le fichier dans /public/data/)
-  //    Exemple : public/data/rrp_france_wgs84_shp.zip
+  // ✅ Charge la couche RRP France depuis un fichier MBTiles local (placer le fichier dans /public/data/)
+  //    Exemple : public/data/02_Donnees_Travail.mbtiles
   useSoilLayerLocal({
     map: mapRef.current,
-    zipUrl: "/data/rrp_france_wgs84_shp.zip",
+    mbtilesUrl: "/data/02_Donnees_Travail.mbtiles",
     sourceId: "soils-rrp",
     fillLayerId: "soils-rrp-fill",
     lineLayerId: "soils-rrp-outline",
