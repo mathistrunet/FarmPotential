@@ -45,11 +45,11 @@ export default function App() {
     (window).maplibregl = maplibregl;
   }, []);
 
-  // ✅ Charge la couche RRP depuis un ZIP local (placer le fichier dans /public/data/)
-  //    Exemple : public/data/rrp_occitanie.zip
+  // ✅ Charge la couche RRP France depuis un ZIP local (placer le fichier dans /public/data/)
+  //    Exemple : public/data/rrp_france_wgs84_shp.zip
   useSoilLayerLocal({
     map: mapRef.current,
-    zipUrl: "/data/rrp_occitanie.zip",
+    zipUrl: "/data/rrp_france_wgs84_shp.zip",
     sourceId: "soils-rrp",
     fillLayerId: "soils-rrp-fill",
     lineLayerId: "soils-rrp-outline",
@@ -240,10 +240,10 @@ export default function App() {
                     checked={rrpVisible}
                     onChange={(e) => setRrpVisible(e.target.checked)}
                   />
-                  <span>Carte des sols RRP Occitanie</span>
+                  <span>Carte des sols RRP France</span>
                 </label>
                 <p style={{ color: "#666", fontSize: 12, marginTop: 8 }}>
-                  Chargée depuis <code>/public/data/rrp_occitanie.zip</code>.
+                  Chargée depuis <code>/public/data/rrp_france_wgs84_shp.zip</code>.
                 </p>
                 <div
                   style={{
