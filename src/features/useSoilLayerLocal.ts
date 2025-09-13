@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type maplibregl from "maplibre-gl";
 
 // ⬇️ imports RELATIFS (plus d'alias "@")
-import { loadLocalRrpMbtiles, lonLatToTile, pickProp } from "../services/rrpLocal";
+import { loadLocalRrpMbtiles, lonLatToTile } from "../services/rrpLocal";
 import {
   FIELD_UCS,
   FIELD_LIB,
@@ -10,19 +10,8 @@ import {
   DEFAULT_OUTLINE,
   DEFAULT_FILL_OPACITY,
 } from "../config/soilsLocalConfig";
-import {
-  loadRrpLookup,
-  loadRrpColors,
-  keyFromProps,
-  formatAreaHa,
-  centroidLonLat,
-} from "../lib/rrpLookup";
-import type { RrpEntry } from "../lib/rrpLookup";
+import { loadRrpColors } from "../lib/rrpLookup";
 
-// Limite le nombre de features affichées pour garder de bonnes perf
-const MAX_FEATURES = 100;
-// Zoom minimum pour afficher la couche
-const MIN_ZOOM = 8;
 
 type Options = {
   map: maplibregl.Map | null;
@@ -61,13 +50,6 @@ export function useSoilLayerLocal({
     }
     let aborted = false;
     let update: (() => void) | undefined;
-    let clickHandler: any;
-    const onEnter = () => {
-      map.getCanvas().style.cursor = "pointer";
-    };
-    const onLeave = () => {
-      map.getCanvas().style.cursor = "";
-    };
 
     async function add() {
       try {
@@ -152,14 +134,6 @@ export function useSoilLayerLocal({
         );
 
         update = () => {
-          if (map.getZoom() < MIN_ZOOM) {
-            (map.getSource(sourceId) as maplibregl.GeoJSONSource).setData({
-              type: "FeatureCollection",
-              features: [],
-            });
-            setPolygonsShown(false);
-            return;
-          }
           const bounds = map.getBounds();
           const z = Math.floor(map.getZoom());
           const nw = lonLatToTile(bounds.getWest(), bounds.getNorth(), z);
@@ -167,6 +141,7 @@ export function useSoilLayerLocal({
           const all: GeoJSON.Feature[] = [];
           for (let x = nw.x; x <= se.x; x++) {
             for (let y = nw.y; y <= se.y; y++) {
+              if ((x + y) % 4 !== 0) continue; // charge 1 tuile sur 4
               const key = `${z}/${x}/${y}`;
               let feats = tileCache.get(key);
               if (!feats) {
@@ -184,7 +159,7 @@ export function useSoilLayerLocal({
           }
           (map.getSource(sourceId) as maplibregl.GeoJSONSource).setData({
             type: "FeatureCollection",
-            features: all.slice(0, MAX_FEATURES),
+            features: all,
           });
           setPolygonsShown(all.length > 0);
         };
@@ -192,108 +167,6 @@ export function useSoilLayerLocal({
         update();
         map.on("move", update);
         map.on("zoom", update);
-        clickHandler = async (e: any) => {
-          const f = e.features?.[0];
-          if (!f) return;
-          const props: Record<string, any> = f.properties ?? {};
-          const feature = {
-            type: "Feature",
-            geometry: f.geometry,
-            properties: {},
-          } as any;
-          const areaHa = formatAreaHa(feature);
-          const [lon, lat] = centroidLonLat(feature);
-
-          let lookupEntry: RrpEntry | undefined;
-          let colorHex: string | undefined;
-          try {
-            const [lookup, colors] = await Promise.all([
-              loadRrpLookup(),
-              loadRrpColors(),
-            ]);
-            lookupEntry = lookup[keyFromProps(props)];
-            colorHex = colors[String(props.code_coul)] ?? undefined;
-          } catch {
-            /* already logged */
-          }
-          const summaryRows = [
-            ["Étude", props.NO_ETUDE ?? "—"],
-            ["UCS", props.NO_UCS ?? "—"],
-            [
-              "Couleur",
-              `${props.code_coul ?? "—"}${
-                colorHex ? ` (${colorHex})` : ""
-              }`,
-            ],
-            ["Surface (ha)", areaHa],
-            ["Centroïde", `${lon}, ${lat}`],
-          ]
-            .map(
-              ([k, v]) =>
-                `<tr><th style="text-align:left;">${escapeHtml(String(
-                  k
-                ))}</th><td>${escapeHtml(String(v))}</td></tr>`
-            )
-            .join("");
-
-          let html = `<div style="font: 12px/1.4 system-ui, sans-serif; max-width:260px;">`;
-          html += `<h3 style="margin:0 0 4px">UCS ${escapeHtml(
-            String(props.NO_UCS ?? "—")
-          )} — Étude ${escapeHtml(String(props.NO_ETUDE ?? "—"))}</h3>`;
-          html += `<table style="border-collapse:collapse;margin:0 0 6px;"><tbody>${summaryRows}</tbody></table>`;
-
-          const nomUcs = lookupEntry?.nom_ucs ?? pickProp(props, ["NOM_UCS", "nom_ucs"]);
-          const regNat = lookupEntry?.reg_nat ?? pickProp(props, ["REG_NAT", "reg_nat"]);
-          const altMin = lookupEntry?.alt_min ?? pickProp(props, ["ALT_MIN", "alt_min"]);
-          const altMod = lookupEntry?.alt_mod ?? pickProp(props, ["ALT_MOD", "alt_mod"]);
-          const altMax = lookupEntry?.alt_max ?? pickProp(props, ["ALT_MAX", "alt_max"]);
-          const nbUts = lookupEntry?.nb_uts ?? pickProp(props, ["NB_UTS", "nb_uts"]);
-          const utsList = lookupEntry?.uts;
-
-          if (
-            nomUcs != null ||
-            regNat != null ||
-            altMin != null ||
-            altMod != null ||
-            altMax != null ||
-            nbUts != null ||
-            (utsList && utsList.length)
-          ) {
-            html += `<div style="margin-top:4px"><b>Contexte UCS</b></div>`;
-            html += `<div>Nom : ${escapeHtml(String(nomUcs ?? "—"))}</div>`;
-            html += `<div>Région nat. : ${escapeHtml(String(regNat ?? "—"))}</div>`;
-            html += `<div>Alt. min/mod/max : ${escapeHtml([
-              altMin ?? "—",
-              altMod ?? "—",
-              altMax ?? "—",
-            ].join("/"))}</div>`;
-            html += `<div>Nb UTS : ${escapeHtml(String(nbUts ?? "—"))}</div>`;
-            if (utsList?.length) {
-              const utsItems = utsList
-                .slice()
-                .sort((a, b) => b.pourcent - a.pourcent)
-                .map(
-                  (u) =>
-                    `<li>${escapeHtml(String(
-                      u.pourcent ?? "—"
-                    ))} — ${escapeHtml(u.rp_2008_nom ?? "—")}</li>`
-                )
-                .join("");
-              html += `<div style="margin-top:4px"><b>Composition UTS (%)</b></div><ul style="margin:4px 0 0 16px; padding:0;">${utsItems}</ul>`;
-            }
-          }
-
-          html += `</div>`;
-
-          new (window as any).maplibregl.Popup({ closeButton: true })
-            .setLngLat(e.lngLat as any)
-            .setHTML(html)
-            .addTo(map);
-        };
-
-        map.on("click", fillLayerId, clickHandler);
-        map.on("mouseenter", fillLayerId, onEnter);
-        map.on("mouseleave", fillLayerId, onLeave);
       } catch (err) {
         console.error("RRP local error:", err);
       }
@@ -317,9 +190,6 @@ export function useSoilLayerLocal({
         map.off("move", update);
         map.off("zoom", update);
       }
-      if (clickHandler) map.off("click", fillLayerId, clickHandler);
-      map.off("mouseenter", fillLayerId, onEnter);
-      map.off("mouseleave", fillLayerId, onLeave);
       setPolygonsShown(false);
     };
   }, [map, visible, mbtilesUrl, sourceId, fillLayerId, lineLayerId, labelLayerId, zIndex]);
@@ -338,12 +208,4 @@ function getLayerIdBelow(map: maplibregl.Map, zIndex: number): string | null {
   if (!layers.length) return null;
   const idx = Math.min(zIndex, layers.length - 1);
   return layers[idx]?.id ?? null;
-}
-
-function escapeHtml(s: string) {
-  return s.replace(/[&<>"']/g, (c) =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[
-      c as "&" | "<" | ">" | '"' | "'"
-    ] as string)
-  );
 }
