@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import type maplibregl from "maplibre-gl";
 
 // ⬇️ imports RELATIFS (plus d'alias "@")
@@ -47,6 +47,7 @@ export function useSoilLayerLocal({
   visible = true,
   fillOpacity = DEFAULT_FILL_OPACITY,
 }: Options) {
+  const [polygonsShown, setPolygonsShown] = useState(false);
   useEffect(() => {
     if (!map) return;
 
@@ -55,10 +56,18 @@ export function useSoilLayerLocal({
       if (map.getLayer(lineLayerId)) map.removeLayer(lineLayerId);
       if (map.getLayer(fillLayerId)) map.removeLayer(fillLayerId);
       if (map.getSource(sourceId)) map.removeSource(sourceId);
+      setPolygonsShown(false);
       return;
     }
     let aborted = false;
     let update: (() => void) | undefined;
+    let clickHandler: any;
+    const onEnter = () => {
+      map.getCanvas().style.cursor = "pointer";
+    };
+    const onLeave = () => {
+      map.getCanvas().style.cursor = "";
+    };
 
     async function add() {
       try {
@@ -148,6 +157,7 @@ export function useSoilLayerLocal({
               type: "FeatureCollection",
               features: [],
             });
+            setPolygonsShown(false);
             return;
           }
           const bounds = map.getBounds();
@@ -176,13 +186,13 @@ export function useSoilLayerLocal({
             type: "FeatureCollection",
             features: all.slice(0, MAX_FEATURES),
           });
+          setPolygonsShown(all.length > 0);
         };
 
         update();
         map.on("move", update);
         map.on("zoom", update);
-
-        map.on("click", fillLayerId, async (e) => {
+        clickHandler = async (e: any) => {
           const f = e.features?.[0];
           if (!f) return;
           const props: Record<string, any> = f.properties ?? {};
@@ -279,26 +289,38 @@ export function useSoilLayerLocal({
             .setLngLat(e.lngLat as any)
             .setHTML(html)
             .addTo(map);
-        });
+        };
 
-        map.on("mouseenter", fillLayerId, () => {
-          map.getCanvas().style.cursor = "pointer";
-        });
-        map.on("mouseleave", fillLayerId, () => {
-          map.getCanvas().style.cursor = "";
-        });
+        map.on("click", fillLayerId, clickHandler);
+        map.on("mouseenter", fillLayerId, onEnter);
+        map.on("mouseleave", fillLayerId, onLeave);
       } catch (err) {
         console.error("RRP local error:", err);
       }
     }
 
-    add();
+    const start = () => {
+      if (aborted) return;
+      add();
+    };
+
+    if (!map.isStyleLoaded()) {
+      map.once("load", start);
+    } else {
+      start();
+    }
+
     return () => {
       aborted = true;
+      map.off("load", start);
       if (update) {
         map.off("move", update);
         map.off("zoom", update);
       }
+      if (clickHandler) map.off("click", fillLayerId, clickHandler);
+      map.off("mouseenter", fillLayerId, onEnter);
+      map.off("mouseleave", fillLayerId, onLeave);
+      setPolygonsShown(false);
     };
   }, [map, visible, mbtilesUrl, sourceId, fillLayerId, lineLayerId, labelLayerId, zIndex]);
 
@@ -308,6 +330,7 @@ export function useSoilLayerLocal({
       map.setPaintProperty(fillLayerId, "fill-opacity", fillOpacity);
     }
   }, [map, fillLayerId, fillOpacity]);
+  return { polygonsShown };
 }
 
 function getLayerIdBelow(map: maplibregl.Map, zIndex: number): string | null {
