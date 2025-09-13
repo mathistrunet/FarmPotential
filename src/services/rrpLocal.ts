@@ -5,6 +5,8 @@ import initSqlJs from "sql.js/dist/sql-wasm.js";
 // @ts-ignore - pas de types officiels
 import Pbf from "pbf";
 // @ts-ignore - pas de types officiels
+import { ungzip } from "pako";
+// @ts-ignore - pas de types officiels
 import { VectorTile } from "@mapbox/vector-tile";
 
 export type RrpGeoJSON = GeoJSON.FeatureCollection<GeoJSON.Geometry, Record<string, any>>;
@@ -53,7 +55,11 @@ export async function loadLocalRrpMbtiles(mbtilesUrl: string): Promise<RrpGeoJSO
   const dim = 1 << maxZoom;
   for (const [tileData, x, tmsY] of rows) {
     const y = dim - 1 - (tmsY as number); // convertit TMS -> XYZ
-    const vt = new VectorTile(new Pbf(tileData as Uint8Array));
+    let rawTile = tileData as Uint8Array;
+    if (rawTile[0] === 0x1f && rawTile[1] === 0x8b) {
+      rawTile = ungzip(rawTile);
+    }
+    const vt = new VectorTile(new Pbf(rawTile));
     const layer = vt.layers[layerName];
     if (!layer) continue;
     for (let i = 0; i < layer.length; i++) {
