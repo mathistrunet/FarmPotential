@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import type maplibregl from "maplibre-gl";
 
 // ⬇️ imports RELATIFS (plus d'alias "@")
-import { loadLocalRrpMbtiles, pickProp } from "../services/rrpLocal";
+import { loadLocalRrpMbtiles, lonLatToTile, pickProp } from "../services/rrpLocal";
 import {
   FIELD_UCS,
   FIELD_LIB,
@@ -19,32 +19,10 @@ import {
 } from "../lib/rrpLookup";
 import type { RrpEntry } from "../lib/rrpLookup";
 
+// Limite le nombre de features affichées pour garder de bonnes perf
 const MAX_FEATURES = 100;
-const MIN_ZOOM = 20;
-
-function bboxFromCoords(coords: any): [number, number, number, number] {
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  const scan = (c: any): void => {
-    if (typeof c[0] === "number") {
-      const [x, y] = c as [number, number];
-      if (x < minX) minX = x;
-      if (y < minY) minY = y;
-      if (x > maxX) maxX = x;
-      if (y > maxY) maxY = y;
-    } else {
-      c.forEach(scan);
-    }
-  };
-  scan(coords);
-  return [minX, minY, maxX, maxY];
-}
-
-function bboxIntersects(a: [number, number, number, number], b: [number, number, number, number]) {
-  return a[0] <= b[2] && a[2] >= b[0] && a[1] <= b[3] && a[3] >= b[1];
-}
+// Zoom minimum pour afficher la couche
+const MIN_ZOOM = 8;
 
 type Options = {
   map: maplibregl.Map | null;
@@ -89,16 +67,13 @@ export function useSoilLayerLocal({
         if (map.getLayer(fillLayerId)) map.removeLayer(fillLayerId);
         if (map.getSource(sourceId)) map.removeSource(sourceId);
 
-        const [gj, colors] = await Promise.all([
+        const [reader, colors] = await Promise.all([
           loadLocalRrpMbtiles(mbtilesUrl),
           loadRrpColors(),
         ]);
         if (aborted) return;
 
-        const features = gj.features?.map((f: any) => ({
-          ...f,
-          __bbox: bboxFromCoords(f.geometry.coordinates),
-        })) ?? [];
+        const tileCache = new Map<string, GeoJSON.Feature[]>();
 
         map.addSource(sourceId, {
           type: "geojson",
@@ -175,25 +150,32 @@ export function useSoilLayerLocal({
             });
             return;
           }
-          const b = map.getBounds();
-          const bbox: [number, number, number, number] = [
-            b.getWest(),
-            b.getSouth(),
-            b.getEast(),
-            b.getNorth(),
-          ];
-          const feats = features
-            .filter((f: any) => bboxIntersects(bbox, f.__bbox))
-            .slice(0, MAX_FEATURES);
+          const bounds = map.getBounds();
+          const z = Math.floor(map.getZoom());
+          const nw = lonLatToTile(bounds.getWest(), bounds.getNorth(), z);
+          const se = lonLatToTile(bounds.getEast(), bounds.getSouth(), z);
+          const all: GeoJSON.Feature[] = [];
+          for (let x = nw.x; x <= se.x; x++) {
+            for (let y = nw.y; y <= se.y; y++) {
+              const key = `${z}/${x}/${y}`;
+              let feats = tileCache.get(key);
+              if (!feats) {
+                const fc = reader.getTileGeoJSON(z, x, y);
+                feats = fc ? fc.features : [];
+                tileCache.set(key, feats);
+              }
+              all.push(...feats);
+            }
+          }
           (map.getSource(sourceId) as maplibregl.GeoJSONSource).setData({
             type: "FeatureCollection",
-            features: feats,
+            features: all.slice(0, MAX_FEATURES),
           });
         };
 
         update();
-        map.on("moveend", update);
-        map.on("zoomend", update);
+        map.on("move", update);
+        map.on("zoom", update);
 
         map.on("click", fillLayerId, async (e) => {
           const f = e.features?.[0];
@@ -309,8 +291,8 @@ export function useSoilLayerLocal({
     return () => {
       aborted = true;
       if (update) {
-        map.off("moveend", update);
-        map.off("zoomend", update);
+        map.off("move", update);
+        map.off("zoom", update);
       }
     };
   }, [map, visible, mbtilesUrl, sourceId, fillLayerId, lineLayerId, labelLayerId, zIndex]);
