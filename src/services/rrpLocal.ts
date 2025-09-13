@@ -129,9 +129,17 @@ export async function loadLocalRrpMbtiles(url: string): Promise<MbtilesReader> {
     const features: GeoJSON.Feature[] = [];
     for (let i = 0; i < lyr.length; i++) {
       const f = lyr.feature(i);
-      // toGeoJSON(x, y, z) → GeoJSON WGS84
-      const gj = f.toGeoJSON(x, yXYZ, z) as GeoJSON.Feature;
-      features.push(gj);
+      // Skip features with unknown type (VectorTileFeature.type 0)
+      const t = (f as any).type as number;
+      if (t !== 1 && t !== 2 && t !== 3) continue;
+      try {
+        // toGeoJSON(x, y, z) → GeoJSON WGS84
+        const gj = f.toGeoJSON(x, yXYZ, z) as GeoJSON.Feature;
+        features.push(gj);
+      } catch (err) {
+        // ignore malformed feature
+        console.warn("RRPLocal: skip feature", err);
+      }
     }
     return { type: "FeatureCollection", features };
   }
