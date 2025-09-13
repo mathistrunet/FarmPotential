@@ -127,7 +127,6 @@ export async function loadLocalRrpMbtiles(url: string): Promise<MbtilesReader> {
     if (!lyr) return null;
 
     const features: GeoJSON.Feature[] = [];
-    const yTMS = flipY(yXYZ, z);
     for (let i = 0; i < lyr.length; i++) {
       const f = lyr.feature(i);
       // Skip features with unknown type (VectorTileFeature.type 0)
@@ -137,8 +136,8 @@ export async function loadLocalRrpMbtiles(url: string): Promise<MbtilesReader> {
         // ensure geometry is valid before conversion
         const geom = (f as any).loadGeometry?.();
         if (!geom || !geom.length) continue;
-        // toGeoJSON(x, yTMS, z) → GeoJSON WGS84
-        const gj = f.toGeoJSON(x, yTMS, z) as GeoJSON.Feature;
+        // toGeoJSON(x, yXYZ, z) → GeoJSON WGS84
+        const gj = f.toGeoJSON(x, yXYZ, z) as GeoJSON.Feature;
         features.push(gj);
       } catch {
         // ignore malformed feature
