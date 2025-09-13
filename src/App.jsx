@@ -39,6 +39,8 @@ export default function App() {
   const [compact, setCompact] = useState(false);
   const [rrpVisible, setRrpVisible] = useState(true);
   const [rrpOpacity, setRrpOpacity] = useState(DEFAULT_FILL_OPACITY);
+  const [rrpFrVisible, setRrpFrVisible] = useState(false);
+  const [rrpFrOpacity, setRrpFrOpacity] = useState(DEFAULT_FILL_OPACITY);
 
   // ✅ expose maplibregl pour les popups utilisés par le hook local
   useEffect(() => {
@@ -57,6 +59,18 @@ export default function App() {
     zIndex: 10,
     visible: rrpVisible,
     fillOpacity: rrpOpacity,
+  });
+
+  useSoilLayerLocal({
+    map: mapRef.current,
+    zipUrl: "/data/rrp_france_wgs84_shp.zip",
+    sourceId: "soils-rrp-fr",
+    fillLayerId: "soils-rrp-fr-fill",
+    lineLayerId: "soils-rrp-fr-outline",
+    labelLayerId: "soils-rrp-fr-label",
+    zIndex: 9,
+    visible: rrpFrVisible,
+    fillOpacity: rrpFrOpacity,
   });
 
   // ---- Styles de la barre d’outils bas
@@ -265,6 +279,50 @@ export default function App() {
                       setRrpOpacity(v);
                       const map = mapRef.current;
                       if (map) map.setPaintProperty("soils-rrp-fill", "fill-opacity", v);
+                    }}
+                    style={{ width: "100%" }}
+                  />
+                </div>
+              </div>
+              <div
+                style={{
+                  border: "1px solid #eee",
+                  borderRadius: 8,
+                  padding: 8,
+                  marginTop: 8,
+                }}
+              >
+                <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <input
+                    type="checkbox"
+                    checked={rrpFrVisible}
+                    onChange={(e) => setRrpFrVisible(e.target.checked)}
+                  />
+                  <span>Carte des sols France</span>
+                </label>
+                <p style={{ color: "#666", fontSize: 12, marginTop: 8 }}>
+                  Chargée depuis <code>/public/data/rrp_france_wgs84_shp.zip</code>.
+                </p>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    marginTop: 6,
+                  }}
+                >
+                  <span style={{ fontSize: 12, color: "#666" }}>Opacité</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={rrpFrOpacity}
+                    onInput={(e) => {
+                      const v = parseFloat(e.currentTarget.value);
+                      setRrpFrOpacity(v);
+                      const map = mapRef.current;
+                      if (map) map.setPaintProperty("soils-rrp-fr-fill", "fill-opacity", v);
                     }}
                     style={{ width: "100%" }}
                   />
