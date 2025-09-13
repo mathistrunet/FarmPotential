@@ -13,16 +13,12 @@ import { VectorTile } from "@mapbox/vector-tile";
 
 export type RrpGeoJSON = GeoJSON.FeatureCollection<GeoJSON.Geometry, Record<string, any>>;
 
-function flipY(y: number, z: number) {
-  return (1 << z) - 1 - y;
+function flipY(yXYZ: number, z: number) {
+  return (1 << z) - 1 - yXYZ;
 }
 
-function normalizeTileBytes(bytes: Uint8Array): Uint8Array {
-  if (bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b) {
-    return ungzip(bytes);
-  }
-  return bytes;
-}
+const isGzip = (b: Uint8Array) => b.length >= 2 && b[0] === 0x1f && b[1] === 0x8b;
+const normalize = (b: Uint8Array) => (isGzip(b) ? ungzip(b) : b);
 
 export async function loadLocalRrpZip(zipUrl: string): Promise<RrpGeoJSON> {
   const res = await fetch(zipUrl, { cache: "force-cache" });
@@ -51,7 +47,7 @@ export async function loadLocalRrpMbtiles(mbtilesUrl: string): Promise<RrpGeoJSO
   const zRes = db.exec("SELECT MAX(zoom_level) AS z FROM tiles");
   const maxZoom = zRes[0]?.values[0]?.[0] as number;
 
-  let layerName = "rrp_ucs";
+  let layerName = "rrp_france";
   try {
     const meta = db.exec("SELECT value FROM metadata WHERE name='json'");
     const metaJson = meta[0]?.values[0]?.[0];
@@ -71,7 +67,7 @@ export async function loadLocalRrpMbtiles(mbtilesUrl: string): Promise<RrpGeoJSO
     const row = stmt.getAsObject() as any;
     const x = row.x as number;
     const y = flipY(row.y as number, maxZoom);
-    const bytes = normalizeTileBytes(row.td as Uint8Array);
+    const bytes = normalize(row.td as Uint8Array);
     const vt = new VectorTile(new Pbf(bytes));
     const layer = vt.layers[layerName];
     if (!layer) continue;
