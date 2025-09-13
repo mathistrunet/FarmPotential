@@ -1,7 +1,7 @@
 // Lit des sources RRP locales (shapefile ZIP ou MBTiles) et renvoie un GeoJSON
 import shp from "shpjs";
 // @ts-ignore - pas de types officiels
-import initSqlJs from "sql.js";
+import initSqlJs from "sql.js/dist/sql-wasm.js";
 // @ts-ignore - pas de types officiels
 import Pbf from "pbf";
 // @ts-ignore - pas de types officiels
