@@ -174,8 +174,8 @@ export function useSoilLayerLocal({
         };
 
         update();
-        map.on("moveend", update);
-        map.on("zoomend", update);
+        map.on("move", update);
+        map.on("zoom", update);
 
         map.on("click", fillLayerId, async (e) => {
           const f = e.features?.[0];
@@ -291,8 +291,8 @@ export function useSoilLayerLocal({
     return () => {
       aborted = true;
       if (update) {
-        map.off("moveend", update);
-        map.off("zoomend", update);
+        map.off("move", update);
+        map.off("zoom", update);
       }
     };
   }, [map, visible, mbtilesUrl, sourceId, fillLayerId, lineLayerId, labelLayerId, zIndex]);
