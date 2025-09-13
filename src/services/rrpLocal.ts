@@ -1,7 +1,9 @@
 // Lit des sources RRP locales (shapefile ZIP ou MBTiles) et renvoie un GeoJSON
 import shp from "shpjs";
 // @ts-ignore - pas de types officiels
-import initSqlJs from "sql.js/dist/sql-wasm.js";
+import initSqlJs from "sql.js";
+// @ts-ignore - pas de types officiels
+import wasmUrl from "sql.js/dist/sql-wasm.wasm?url";
 // @ts-ignore - pas de types officiels
 import Pbf from "pbf";
 // @ts-ignore - pas de types officiels
@@ -10,6 +12,17 @@ import { ungzip } from "pako";
 import { VectorTile } from "@mapbox/vector-tile";
 
 export type RrpGeoJSON = GeoJSON.FeatureCollection<GeoJSON.Geometry, Record<string, any>>;
+
+function flipY(y: number, z: number) {
+  return (1 << z) - 1 - y;
+}
+
+function normalizeTileBytes(bytes: Uint8Array): Uint8Array {
+  if (bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b) {
+    return ungzip(bytes);
+  }
+  return bytes;
+}
 
 export async function loadLocalRrpZip(zipUrl: string): Promise<RrpGeoJSON> {
   const res = await fetch(zipUrl, { cache: "force-cache" });
@@ -32,42 +45,43 @@ export async function loadLocalRrpMbtiles(mbtilesUrl: string): Promise<RrpGeoJSO
     throw new Error(`Impossible de charger ${mbtilesUrl}: ${res.status} ${res.statusText}`);
   }
   const buf = await res.arrayBuffer();
-  const SQL = await initSqlJs({ locateFile: (f: string) => `https://sql.js.org/dist/${f}` });
+  const SQL = await initSqlJs({ locateFile: () => wasmUrl });
   const db = new SQL.Database(new Uint8Array(buf));
 
   const zRes = db.exec("SELECT MAX(zoom_level) AS z FROM tiles");
   const maxZoom = zRes[0]?.values[0]?.[0] as number;
 
-  let layerName = "layer";
-  const meta = db.exec("SELECT value FROM metadata WHERE name='json'");
-  const metaJson = meta[0]?.values[0]?.[0];
-  if (metaJson) {
-    try {
+  let layerName = "rrp_ucs";
+  try {
+    const meta = db.exec("SELECT value FROM metadata WHERE name='json'");
+    const metaJson = meta[0]?.values[0]?.[0];
+    if (metaJson) {
       const parsed = JSON.parse(metaJson as string);
       layerName = parsed?.vector_layers?.[0]?.id ?? layerName;
-    } catch {}
-  }
-
-  const rows = db.exec(
-    `SELECT tile_data, tile_column, tile_row FROM tiles WHERE zoom_level = ${maxZoom}`
-  )[0]?.values ?? [];
-  const features: any[] = [];
-  const dim = 1 << maxZoom;
-  for (const [tileData, x, tmsY] of rows) {
-    const y = dim - 1 - (tmsY as number); // convertit TMS -> XYZ
-    let rawTile = tileData as Uint8Array;
-    if (rawTile[0] === 0x1f && rawTile[1] === 0x8b) {
-      rawTile = ungzip(rawTile);
     }
-    const vt = new VectorTile(new Pbf(rawTile));
+  } catch {}
+
+  const stmt = db.prepare(
+    "SELECT tile_data AS td, tile_column AS x, tile_row AS y FROM tiles WHERE zoom_level = ?"
+  );
+  stmt.bind([maxZoom]);
+
+  const features: any[] = [];
+  while (stmt.step()) {
+    const row = stmt.getAsObject() as any;
+    const x = row.x as number;
+    const y = flipY(row.y as number, maxZoom);
+    const bytes = normalizeTileBytes(row.td as Uint8Array);
+    const vt = new VectorTile(new Pbf(bytes));
     const layer = vt.layers[layerName];
     if (!layer) continue;
     for (let i = 0; i < layer.length; i++) {
-      const feat = layer.feature(i).toGeoJSON(x as number, y, maxZoom);
+      const feat = layer.feature(i).toGeoJSON(x, y, maxZoom);
       if (feat && feat.id == null) feat.id = features.length;
       features.push(feat);
     }
   }
+  stmt.free();
 
   return { type: "FeatureCollection", features };
 }
