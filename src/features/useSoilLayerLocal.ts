@@ -19,6 +19,33 @@ import {
 } from "../lib/rrpLookup";
 import type { RrpEntry } from "../lib/rrpLookup";
 
+const MAX_FEATURES = 1000;
+const MIN_ZOOM = 20;
+
+function bboxFromCoords(coords: any): [number, number, number, number] {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  const scan = (c: any): void => {
+    if (typeof c[0] === "number") {
+      const [x, y] = c as [number, number];
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x > maxX) maxX = x;
+      if (y > maxY) maxY = y;
+    } else {
+      c.forEach(scan);
+    }
+  };
+  scan(coords);
+  return [minX, minY, maxX, maxY];
+}
+
+function bboxIntersects(a: [number, number, number, number], b: [number, number, number, number]) {
+  return a[0] <= b[2] && a[2] >= b[0] && a[1] <= b[3] && a[3] >= b[1];
+}
+
 type Options = {
   map: maplibregl.Map | null;
   zipUrl?: string;
@@ -53,6 +80,7 @@ export function useSoilLayerLocal({
       return;
     }
     let aborted = false;
+    let update: (() => void) | undefined;
 
     async function add() {
       try {
@@ -67,9 +95,14 @@ export function useSoilLayerLocal({
         ]);
         if (aborted) return;
 
+        const features = gj.features?.map((f: any) => ({
+          ...f,
+          __bbox: bboxFromCoords(f.geometry.coordinates),
+        })) ?? [];
+
         map.addSource(sourceId, {
           type: "geojson",
-          data: gj,
+          data: { type: "FeatureCollection", features: [] },
           promoteId: "id",
         });
 
@@ -133,6 +166,34 @@ export function useSoilLayerLocal({
           },
           getLayerIdBelow(map, zIndex + 2) || undefined
         );
+
+        update = () => {
+          if (map.getZoom() < MIN_ZOOM) {
+            (map.getSource(sourceId) as maplibregl.GeoJSONSource).setData({
+              type: "FeatureCollection",
+              features: [],
+            });
+            return;
+          }
+          const b = map.getBounds();
+          const bbox: [number, number, number, number] = [
+            b.getWest(),
+            b.getSouth(),
+            b.getEast(),
+            b.getNorth(),
+          ];
+          const feats = features
+            .filter((f: any) => bboxIntersects(bbox, f.__bbox))
+            .slice(0, MAX_FEATURES);
+          (map.getSource(sourceId) as maplibregl.GeoJSONSource).setData({
+            type: "FeatureCollection",
+            features: feats,
+          });
+        };
+
+        update();
+        map.on("moveend", update);
+        map.on("zoomend", update);
 
         map.on("click", fillLayerId, async (e) => {
           const f = e.features?.[0];
@@ -247,6 +308,10 @@ export function useSoilLayerLocal({
     add();
     return () => {
       aborted = true;
+      if (update) {
+        map.off("moveend", update);
+        map.off("zoomend", update);
+      }
     };
   }, [map, visible, zipUrl, sourceId, fillLayerId, lineLayerId, labelLayerId, zIndex]);
 

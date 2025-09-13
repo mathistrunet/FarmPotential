@@ -3,6 +3,9 @@ import maplibregl from "maplibre-gl";
 import { SOILS_LAYERS } from "../config/soilsConfig";
 import { getInfoAtPoint } from "../services/soilsAdapter";
 
+const MAX_FEATURES = 1000;
+const MIN_ZOOM = 9;
+
 export function useSoilsLayer(mapRef: any) {
   const [visible, setVisible] = useState(false);
   const [layerId, setLayerId] = useState<string>(SOILS_LAYERS[0]?.id);
@@ -47,6 +50,8 @@ export function useSoilsLayer(mapRef: any) {
         });
     };
 
+    let update: (() => void) | undefined;
+
     if (visible) {
       if (map.getLayer(lyrId)) map.removeLayer(lyrId);
       if (map.getSource(srcId)) map.removeSource(srcId);
@@ -82,16 +87,32 @@ export function useSoilsLayer(mapRef: any) {
         });
         map.on("click", lyrId, clickHandler);
 
-        const b = map.getBounds();
-        const bbox = `${b.getWest()},${b.getSouth()},${b.getEast()},${b.getNorth()}`;
-        fetch(
-          `${cfg.wfs!.url}?service=WFS&version=2.0.0&request=GetFeature&typeName=${cfg.wfs!.typeName}&outputFormat=application/json&srsName=EPSG:4326&bbox=${bbox}`
-        )
-          .then((r) => r.json())
-          .then((geojson) => {
-            (map.getSource(srcId) as maplibregl.GeoJSONSource).setData(geojson);
-          })
-          .catch(() => {});
+        update = () => {
+          if (map.getZoom() < MIN_ZOOM) {
+            (map.getSource(srcId) as maplibregl.GeoJSONSource).setData({
+              type: "FeatureCollection",
+              features: [],
+            });
+            return;
+          }
+          const b = map.getBounds();
+          const bbox = `${b.getWest()},${b.getSouth()},${b.getEast()},${b.getNorth()}`;
+          fetch(
+            `${cfg.wfs!.url}?service=WFS&version=2.0.0&request=GetFeature&typeName=${cfg.wfs!.typeName}&outputFormat=application/json&srsName=EPSG:4326&bbox=${bbox}&count=${MAX_FEATURES}`
+          )
+            .then((r) => r.json())
+            .then((geojson) => {
+              if (geojson?.features?.length > MAX_FEATURES) {
+                geojson.features = geojson.features.slice(0, MAX_FEATURES);
+              }
+              (map.getSource(srcId) as maplibregl.GeoJSONSource).setData(geojson);
+            })
+            .catch(() => {});
+        };
+
+        update();
+        map.on("moveend", update);
+        map.on("zoomend", update);
       }
     } else {
       if (map.getLayer(lyrId)) {
@@ -104,6 +125,10 @@ export function useSoilsLayer(mapRef: any) {
     return () => {
       map.off("click", clickHandler);
       map.off("click", lyrId, clickHandler as any);
+      if (update) {
+        map.off("moveend", update as any);
+        map.off("zoomend", update as any);
+      }
     };
   }, [mapRef, visible, layerId]);
 
