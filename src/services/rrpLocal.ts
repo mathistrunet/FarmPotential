@@ -134,14 +134,15 @@ export async function loadLocalRrpMbtiles(url: string): Promise<MbtilesReader> {
       const t = (f as any).type as number;
       if (t !== 1 && t !== 2 && t !== 3) continue;
       try {
-
+        // ensure geometry is valid before conversion
+        const geom = (f as any).loadGeometry?.();
+        if (!geom || !geom.length) continue;
         // toGeoJSON(x, yTMS, z) → GeoJSON WGS84
         const gj = f.toGeoJSON(x, yTMS, z) as GeoJSON.Feature;
-
         features.push(gj);
-      } catch (err) {
+      } catch {
         // ignore malformed feature
-        console.warn("RRPLocal: skip feature", err);
+        continue;
       }
     }
     return { type: "FeatureCollection", features };

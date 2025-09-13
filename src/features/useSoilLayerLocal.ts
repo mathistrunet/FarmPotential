@@ -160,7 +160,12 @@ export function useSoilLayerLocal({
               const key = `${z}/${x}/${y}`;
               let feats = tileCache.get(key);
               if (!feats) {
-                const fc = reader.getTileGeoJSON(z, x, y);
+                let fc: GeoJSON.FeatureCollection | null = null;
+                try {
+                  fc = reader.getTileGeoJSON(z, x, y);
+                } catch {
+                  /* ignore tile parsing errors */
+                }
                 feats = fc ? fc.features : [];
                 tileCache.set(key, feats);
               }
