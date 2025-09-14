@@ -185,6 +185,7 @@ export function useSoilLayerLocal({
                   (f): f is GeoJSON.Feature =>
                     !!f && f.geometry !== null
                 );
+
               tileCache.set(key, feats);
             }
             feats.forEach((f) => {
