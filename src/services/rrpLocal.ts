@@ -8,6 +8,7 @@ export async function loadLocalRrpZip(zipUrl: string): Promise<RrpGeoJSON> {
   if (!res.ok) {
     throw new Error(`Impossible de charger ${zipUrl}: ${res.status} ${res.statusText}`);
   }
+
   const buf = await res.arrayBuffer();
   const gj = (await shp(buf)) as RrpGeoJSON;
   // Assure des IDs pour de meilleures perfs d’affichage/interaction
