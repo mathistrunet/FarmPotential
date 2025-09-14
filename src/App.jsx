@@ -46,10 +46,10 @@ export default function App() {
   }, []);
 
   // ✅ Charge la couche RRP France depuis un fichier MBTiles local (placer le fichier dans /public/data/)
-  //    Exemple : public/data/02_Donnees_Travail.mbtiles
+  //    Exemple : public/data/rrp_france_wgs84_shp.mbtiles
   const { polygonsShown } = useSoilLayerLocal({
     map: mapRef.current,
-    mbtilesUrl: "/data/02_Donnees_Travail.mbtiles",
+    mbtilesUrl: "/data/rrp_france_wgs84_shp.mbtiles",
     sourceId: "soils-rrp",
     fillLayerId: "soils-rrp-fill",
     lineLayerId: "soils-rrp-outline",
@@ -243,7 +243,7 @@ export default function App() {
                 <span>Carte des sols France</span>
               </label>
                 <p style={{ color: "#666", fontSize: 12, marginTop: 8 }}>
-                  Chargée depuis <code>/public/data/rrp_france_wgs84_shp.zip</code>.
+                  Chargée depuis <code>/public/data/rrp_france_wgs84_shp.mbtiles</code>.
                 </p>
                 <div
                   style={{
