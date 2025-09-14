@@ -26,7 +26,6 @@ export const RASTER_LAYERS = [
     url: "https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&FORMAT=image/jpeg",
     subdomains: null,
     tileSize: 256,
-    scheme: "tms",
     attribution: "© IGN",
     defaultVisible: false,
     defaultOpacity: 1.0,

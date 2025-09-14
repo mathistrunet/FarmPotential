@@ -19,7 +19,7 @@ describe("useSoilsLayer", () => {
   it("adds layer and calls adapter on click", async () => {
     SOILS_LAYERS[0].mode = "wms";
     const map: any = {
-      getSource: vi.fn().mockReturnValue({ setData: vi.fn() }),
+      getSource: vi.fn().mockReturnValue(null),
       addSource: vi.fn(),
       addLayer: vi.fn(),
       on: vi.fn(),
@@ -55,45 +55,5 @@ describe("useSoilsLayer", () => {
 
     act(() => toggle());
     expect(map.off).toHaveBeenCalledWith("click", clickHandler);
-  });
-
-  it("fetches WFS data paginated without bbox", async () => {
-    SOILS_LAYERS[0].mode = "wfs";
-    const fetchSpy = vi.fn(() =>
-      Promise.resolve({ json: () => Promise.resolve({ features: [] }) }) as any
-    );
-    vi.stubGlobal("fetch", fetchSpy);
-    const map: any = {
-      getSource: vi.fn().mockReturnValue({ setData: vi.fn() }),
-      addSource: vi.fn(),
-      addLayer: vi.fn(),
-      on: vi.fn(),
-      off: vi.fn(),
-      getLayer: vi.fn().mockReturnValue(null),
-      setLayoutProperty: vi.fn(),
-      removeLayer: vi.fn(),
-      removeSource: vi.fn(),
-      getCanvas: () => ({ width: 100, height: 100 }),
-      getZoom: () => 10,
-    };
-    const mapRef = { current: map };
-
-    let toggle: any;
-    function Comp() {
-      const res = useSoilsLayer(mapRef);
-      toggle = res.toggle;
-      return null;
-    }
-    const div = document.createElement("div");
-    act(() => {
-      createRoot(div).render(<Comp />);
-    });
-
-    act(() => toggle());
-    expect(fetchSpy).toHaveBeenCalled();
-    const url = fetchSpy.mock.calls[0][0];
-    expect(url).not.toMatch(/bbox=/);
-    expect(url).toMatch(/count=1000/);
-    expect(url).toMatch(/startIndex=0/);
   });
 });

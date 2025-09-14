@@ -11,7 +11,6 @@ export function useRasterLayers() {
           type: "raster",
           tiles: def.subdomains ? def.subdomains.map((s) => def.url.replace("{s}", s)) : [def.url],
           tileSize: def.tileSize || 256,
-          scheme: def.scheme || "xyz",
           attribution: def.attribution || "",
         });
       }
