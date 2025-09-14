@@ -27,7 +27,7 @@ type Options = {
 
 export function useSoilLayerLocal({
   map,
-  mbtilesUrl = "/data/02_Donnees_Travail.mbtiles",
+  mbtilesUrl = "/data/rrp_france_wgs84_shp.mbtiles",
   sourceId = "soils-rrp",
   fillLayerId = "soils-rrp-fill",
   lineLayerId = "soils-rrp-outline",

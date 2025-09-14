@@ -54,11 +54,22 @@ export function useSoilsLayer(mapRef: any) {
       if (cfg.mode === "wms") {
         const version = cfg.wms!.version || "1.3.0";
         const crsParam = version === "1.3.0" ? "CRS" : "SRS";
+        const params = new URLSearchParams({
+          SERVICE: "WMS",
+          VERSION: version,
+          REQUEST: "GetMap",
+          LAYERS: cfg.wms!.layer,
+          STYLES: "",
+          FORMAT: "image/png",
+          TRANSPARENT: "TRUE",
+          WIDTH: "256",
+          HEIGHT: "256",
+          BBOX: "{bbox-epsg-3857}",
+        });
+        params.set(crsParam, "EPSG:3857");
         map.addSource(srcId, {
           type: "raster",
-          tiles: [
-            `${cfg.wms!.url}?SERVICE=WMS&VERSION=${version}&REQUEST=GetMap&LAYERS=${cfg.wms!.layer}&STYLES=&FORMAT=image/png&TRANSPARENT=TRUE&${crsParam}=EPSG:3857&WIDTH=256&HEIGHT=256&BBOX={bbox-epsg-3857}`,
-          ],
+          tiles: [`${cfg.wms!.url}?${params.toString()}`],
           tileSize: 256,
           attribution: `<a href="${cfg.attribution.url}" target="_blank">${cfg.attribution.text}</a>`,
         });
