@@ -42,6 +42,23 @@ export function lonLatToTile(lon: number, lat: number, z: number): { x: number; 
   return { x, y };
 }
 
+/**
+ * Retourne le bounding box d'une tuile XYZ en WGS84
+ * sous la forme [minLon, minLat, maxLon, maxLat]
+ */
+export function tileToBBox(
+  x: number,
+  y: number,
+  z: number
+): [number, number, number, number] {
+  const n = 2 ** z;
+  const lonMin = (x / n) * 360 - 180;
+  const lonMax = ((x + 1) / n) * 360 - 180;
+  const latMin = (Math.atan(Math.sinh(Math.PI * (1 - 2 * (y + 1) / n))) * 180) / Math.PI;
+  const latMax = (Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n))) * 180) / Math.PI;
+  return [lonMin, latMin, lonMax, latMax];
+}
+
 export interface MbtilesReader {
   /** Nom de couche (source-layer), ex. "rrp_france" */
   layerName: string;

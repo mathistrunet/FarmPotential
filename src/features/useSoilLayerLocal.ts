@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import type maplibregl from "maplibre-gl";
 
 // ⬇️ imports RELATIFS (plus d'alias "@")
-import { loadLocalRrpMbtiles, lonLatToTile } from "../services/rrpLocal";
+import { loadLocalRrpMbtiles, lonLatToTile, tileToBBox } from "../services/rrpLocal";
+import bboxClip from "@turf/bbox-clip";
 import {
   FIELD_UCS,
   FIELD_LIB,
@@ -157,6 +158,7 @@ export function useSoilLayerLocal({
             { x: x + 1, y: y + 1 },
           ];
           const all: GeoJSON.Feature[] = [];
+          const seenIds = new Set<string | number>();
           tiles.forEach(({ x, y }) => {
             const key = `${z}/${x}/${y}`;
             let feats = tileCache.get(key);
@@ -167,10 +169,26 @@ export function useSoilLayerLocal({
               } catch {
                 /* ignore tile parsing errors */
               }
-              feats = fc ? fc.features : [];
+              const bbox = tileToBBox(x, y, z);
+              feats = (fc ? fc.features : [])
+                .map((f) => {
+                  try {
+                    return bboxClip(f, bbox);
+                  } catch {
+                    return null;
+                  }
+                })
+                .filter((f): f is GeoJSON.Feature => !!f);
               tileCache.set(key, feats);
             }
-            all.push(...feats);
+            feats.forEach((f) => {
+              const id = (f as any).id ?? (f.properties as any)?.id;
+              if (id != null) {
+                if (seenIds.has(id)) return;
+                seenIds.add(id);
+              }
+              all.push(f);
+            });
           });
           (map.getSource(sourceId) as maplibregl.GeoJSONSource).setData({
             type: "FeatureCollection",
