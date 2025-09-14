@@ -20,7 +20,7 @@ import DrawToolbar from "./Front/DrawToolbar";
 // ✅ Import/Export Télépac (chemin conservé)
 import ImportTelepacButton, { ExportTelepacButton } from "./Front/TelepacButton";
 
-// ✅ NOUVEAU : hook d’affichage RRP local (depuis un ZIP placé dans /public/data)
+// ✅ NOUVEAU : hook d’affichage RRP local (depuis un fichier MBTiles placé dans /public/data)
 import { useSoilLayerLocal } from "./features/useSoilLayerLocal";
 
 export default function App() {
@@ -45,11 +45,11 @@ export default function App() {
     (window).maplibregl = maplibregl;
   }, []);
 
-  // ✅ Charge la couche RRP depuis un ZIP local (placer le fichier dans /public/data/)
-  //    Exemple : public/data/rrp_occitanie.zip
-  useSoilLayerLocal({
+  // ✅ Charge la couche RRP France depuis un fichier MBTiles local (placer le fichier dans /public/data/)
+  //    Exemple : public/data/02_Donnees_Travail.mbtiles
+  const { polygonsShown } = useSoilLayerLocal({
     map: mapRef.current,
-    zipUrl: "/data/rrp_occitanie.zip",
+    mbtilesUrl: "/data/02_Donnees_Travail.mbtiles",
     sourceId: "soils-rrp",
     fillLayerId: "soils-rrp-fill",
     lineLayerId: "soils-rrp-outline",
@@ -234,16 +234,16 @@ export default function App() {
                   marginTop: 8,
                 }}
               >
-                <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <input
-                    type="checkbox"
-                    checked={rrpVisible}
-                    onChange={(e) => setRrpVisible(e.target.checked)}
-                  />
-                  <span>Carte des sols RRP Occitanie</span>
-                </label>
+              <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={rrpVisible}
+                  onChange={(e) => setRrpVisible(e.target.checked)}
+                />
+                <span>Carte des sols France</span>
+              </label>
                 <p style={{ color: "#666", fontSize: 12, marginTop: 8 }}>
-                  Chargée depuis <code>/public/data/rrp_occitanie.zip</code>.
+                  Chargée depuis <code>/public/data/rrp_france_wgs84_shp.zip</code>.
                 </p>
                 <div
                   style={{
@@ -268,6 +268,9 @@ export default function App() {
                     }}
                     style={{ width: "100%" }}
                   />
+                </div>
+                <div style={{ fontSize: 12, color: "#666", marginTop: 4 }}>
+                  Polygones: {polygonsShown ? "affichés" : "non visibles"}
                 </div>
               </div>
               {/* ⛔️ retiré : contrôle sols en ligne (WMS/WFS) */}
