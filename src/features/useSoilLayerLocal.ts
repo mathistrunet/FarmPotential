@@ -173,12 +173,19 @@ export function useSoilLayerLocal({
               feats = (fc ? fc.features : [])
                 .map((f) => {
                   try {
+                    // Trim feature to its tile bounds; if clipping fails,
+                    // fall back to the original geometry so the layer
+                    // still renders.
                     return bboxClip(f, bbox);
                   } catch {
-                    return null;
+                    return f;
                   }
                 })
-                .filter((f): f is GeoJSON.Feature => !!f);
+                .filter(
+                  (f): f is GeoJSON.Feature =>
+                    !!f && f.geometry !== null
+                );
+
               tileCache.set(key, feats);
             }
             feats.forEach((f) => {
