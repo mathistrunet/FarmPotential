@@ -13,16 +13,6 @@ import {
 } from "../config/soilsLocalConfig";
 import { loadRrpColors } from "../lib/rrpLookup";
 
-const TILE_SIZE_KM = 30;
-
-function zoomForKmAtLat(lat: number, km: number): number {
-  const earthCircumference = 40075016.686; // metres at equator
-  const latFactor = Math.cos((lat * Math.PI) / 180);
-  const tileSizeM = km * 1000;
-  const exact = Math.log2((earthCircumference * latFactor) / tileSizeM);
-  return Math.round(exact);
-}
-
 
 type Options = {
   map: maplibregl.Map | null;
@@ -145,11 +135,8 @@ export function useSoilLayerLocal({
         );
 
         update = () => {
+          const z = Math.floor(map.getZoom());
           const center = map.getCenter();
-          const targetZ = zoomForKmAtLat(center.lat, TILE_SIZE_KM);
-          const minZ = reader.meta.minzoom ?? 0;
-          const maxZ = reader.meta.maxzoom ?? 22;
-          const z = Math.min(Math.max(targetZ, minZ), maxZ);
           const { x, y } = lonLatToTile(center.lng, center.lat, z);
           const tiles = [
             { x, y },
