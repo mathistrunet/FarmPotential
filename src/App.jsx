@@ -1,16 +1,11 @@
 // src/App.jsx
-import React, { useEffect, useState } from "react";
-import maplibregl from "maplibre-gl";
+import React, { useState } from "react";
 
 import RasterToggles from "./components/RasterToggles";
 import ParcelleEditor from "./components/ParcelleEditor";
 import { useMapInitialization } from "./features/map/useMapInitialization";
 
-// ⛔️ retirés car liés aux calques/queries en ligne (Géoportail)
-// import SoilsControl from "./features/soils/components/SoilsControl";
-// import { useSoilsLayer } from "./features/soils/hooks/useSoilsLayer";
-// import SoilInfoPanel from "./components/SoilInfoPanel";
-// import { getRrpAtPoint } from "./utils/rrpGetFeatureInfo";
+// ⛔️ Fonctionnalités sols retirées pour focaliser cette branche sur la météo locale
 
 // ✅ composant RPG autonome (chemin conservé)
 import RpgFeature from "./Front/useRpgLayer";
@@ -18,9 +13,6 @@ import RpgFeature from "./Front/useRpgLayer";
 import DrawToolbar from "./Front/DrawToolbar";
 // ✅ Import/Export Télépac (chemin conservé)
 import ImportTelepacButton, { ExportTelepacButton } from "./Front/TelepacButton";
-
-// ✅ NOUVEAU : hook d’affichage RRP local (depuis un ZIP placé dans /public/data)
-import { useSoilLayerLocal } from "./features/useSoilLayerLocal";
 
 export default function App() {
   const {
@@ -36,26 +28,6 @@ export default function App() {
   const [sideOpen, setSideOpen] = useState(true);          // panneau latéral ouvert/fermé
   const [activeTab, setActiveTab] = useState("parcelles"); // "parcelles" | "calques"
   const [compact, setCompact] = useState(false);
-  const [rrpVisible, setRrpVisible] = useState(true);
-
-  // ✅ expose maplibregl pour les popups utilisés par le hook local
-  useEffect(() => {
-    (window).maplibregl = maplibregl;
-  }, []);
-
-  // ✅ Charge la couche RRP depuis un ZIP local (placer le fichier dans /public/data/)
-  //    Exemple : public/data/rrp_occitanie.zip
-  useSoilLayerLocal({
-    map: mapRef.current,
-    zipUrl: "/data/rrp_occitanie.zip",
-    sourceId: "soils-rrp",
-    fillLayerId: "soils-rrp-fill",
-    lineLayerId: "soils-rrp-outline",
-    labelLayerId: "soils-rrp-label",
-    zIndex: 10,
-    visible: rrpVisible,
-  });
-
   // ---- Styles de la barre d’outils bas
   const barBase = {
     position: "fixed",
@@ -118,8 +90,7 @@ export default function App() {
       {/* Carte */}
       <div id="map" style={{ height: "100dvh", width: "100%" }} />
 
-      {/* ⛔️ retiré : panneau d’info sols alimenté par GetFeatureInfo distant */}
-      {/* <SoilInfoPanel info={soilInfo} /> */}
+      {/* ⛔️ Panneau d’info sols supprimé pour laisser place aux futures données météo */}
 
       {/* Panneau latéral (onglets + repliable) */}
       <div
@@ -223,28 +194,7 @@ export default function App() {
             </span>
             <div style={{ marginTop: 8 }}>
               <RasterToggles mapRef={mapRef} />
-              <div
-                style={{
-                  border: "1px solid #eee",
-                  borderRadius: 8,
-                  padding: 8,
-                  marginTop: 8,
-                }}
-              >
-                <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <input
-                    type="checkbox"
-                    checked={rrpVisible}
-                    onChange={(e) => setRrpVisible(e.target.checked)}
-                  />
-                  <span>Carte des sols RRP Occitanie</span>
-                </label>
-                <p style={{ color: "#666", fontSize: 12, marginTop: 8 }}>
-                  Chargée depuis <code>/public/data/rrp_occitanie.zip</code>.
-                </p>
-              </div>
-              {/* ⛔️ retiré : contrôle sols en ligne (WMS/WFS) */}
-              {/* <SoilsControl ... /> */}
+              {/* ⛔️ Fonctionnalités sols retirées pour focaliser cette branche sur la météo */}
             </div>
           </div>
         )}
