@@ -42,6 +42,17 @@ export function lonLatToTile(lon: number, lat: number, z: number): { x: number; 
   return { x, y };
 }
 
+export type LngLatBBox = [number, number, number, number];
+
+export function tileToBBox(z: number, x: number, y: number): LngLatBBox {
+  const scale = 1 << z;
+  const west = (x / scale) * 360 - 180;
+  const east = ((x + 1) / scale) * 360 - 180;
+  const north = (Math.atan(Math.sinh(Math.PI * (1 - (2 * y) / scale))) * 180) / Math.PI;
+  const south = (Math.atan(Math.sinh(Math.PI * (1 - (2 * (y + 1)) / scale))) * 180) / Math.PI;
+  return [west, south, east, north];
+}
+
 export interface MbtilesReader {
   /** Nom de couche (source-layer), ex. "rrp_france" */
   layerName: string;
