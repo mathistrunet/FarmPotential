@@ -2,10 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import type maplibregl from "maplibre-gl";
 
 // ⬇️ imports RELATIFS (plus d'alias "@")
+import {
+  loadLocalRrpMbtiles,
+  lonLatToTile,
+  tileToBBox,
+  type LngLatBBox,
+} from "../services/rrpLocal";
 import bboxClip from "@turf/bbox-clip";
-import type { BBox } from "geojson";
 
-import { loadLocalRrpMbtiles, lonLatToTile, tileToBBox } from "../services/rrpLocal";
 import {
   FIELD_UCS,
   FIELD_LIB,
@@ -184,8 +188,10 @@ export function useSoilLayerLocal({
               } catch {
                 /* ignore tile parsing errors */
               }
+
               feats = fc ? fc.features : [];
               tileCache.set(tileKey, feats);
+
             }
             for (const feat of feats) {
               const featureKey = createFeatureKey(feat);
@@ -297,6 +303,16 @@ function roundCoord(value: number): string {
   const rounded = Math.round(value * 1e6) / 1e6;
   return rounded === 0 ? "0" : String(rounded);
 
+}
+
+function cloneFeatureWithGeometry(
+  feature: GeoJSON.Feature,
+  geometry: GeoJSON.Geometry
+): GeoJSON.Feature {
+  const { geometry: _oldGeometry, bbox: _oldBBox, ...rest } = feature as GeoJSON.Feature & {
+    bbox?: GeoJSON.BBox;
+  };
+  return { ...rest, geometry };
 }
 
 function getLayerIdBelow(map: maplibregl.Map, zIndex: number): string | null {

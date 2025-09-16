@@ -37,7 +37,7 @@ export default function App() {
   const [sideOpen, setSideOpen] = useState(true);          // panneau latéral ouvert/fermé
   const [activeTab, setActiveTab] = useState("parcelles"); // "parcelles" | "calques"
   const [compact, setCompact] = useState(false);
-  const [rrpVisible, setRrpVisible] = useState(true);
+  const [rrpVisible, setRrpVisible] = useState(false);
   const [rrpOpacity, setRrpOpacity] = useState(DEFAULT_FILL_OPACITY);
   const [freezeTiles, setFreezeTiles] = useState(false);
 
