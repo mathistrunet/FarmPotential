@@ -3,7 +3,13 @@ import React, { useEffect, useRef, useState } from "react";
 import { entriesCodebook, labelFromCode, codeFromLabel } from "../utils/cultureLabels";
 import { ringAreaM2 } from "../utils/geometry";
 
-export default function ParcelleEditor({ features, setFeatures, selectedId, onSelect }) {
+export default function ParcelleEditor({
+  features,
+  setFeatures,
+  selectedId,
+  onSelect,
+  onRequestWeather,
+}) {
   const options = entriesCodebook();                 // [[code,label], ...]
   const rowsRef = useRef(new Map());
   const [typed, setTyped] = useState({});            // saisie libre par parcelle (id -> string)
@@ -50,10 +56,12 @@ export default function ParcelleEditor({ features, setFeatures, selectedId, onSe
         // Affichage "ilot.numero" si les deux sont présents ; sinon on retombe sur ce qu’on a (numéro seul, ou îlot seul), ou à défaut l'id.
         const ilot = (f.properties?.ilot_numero ?? "").toString().trim();
         const num  = (f.properties?.numero ?? "").toString().trim();
-        const titre = ilot && num ? `${ilot}.${num}` : (ilot || num || "");
+        const titre = ilot && num ? `${ilot}.${num}` : ilot || num || "";
+        const displayTitle = titre ? `Parcelle ${titre}` : `Parcelle ${idx + 1}`;
 
         const ring = f.geometry?.coordinates?.[0];
         const surfaceHa = ring ? ringAreaM2(ring) / 10000 : null;
+        const hasGeometry = Array.isArray(ring) && ring.length >= 3;
 
 
         return (
@@ -69,8 +77,43 @@ export default function ParcelleEditor({ features, setFeatures, selectedId, onSe
             }}
             title="Cliquer pour sélectionner la parcelle sur la carte"
           >
-            <div style={{ fontWeight: 600, marginBottom: 6 }}>
-              Parcelle {titre}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 8,
+                marginBottom: 6,
+              }}
+            >
+              <div style={{ fontWeight: 600 }}>{displayTitle}</div>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!hasGeometry) return;
+                  onRequestWeather?.(id, displayTitle);
+                }}
+                disabled={!hasGeometry}
+                title={
+                  hasGeometry
+                    ? "Afficher la météo de la dernière année pour cette parcelle"
+                    : "Dessinez d'abord la géométrie de la parcelle"
+                }
+                style={{
+                  padding: "6px 10px",
+                  borderRadius: 8,
+                  border: "1px solid #2563eb",
+                  background: hasGeometry ? "#ffffff" : "#f8fafc",
+                  color: hasGeometry ? "#2563eb" : "#94a3b8",
+                  cursor: hasGeometry ? "pointer" : "not-allowed",
+                  fontSize: 12,
+                  fontWeight: 500,
+                  transition: "background-color .2s ease, color .2s ease",
+                }}
+              >
+                Météo (12 mois)
+              </button>
             </div>
             {surfaceHa != null && !Number.isNaN(surfaceHa) && (
               <div style={{ fontSize: 12, color: "#555", marginBottom: 6 }}>

@@ -1,9 +1,12 @@
 // src/App.jsx
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 
 import RasterToggles from "./components/RasterToggles";
 import ParcelleEditor from "./components/ParcelleEditor";
 import { useMapInitialization } from "./features/map/useMapInitialization";
+import WeatherModal from "./components/WeatherModal";
+import { fetchWeatherSummary } from "./services/weather";
+import { ringCentroidLonLat } from "./utils/geometry";
 
 // ⛔️ Fonctionnalités sols retirées pour focaliser cette branche sur la météo locale
 
@@ -28,6 +31,16 @@ export default function App() {
   const [sideOpen, setSideOpen] = useState(true);          // panneau latéral ouvert/fermé
   const [activeTab, setActiveTab] = useState("parcelles"); // "parcelles" | "calques"
   const [compact, setCompact] = useState(false);
+  const [weatherModal, setWeatherModal] = useState({
+    open: false,
+    parcelId: null,
+    label: "",
+    coordinates: null,
+  });
+  const [weatherData, setWeatherData] = useState(null);
+  const [weatherLoading, setWeatherLoading] = useState(false);
+  const [weatherError, setWeatherError] = useState(null);
+  const weatherAbortRef = useRef(null);
   // ---- Styles de la barre d’outils bas
   const barBase = {
     position: "fixed",
@@ -63,6 +76,86 @@ export default function App() {
     fontSize: 14,
   };
   const label = (t) => (compact ? null : <span>{t}</span>);
+
+  const handleRequestWeather = (featureId, labelText) => {
+    const displayLabel = labelText?.trim() || `Parcelle ${featureId ?? ""}`.trim() || "Parcelle";
+
+    setWeatherModal({
+      open: true,
+      parcelId: featureId,
+      label: displayLabel,
+      coordinates: null,
+    });
+    setWeatherLoading(true);
+    setWeatherError(null);
+    setWeatherData(null);
+
+    if (weatherAbortRef.current) {
+      weatherAbortRef.current.abort();
+      weatherAbortRef.current = null;
+    }
+
+    const feature = features.find((f, idx) => (f.id ?? idx) === featureId);
+
+    if (!feature) {
+      setWeatherLoading(false);
+      setWeatherError("Parcelle introuvable dans la carte.");
+      return;
+    }
+
+    const ring = feature.geometry?.coordinates?.[0];
+    if (!Array.isArray(ring) || ring.length < 3) {
+      setWeatherLoading(false);
+      setWeatherError("La géométrie de la parcelle est incomplète.");
+      return;
+    }
+
+    const centroid = ringCentroidLonLat(ring);
+    if (!centroid) {
+      setWeatherLoading(false);
+      setWeatherError("Impossible de localiser la parcelle pour la météo.");
+      return;
+    }
+
+    const [lon, lat] = centroid;
+    setWeatherModal((prev) => ({
+      ...prev,
+      coordinates: { latitude: lat, longitude: lon },
+    }));
+
+    selectFeatureOnMap(featureId, true);
+
+    const controller = new AbortController();
+    weatherAbortRef.current = controller;
+
+    fetchWeatherSummary({ latitude: lat, longitude: lon, signal: controller.signal })
+      .then((data) => {
+        weatherAbortRef.current = null;
+        setWeatherData(data);
+        setWeatherError(null);
+        setWeatherLoading(false);
+      })
+      .catch((err) => {
+        if (err?.name === "AbortError") return;
+        weatherAbortRef.current = null;
+        setWeatherError(
+          err?.message ||
+            "Impossible de récupérer les relevés météo pour cette parcelle."
+        );
+        setWeatherLoading(false);
+      });
+  };
+
+  const handleCloseWeather = () => {
+    if (weatherAbortRef.current) {
+      weatherAbortRef.current.abort();
+      weatherAbortRef.current = null;
+    }
+    setWeatherModal({ open: false, parcelId: null, label: "", coordinates: null });
+    setWeatherData(null);
+    setWeatherError(null);
+    setWeatherLoading(false);
+  };
 
   // Petites icônes (chevron uniquement ici)
   const iconStyle = {
@@ -175,6 +268,7 @@ export default function App() {
               setFeatures={setFeatures}
               selectedId={selectedId}
               onSelect={(id) => selectFeatureOnMap(id, true)}
+              onRequestWeather={handleRequestWeather}
             />
 
             <p style={{ fontSize: 12, color: "#777", marginTop: 10 }}>
@@ -264,6 +358,16 @@ export default function App() {
           </button>
         </div>
       </div>
+
+      <WeatherModal
+        open={weatherModal.open}
+        onClose={handleCloseWeather}
+        parcelLabel={weatherModal.label}
+        loading={weatherLoading}
+        error={weatherError}
+        weather={weatherData}
+        coordinates={weatherModal.coordinates}
+      />
     </div>
   );
 }
