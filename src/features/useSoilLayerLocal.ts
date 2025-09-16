@@ -260,6 +260,12 @@ function clipTileFeatures(features: GeoJSON.Feature[], bounds: LngLatBBox): GeoJ
   const clipped: GeoJSON.Feature[] = [];
   features.forEach((feature) => {
     if (!feature.geometry) return;
+    if (
+      feature.geometry.type !== "Polygon" &&
+      feature.geometry.type !== "MultiPolygon"
+    ) {
+      return;
+    }
     let clippedFeature: GeoJSON.Feature | null = null;
     try {
       clippedFeature = bboxClip(feature as GeoJSON.Feature, bounds) as GeoJSON.Feature;
@@ -275,20 +281,40 @@ function clipTileFeatures(features: GeoJSON.Feature[], bounds: LngLatBBox): GeoJ
 
 function geometryIsEmpty(geometry: GeoJSON.Geometry): boolean {
   switch (geometry.type) {
-    case "Polygon":
-      return !geometry.coordinates.some((ring) => ring.length >= 4);
-    case "MultiPolygon":
-      return !geometry.coordinates.some((poly) =>
-        poly.some((ring) => ring.length >= 4)
+    case "Polygon": {
+      const rings = geometry.coordinates;
+      if (!Array.isArray(rings)) return true;
+      return !rings.some((ring) => Array.isArray(ring) && ring.length >= 4);
+    }
+    case "MultiPolygon": {
+      const polygons = geometry.coordinates;
+      if (!Array.isArray(polygons)) return true;
+      return !polygons.some(
+        (poly) =>
+          Array.isArray(poly) &&
+          poly.some((ring) => Array.isArray(ring) && ring.length >= 4)
       );
-    case "LineString":
-      return geometry.coordinates.length < 2;
-    case "MultiLineString":
-      return !geometry.coordinates.some((line) => line.length >= 2);
-    case "MultiPoint":
-      return geometry.coordinates.length === 0;
-    case "GeometryCollection":
-      return !geometry.geometries.some((geom) => !geometryIsEmpty(geom));
+    }
+    case "LineString": {
+      const coords = geometry.coordinates;
+      return !Array.isArray(coords) || coords.length < 2;
+    }
+    case "MultiLineString": {
+      const lines = geometry.coordinates;
+      if (!Array.isArray(lines)) return true;
+      return !lines.some((line) => Array.isArray(line) && line.length >= 2);
+    }
+    case "MultiPoint": {
+      const points = geometry.coordinates;
+      return !Array.isArray(points) || points.length === 0;
+    }
+    case "GeometryCollection": {
+      const geometries = geometry.geometries;
+      if (!Array.isArray(geometries)) return true;
+      return !geometries.some(
+        (geom) => geom && typeof geom === "object" && !geometryIsEmpty(geom)
+      );
+    }
     default:
       return false;
   }
