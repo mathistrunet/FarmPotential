@@ -131,24 +131,31 @@ export function useSoilLayerLocal({
           ["to-string", ["get", FIELD_LIB[0] ?? FIELD_UCS[0]]],
         ];
 
-        map.addLayer(
-          {
-            id: labelLayerId,
-            type: "symbol",
-            source: sourceId,
-            layout: {
-              "text-field": labelExpr,
-              "text-size": 10,
-              "text-allow-overlap": false,
+        const canRenderLabels = Boolean(map.getStyle()?.glyphs);
+        if (canRenderLabels) {
+          map.addLayer(
+            {
+              id: labelLayerId,
+              type: "symbol",
+              source: sourceId,
+              layout: {
+                "text-field": labelExpr,
+                "text-size": 10,
+                "text-allow-overlap": false,
+              },
+              paint: {
+                "text-color": "#222",
+                "text-halo-color": "#ffffff",
+                "text-halo-width": 1.2,
+              },
             },
-            paint: {
-              "text-color": "#222",
-              "text-halo-color": "#ffffff",
-              "text-halo-width": 1.2,
-            },
-          },
-          getLayerIdBelow(map, zIndex + 2) || undefined
-        );
+            getLayerIdBelow(map, zIndex + 2) || undefined
+          );
+        } else {
+          console.warn(
+            `Skipping "${labelLayerId}" labels because the current style has no glyphs URL.`
+          );
+        }
 
         update = () => {
           if (aborted || freezeRef.current) return;
@@ -163,9 +170,10 @@ export function useSoilLayerLocal({
             { x: x + 1, y: y + 1 },
           ];
           const all: GeoJSON.Feature[] = [];
+          const dedupe = new Set<string>();
           tiles.forEach(({ x, y }) => {
-            const key = `${z}/${x}/${y}`;
-            let feats = tileCache.get(key);
+            const tileKey = `${z}/${x}/${y}`;
+            let feats = tileCache.get(tileKey);
             if (!feats) {
               let fc: GeoJSON.FeatureCollection | null = null;
               try {
@@ -174,9 +182,14 @@ export function useSoilLayerLocal({
                 /* ignore tile parsing errors */
               }
               feats = fc ? fc.features : [];
-              tileCache.set(key, feats);
+              tileCache.set(tileKey, feats);
             }
-            all.push(...feats);
+            for (const feat of feats) {
+              const featureKey = createFeatureKey(feat);
+              if (featureKey && dedupe.has(featureKey)) continue;
+              if (featureKey) dedupe.add(featureKey);
+              all.push(feat);
+            }
           });
           const source = map.getSource(sourceId) as maplibregl.GeoJSONSource | undefined;
           if (!source) {
@@ -235,6 +248,50 @@ export function useSoilLayerLocal({
     }
   }, [map, fillLayerId, fillOpacity]);
   return { polygonsShown, loadingTiles };
+}
+
+function createFeatureKey(feature: GeoJSON.Feature): string | null {
+  if (!feature.geometry) return null;
+  if (feature.id !== undefined && feature.id !== null) {
+    return `id:${feature.id}`;
+  }
+  return `geom:${geometrySignature(feature.geometry)}|props:${propertiesSignature(
+    feature.properties
+  )}`;
+}
+
+function geometrySignature(geometry: GeoJSON.Geometry): string {
+  if (geometry.type === "GeometryCollection") {
+    return geometry.geometries.map((g) => geometrySignature(g)).join(";");
+  }
+  const coords: unknown = (geometry as any).coordinates;
+  return `${geometry.type}:${coordinateSignature(coords)}`;
+}
+
+function coordinateSignature(coords: unknown): string {
+  if (!Array.isArray(coords)) return "";
+  if (coords.length > 0 && typeof coords[0] === "number") {
+    return (coords as number[])
+      .map((value) => roundCoord(value))
+      .join(",");
+  }
+  return (coords as unknown[]).map((c) => coordinateSignature(c)).join("|");
+}
+
+function propertiesSignature(props: GeoJSON.GeoJsonProperties | null | undefined): string {
+  if (!props) return "";
+  const entries = Object.entries(props).filter(([, value]) => value !== undefined && value !== null);
+  if (!entries.length) return "";
+  return entries
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([name, value]) => `${name}:${String(value)}`)
+    .join("|");
+}
+
+function roundCoord(value: number): string {
+  if (!Number.isFinite(value)) return "nan";
+  const rounded = Math.round(value * 1e6) / 1e6;
+  return rounded === 0 ? "0" : String(rounded);
 }
 
 function getLayerIdBelow(map: maplibregl.Map, zIndex: number): string | null {
