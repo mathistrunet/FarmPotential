@@ -2,10 +2,18 @@ import { useEffect, useRef, useState } from "react";
 import type maplibregl from "maplibre-gl";
 
 // ⬇️ imports RELATIFS (plus d'alias "@")
-import bboxClip from "@turf/bbox-clip";
-import type { BBox } from "geojson";
+import {
+  loadLocalRrpMbtiles,
+  lonLatToTile,
+  tileToBBox,
+  type LngLatBBox,
+} from "../services/rrpLocal";
+import {
+  intersection,
+  type Polygon as ClipPolygon,
+  type MultiPolygon as ClipMultiPolygon,
+} from "polygon-clipping";
 
-import { loadLocalRrpMbtiles, lonLatToTile, tileToBBox } from "../services/rrpLocal";
 import {
   FIELD_UCS,
   FIELD_LIB,
@@ -183,12 +191,9 @@ export function useSoilLayerLocal({
               } catch {
                 /* ignore tile parsing errors */
               }
-              const bbox = tileToBBox(x, y, z) as BBox;
-              feats = fc
-                ? fc.features
-                    .map((feat) => clipFeatureToBBox(feat, bbox))
-                    .filter((feat): feat is GeoJSON.Feature => Boolean(feat))
-                : [];
+
+              const bbox = tileToBBox(z, x, y);
+              feats = fc ? clipTileFeatures(fc.features, bbox) : [];
               tileCache.set(key, feats);
             }
             for (const feat of feats) {
@@ -254,25 +259,67 @@ export function useSoilLayerLocal({
   return { polygonsShown, loadingTiles };
 }
 
-function clipFeatureToBBox(
-  feature: GeoJSON.Feature,
-  bbox: BBox
-): GeoJSON.Feature | null {
-  if (!feature.geometry) return null;
-  try {
-    const clipped = bboxClip(feature as GeoJSON.Feature, bbox) as GeoJSON.Feature;
-    if (!clipped?.geometry) return null;
-    if (feature.id !== undefined) {
-      clipped.id = feature.id;
+function clipTileFeatures(features: GeoJSON.Feature[], bounds: LngLatBBox): GeoJSON.Feature[] {
+  if (!features.length) return [];
+  const clipPolygon = boundsToClipPolygon(bounds);
+  const clipped: GeoJSON.Feature[] = [];
+  features.forEach((feature) => {
+    const geometry = feature.geometry;
+    if (!geometry) return;
+    const next = clipGeometryToBounds(geometry, clipPolygon);
+    if (!next) return;
+    clipped.push(cloneFeatureWithGeometry(feature, next));
+  });
+  return clipped;
+}
+
+function clipGeometryToBounds(
+  geometry: GeoJSON.Geometry,
+  clipPolygon: ClipPolygon
+): GeoJSON.Geometry | null {
+  if (geometry.type === "Polygon" || geometry.type === "MultiPolygon") {
+    const subject =
+      geometry.type === "Polygon"
+        ? (geometry.coordinates as ClipPolygon)
+        : (geometry.coordinates as ClipMultiPolygon);
+    const intersectionResult = intersection(subject, clipPolygon);
+    if (!intersectionResult.length) return null;
+    if (intersectionResult.length === 1) {
+      return { type: "Polygon", coordinates: intersectionResult[0] };
     }
-    // ensure properties are preserved when turf returns an empty object
-    if (!clipped.properties && feature.properties) {
-      clipped.properties = feature.properties;
-    }
-    return clipped;
-  } catch {
-    return null;
+    return { type: "MultiPolygon", coordinates: intersectionResult };
   }
+  if (geometry.type === "GeometryCollection") {
+    const geometries = geometry.geometries
+      .map((geom) => clipGeometryToBounds(geom, clipPolygon))
+      .filter((geom): geom is GeoJSON.Geometry => Boolean(geom));
+    if (!geometries.length) return null;
+    return { type: "GeometryCollection", geometries };
+  }
+  return geometry;
+}
+
+function boundsToClipPolygon(bounds: LngLatBBox): ClipPolygon {
+  const [west, south, east, north] = bounds;
+  return [
+    [
+      [west, south],
+      [east, south],
+      [east, north],
+      [west, north],
+      [west, south],
+    ],
+  ];
+}
+
+function cloneFeatureWithGeometry(
+  feature: GeoJSON.Feature,
+  geometry: GeoJSON.Geometry
+): GeoJSON.Feature {
+  const { geometry: _oldGeometry, bbox: _oldBBox, ...rest } = feature as GeoJSON.Feature & {
+    bbox?: GeoJSON.BBox;
+  };
+  return { ...rest, geometry };
 }
 
 function getLayerIdBelow(map: maplibregl.Map, zIndex: number): string | null {
