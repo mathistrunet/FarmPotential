@@ -2,7 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import type maplibregl from "maplibre-gl";
 
 // ⬇️ imports RELATIFS (plus d'alias "@")
-import { loadLocalRrpMbtiles, lonLatToTile } from "../services/rrpLocal";
+import bboxClip from "@turf/bbox-clip";
+import type { BBox } from "geojson";
+
+import { loadLocalRrpMbtiles, lonLatToTile, tileToBBox } from "../services/rrpLocal";
 import {
   FIELD_UCS,
   FIELD_LIB,
@@ -190,6 +193,7 @@ export function useSoilLayerLocal({
               if (featureKey) dedupe.add(featureKey);
               all.push(feat);
             }
+
           });
           const source = map.getSource(sourceId) as maplibregl.GeoJSONSource | undefined;
           if (!source) {
@@ -292,6 +296,7 @@ function roundCoord(value: number): string {
   if (!Number.isFinite(value)) return "nan";
   const rounded = Math.round(value * 1e6) / 1e6;
   return rounded === 0 ? "0" : String(rounded);
+
 }
 
 function getLayerIdBelow(map: maplibregl.Map, zIndex: number): string | null {
