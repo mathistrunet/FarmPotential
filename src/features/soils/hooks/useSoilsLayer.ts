@@ -81,6 +81,8 @@ export function useSoilsLayer(mapRef: any) {
           tiles: [`${cfg.wms!.url}?${params.toString()}`],
           tileSize: 256,
           minzoom: MIN_WMS_ZOOM,
+          maxzoom: MIN_WMS_ZOOM,
+
           attribution: `<a href="${cfg.attribution.url}" target="_blank">${cfg.attribution.text}</a>`,
         });
         map.addLayer({
