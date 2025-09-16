@@ -3,10 +3,11 @@ import maplibregl from "maplibre-gl";
 import { SOILS_LAYERS } from "../config/soilsConfig";
 import { getInfoAtPoint } from "../services/soilsAdapter";
 
-const MAX_FEATURES = 1000;
-// limit number of requests to avoid overwhelming the browser
-const MAX_PAGES = 5;
-const MIN_ZOOM = 9;
+const WEB_MERCATOR_WORLD_WIDTH_METERS = 40075016.68557849;
+const MAX_WMS_TILE_EDGE_METERS = 30_000;
+const MIN_WMS_ZOOM = Math.ceil(
+  Math.log2(WEB_MERCATOR_WORLD_WIDTH_METERS / MAX_WMS_TILE_EDGE_METERS)
+);
 
 export function useSoilsLayer(mapRef: any) {
   const [visible, setVisible] = useState(false);
@@ -22,6 +23,9 @@ export function useSoilsLayer(mapRef: any) {
     const lyrId = "soils_lyr";
 
     const clickHandler = (e: maplibregl.MapMouseEvent) => {
+      if (cfg.mode === "wms" && map.getZoom() < MIN_WMS_ZOOM) {
+        return;
+      }
       getInfoAtPoint(map, e.lngLat, cfg)
         .then((info) => {
           const attrsHtml = info
@@ -52,8 +56,6 @@ export function useSoilsLayer(mapRef: any) {
         });
     };
 
-    let update: (() => void | Promise<void>) | undefined;
-
     if (visible) {
       if (map.getLayer(lyrId)) map.removeLayer(lyrId);
       if (map.getSource(srcId)) map.removeSource(srcId);
@@ -61,18 +63,33 @@ export function useSoilsLayer(mapRef: any) {
       if (cfg.mode === "wms") {
         const version = cfg.wms!.version || "1.3.0";
         const crsParam = version === "1.3.0" ? "CRS" : "SRS";
+        const params = new URLSearchParams({
+          SERVICE: "WMS",
+          VERSION: version,
+          REQUEST: "GetMap",
+          LAYERS: cfg.wms!.layer,
+          STYLES: "",
+          FORMAT: "image/png",
+          TRANSPARENT: "TRUE",
+          WIDTH: "256",
+          HEIGHT: "256",
+          BBOX: "{bbox-epsg-3857}",
+        });
+        params.set(crsParam, "EPSG:3857");
         map.addSource(srcId, {
           type: "raster",
-          tiles: [
-            `${cfg.wms!.url}?SERVICE=WMS&VERSION=${version}&REQUEST=GetMap&LAYERS=${cfg.wms!.layer}&STYLES=&FORMAT=image/png&TRANSPARENT=TRUE&${crsParam}=EPSG:3857&WIDTH=256&HEIGHT=256&BBOX={bbox-epsg-3857}`,
-          ],
+          tiles: [`${cfg.wms!.url}?${params.toString()}`],
           tileSize: 256,
+          minzoom: MIN_WMS_ZOOM,
+          maxzoom: MIN_WMS_ZOOM,
+
           attribution: `<a href="${cfg.attribution.url}" target="_blank">${cfg.attribution.text}</a>`,
         });
         map.addLayer({
           id: lyrId,
           type: "raster",
           source: srcId,
+          minzoom: MIN_WMS_ZOOM,
           paint: { "raster-opacity": cfg.rasterOpacity },
         });
         map.on("click", clickHandler);
@@ -89,39 +106,16 @@ export function useSoilsLayer(mapRef: any) {
         });
         map.on("click", lyrId, clickHandler);
 
-        update = async () => {
-          if (map.getZoom() < MIN_ZOOM) {
-            (map.getSource(srcId) as maplibregl.GeoJSONSource).setData({
-              type: "FeatureCollection",
-              features: [],
-            });
-            return;
-          }
-          const all: any[] = [];
-          let start = 0;
-          for (let i = 0; i < MAX_PAGES; i++) {
-            try {
-              const url = `${cfg.wfs!.url}?service=WFS&version=2.0.0&request=GetFeature&typeName=${cfg.wfs!.typeName}&outputFormat=application/json&srsName=EPSG:4326&count=${MAX_FEATURES}&startIndex=${start}`;
-              const geojson = await fetch(url).then((r) => r.json());
-              if (geojson?.features?.length) {
-                all.push(...geojson.features);
-                if (geojson.features.length < MAX_FEATURES) break;
-              } else {
-                break;
-              }
-            } catch {
-              break;
-            }
-            start += MAX_FEATURES;
-          }
-          (map.getSource(srcId) as maplibregl.GeoJSONSource).setData({
-            type: "FeatureCollection",
-            features: all,
-          });
-        };
-
-        update();
-        map.on("zoomend", update);
+        const b = map.getBounds();
+        const bbox = `${b.getWest()},${b.getSouth()},${b.getEast()},${b.getNorth()}`;
+        fetch(
+          `${cfg.wfs!.url}?service=WFS&version=2.0.0&request=GetFeature&typeName=${cfg.wfs!.typeName}&outputFormat=application/json&srsName=EPSG:4326&bbox=${bbox}`
+        )
+          .then((r) => r.json())
+          .then((geojson) => {
+            (map.getSource(srcId) as maplibregl.GeoJSONSource).setData(geojson);
+          })
+          .catch(() => {});
       }
     } else {
       if (map.getLayer(lyrId)) {
@@ -134,9 +128,6 @@ export function useSoilsLayer(mapRef: any) {
     return () => {
       map.off("click", clickHandler);
       map.off("click", lyrId, clickHandler as any);
-      if (update) {
-        map.off("zoomend", update as any);
-      }
     };
   }, [mapRef, visible, layerId]);
 

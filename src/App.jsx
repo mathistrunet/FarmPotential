@@ -20,7 +20,7 @@ import DrawToolbar from "./Front/DrawToolbar";
 // ✅ Import/Export Télépac (chemin conservé)
 import ImportTelepacButton, { ExportTelepacButton } from "./Front/TelepacButton";
 
-// ✅ NOUVEAU : hook d’affichage RRP local (depuis un ZIP placé dans /public/data)
+// ✅ NOUVEAU : hook d’affichage RRP local (depuis un fichier MBTiles placé dans /public/data)
 import { useSoilLayerLocal } from "./features/useSoilLayerLocal";
 
 export default function App() {
@@ -37,8 +37,9 @@ export default function App() {
   const [sideOpen, setSideOpen] = useState(true);          // panneau latéral ouvert/fermé
   const [activeTab, setActiveTab] = useState("parcelles"); // "parcelles" | "calques"
   const [compact, setCompact] = useState(false);
-  const [rrpVisible, setRrpVisible] = useState(false);
+  const [rrpVisible, setRrpVisible] = useState(true);
   const [rrpOpacity, setRrpOpacity] = useState(DEFAULT_FILL_OPACITY);
+  const [freezeTiles, setFreezeTiles] = useState(false);
 
   // ✅ expose maplibregl pour les popups utilisés par le hook local
   useEffect(() => {
@@ -46,10 +47,10 @@ export default function App() {
   }, []);
 
   // ✅ Charge la couche RRP France depuis un fichier MBTiles local (placer le fichier dans /public/data/)
-  //    Exemple : public/data/02_Donnees_Travail.mbtiles
-  const { polygonsShown } = useSoilLayerLocal({
+  //    Exemple : public/data/rrp_france_wgs84_shp.mbtiles
+  const { polygonsShown, loadingTiles } = useSoilLayerLocal({
     map: mapRef.current,
-    mbtilesUrl: "/data/02_Donnees_Travail.mbtiles",
+    mbtilesUrl: "/data/rrp_france_wgs84_shp.mbtiles",
     sourceId: "soils-rrp",
     fillLayerId: "soils-rrp-fill",
     lineLayerId: "soils-rrp-outline",
@@ -57,7 +58,15 @@ export default function App() {
     zIndex: 10,
     visible: rrpVisible,
     fillOpacity: rrpOpacity,
+    freezeTiles,
   });
+
+  const soilStatusLabel = (() => {
+    if (!rrpVisible) return "couche désactivée";
+    if (freezeTiles) return "tuiles figées (pas de rechargement)";
+    if (loadingTiles) return "chargement des tuiles…";
+    return polygonsShown ? "tuiles affichées" : "aucune tuile visible";
+  })();
 
   // ---- Styles de la barre d’outils bas
   const barBase = {
@@ -243,7 +252,7 @@ export default function App() {
                 <span>Carte des sols France</span>
               </label>
                 <p style={{ color: "#666", fontSize: 12, marginTop: 8 }}>
-                  Chargée depuis <code>/public/data/rrp_france_wgs84_shp.zip</code>.
+                  Chargée depuis <code>/public/data/rrp_france_wgs84_shp.mbtiles</code>.
                 </p>
                 <div
                   style={{
@@ -270,7 +279,31 @@ export default function App() {
                   />
                 </div>
                 <div style={{ fontSize: 12, color: "#666", marginTop: 4 }}>
-                  Polygones: {polygonsShown ? "affichés" : "non visibles"}
+                  Statut : {soilStatusLabel}
+                </div>
+                <div style={{ marginTop: 8 }}>
+                  <button
+                    type="button"
+                    onClick={() => setFreezeTiles((v) => !v)}
+                    disabled={!rrpVisible}
+                    style={{
+                      padding: "6px 10px",
+                      fontSize: 12,
+                      borderRadius: 6,
+                      border: "1px solid #d1d5db",
+                      background: freezeTiles ? "#eef2ff" : "#fff",
+                      cursor: rrpVisible ? "pointer" : "not-allowed",
+                      opacity: rrpVisible ? 1 : 0.5,
+                      transition: "background-color 0.2s ease",
+                    }}
+                    title={
+                      freezeTiles
+                        ? "Cliquer pour relancer le chargement des tuiles"
+                        : "Cliquer pour figer les tuiles affichées"
+                    }
+                  >
+                    {freezeTiles ? "Relancer le chargement" : "Figer les tuiles"}
+                  </button>
                 </div>
               </div>
               {/* ⛔️ retiré : contrôle sols en ligne (WMS/WFS) */}

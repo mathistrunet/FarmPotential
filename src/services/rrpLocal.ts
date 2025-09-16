@@ -163,7 +163,7 @@ export async function loadLocalRrpMbtiles(url: string): Promise<MbtilesReader> {
    Exemples d'usage (dans ton code appelant) :
 
 // 1) Charger le lecteur
-const reader = await loadLocalRrpMbtiles("/data/02_Donnees_Travail.mbtiles");
+const reader = await loadLocalRrpMbtiles("/data/rrp_france_wgs84_shp.mbtiles");
 console.log(reader.layerName, reader.meta);
 
 // 2) Récupérer une tuile au centre de la France (z=7)
