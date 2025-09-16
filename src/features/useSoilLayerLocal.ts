@@ -2,7 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import type maplibregl from "maplibre-gl";
 
 // ⬇️ imports RELATIFS (plus d'alias "@")
-import { loadLocalRrpMbtiles, lonLatToTile } from "../services/rrpLocal";
+import bboxClip from "@turf/bbox-clip";
+import type { BBox } from "geojson";
+
+import { loadLocalRrpMbtiles, lonLatToTile, tileToBBox } from "../services/rrpLocal";
 import {
   FIELD_UCS,
   FIELD_LIB,
@@ -173,7 +176,12 @@ export function useSoilLayerLocal({
               } catch {
                 /* ignore tile parsing errors */
               }
-              feats = fc ? fc.features : [];
+              const bbox = tileToBBox(x, y, z) as BBox;
+              feats = fc
+                ? fc.features
+                    .map((feat) => clipFeatureToBBox(feat, bbox))
+                    .filter((feat): feat is GeoJSON.Feature => Boolean(feat))
+                : [];
               tileCache.set(key, feats);
             }
             all.push(...feats);
@@ -235,6 +243,27 @@ export function useSoilLayerLocal({
     }
   }, [map, fillLayerId, fillOpacity]);
   return { polygonsShown, loadingTiles };
+}
+
+function clipFeatureToBBox(
+  feature: GeoJSON.Feature,
+  bbox: BBox
+): GeoJSON.Feature | null {
+  if (!feature.geometry) return null;
+  try {
+    const clipped = bboxClip(feature as GeoJSON.Feature, bbox) as GeoJSON.Feature;
+    if (!clipped?.geometry) return null;
+    if (feature.id !== undefined) {
+      clipped.id = feature.id;
+    }
+    // ensure properties are preserved when turf returns an empty object
+    if (!clipped.properties && feature.properties) {
+      clipped.properties = feature.properties;
+    }
+    return clipped;
+  } catch {
+    return null;
+  }
 }
 
 function getLayerIdBelow(map: maplibregl.Map, zIndex: number): string | null {

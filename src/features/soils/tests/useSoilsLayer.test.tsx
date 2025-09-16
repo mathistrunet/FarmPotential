@@ -28,6 +28,7 @@ describe("useSoilsLayer", () => {
       setLayoutProperty: vi.fn(),
       removeLayer: vi.fn(),
       removeSource: vi.fn(),
+      getZoom: vi.fn(() => 12),
       getBounds: () => ({ getWest: () => 0, getSouth: () => 0, getEast: () => 10, getNorth: () => 10 }),
       getCanvas: () => ({ width: 100, height: 100 }),
     };
