@@ -8,7 +8,7 @@ export default function ParcelleEditor({
   setFeatures,
   selectedId,
   onSelect,
-
+  
 }) {
   const options = entriesCodebook();                 // [[code,label], ...]
   const rowsRef = useRef(new Map());
@@ -61,7 +61,6 @@ export default function ParcelleEditor({
 
         const ring = f.geometry?.coordinates?.[0];
         const surfaceHa = ring ? ringAreaM2(ring) / 10000 : null;
-        const hasGeometry = Array.isArray(ring) && ring.length >= 3;
 
         return (
           <div
