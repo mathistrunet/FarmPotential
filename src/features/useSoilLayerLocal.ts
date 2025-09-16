@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type maplibregl from "maplibre-gl";
 
 // ⬇️ imports RELATIFS (plus d'alias "@")
@@ -23,6 +23,7 @@ type Options = {
   zIndex?: number;
   visible?: boolean;
   fillOpacity?: number;
+  freezeTiles?: boolean;
 };
 
 export function useSoilLayerLocal({
@@ -35,8 +36,22 @@ export function useSoilLayerLocal({
   zIndex = 10,
   visible = true,
   fillOpacity = DEFAULT_FILL_OPACITY,
+  freezeTiles = false,
 }: Options) {
   const [polygonsShown, setPolygonsShown] = useState(false);
+  const [loadingTiles, setLoadingTiles] = useState(false);
+  const freezeRef = useRef(freezeTiles);
+  const updateRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    freezeRef.current = freezeTiles;
+    if (freezeTiles) {
+      setLoadingTiles(false);
+    } else {
+      updateRef.current?.();
+    }
+  }, [freezeTiles]);
+
   useEffect(() => {
     if (!map) return;
 
@@ -46,6 +61,7 @@ export function useSoilLayerLocal({
       if (map.getLayer(fillLayerId)) map.removeLayer(fillLayerId);
       if (map.getSource(sourceId)) map.removeSource(sourceId);
       setPolygonsShown(false);
+      setLoadingTiles(false);
       return;
     }
     let aborted = false;
@@ -58,6 +74,7 @@ export function useSoilLayerLocal({
         if (map.getLayer(fillLayerId)) map.removeLayer(fillLayerId);
         if (map.getSource(sourceId)) map.removeSource(sourceId);
 
+        setLoadingTiles(true);
         const [reader, colors] = await Promise.all([
           loadLocalRrpMbtiles(mbtilesUrl),
           loadRrpColors(),
@@ -134,6 +151,8 @@ export function useSoilLayerLocal({
         );
 
         update = () => {
+          if (aborted || freezeRef.current) return;
+          setLoadingTiles(true);
           const z = Math.floor(map.getZoom());
           const center = map.getCenter();
           const { x, y } = lonLatToTile(center.lng, center.lat, z);
@@ -159,18 +178,29 @@ export function useSoilLayerLocal({
             }
             all.push(...feats);
           });
-          (map.getSource(sourceId) as maplibregl.GeoJSONSource).setData({
-            type: "FeatureCollection",
-            features: all,
-          });
-          setPolygonsShown(all.length > 0);
+          const source = map.getSource(sourceId) as maplibregl.GeoJSONSource | undefined;
+          if (!source) {
+            if (!aborted) setLoadingTiles(false);
+            return;
+          }
+          try {
+            source.setData({
+              type: "FeatureCollection",
+              features: all,
+            });
+            setPolygonsShown(all.length > 0);
+          } finally {
+            if (!aborted) setLoadingTiles(false);
+          }
         };
 
+        updateRef.current = update;
         update();
         map.on("move", update);
         map.on("zoom", update);
       } catch (err) {
         console.error("RRP local error:", err);
+        setLoadingTiles(false);
       }
     }
 
@@ -192,7 +222,9 @@ export function useSoilLayerLocal({
         map.off("move", update);
         map.off("zoom", update);
       }
+      updateRef.current = null;
       setPolygonsShown(false);
+      setLoadingTiles(false);
     };
   }, [map, visible, mbtilesUrl, sourceId, fillLayerId, lineLayerId, labelLayerId, zIndex]);
 
@@ -202,7 +234,7 @@ export function useSoilLayerLocal({
       map.setPaintProperty(fillLayerId, "fill-opacity", fillOpacity);
     }
   }, [map, fillLayerId, fillOpacity]);
-  return { polygonsShown };
+  return { polygonsShown, loadingTiles };
 }
 
 function getLayerIdBelow(map: maplibregl.Map, zIndex: number): string | null {
