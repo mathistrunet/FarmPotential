@@ -1,5 +1,5 @@
 // src/App.jsx
-import React, { useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 
 import RasterToggles from "./components/RasterToggles";
 import ParcelleEditor from "./components/ParcelleEditor";
@@ -17,6 +17,30 @@ import DrawToolbar from "./Front/DrawToolbar";
 // ✅ Import/Export Télépac (chemin conservé)
 import ImportTelepacButton, { ExportTelepacButton } from "./Front/TelepacButton";
 
+const CONTEXT_MENU_WIDTH = 220;
+const CONTEXT_MENU_HEIGHT = 120;
+const CONTEXT_MENU_MARGIN = 12;
+
+const createClosedContextMenu = () => ({
+  open: false,
+  x: 0,
+  y: 0,
+  featureId: null,
+  label: "",
+});
+
+const buildParcelTitle = (feature, index) => {
+  if (!feature) return "Parcelle";
+  const ilot = (feature.properties?.ilot_numero ?? "").toString().trim();
+  const num = (feature.properties?.numero ?? "").toString().trim();
+  const titre = ilot && num ? `${ilot}.${num}` : ilot || num || "";
+  if (titre) return `Parcelle ${titre}`;
+  if (typeof index === "number" && index >= 0) {
+    return `Parcelle ${index + 1}`;
+  }
+  return "Parcelle";
+};
+
 export default function App() {
   const {
     mapRef,
@@ -25,6 +49,7 @@ export default function App() {
     setFeatures,
     selectedId,
     selectFeatureOnMap,
+    mapReady,
   } = useMapInitialization();
 
   // Onglets + panneau latéral repliable
@@ -41,6 +66,31 @@ export default function App() {
   const [weatherLoading, setWeatherLoading] = useState(false);
   const [weatherError, setWeatherError] = useState(null);
   const weatherAbortRef = useRef(null);
+  const [contextMenu, setContextMenu] = useState(createClosedContextMenu);
+
+  const closeContextMenu = useCallback(() => {
+    setContextMenu((prev) => (prev.open ? createClosedContextMenu() : prev));
+  }, []);
+
+  const findFeatureById = useCallback(
+    (id) => {
+      if (id == null) return { feature: null, index: -1 };
+      for (let i = 0; i < features.length; i += 1) {
+        const candidate = features[i];
+        const candidateId = candidate?.id ?? candidate?.properties?.id ?? i;
+        if (String(candidateId) === String(id)) {
+          return { feature: candidate, index: i };
+        }
+      }
+      const fallback = drawRef.current?.get?.(id);
+      if (fallback) {
+        return { feature: fallback, index: -1 };
+      }
+      return { feature: null, index: -1 };
+    },
+    [features, drawRef]
+  );
+  
   // ---- Styles de la barre d’outils bas
   const barBase = {
     position: "fixed",
@@ -78,7 +128,12 @@ export default function App() {
   const label = (t) => (compact ? null : <span>{t}</span>);
 
   const handleRequestWeather = (featureId, labelText) => {
-    const displayLabel = labelText?.trim() || `Parcelle ${featureId ?? ""}`.trim() || "Parcelle";
+    closeContextMenu();
+
+    const { feature, index } = findFeatureById(featureId);
+    const defaultLabel =
+      feature ? buildParcelTitle(feature, index) : (`Parcelle ${featureId ?? ""}`.trim() || "Parcelle");
+    const displayLabel = labelText?.trim() || defaultLabel;
 
     setWeatherModal({
       open: true,
@@ -94,8 +149,6 @@ export default function App() {
       weatherAbortRef.current.abort();
       weatherAbortRef.current = null;
     }
-
-    const feature = features.find((f, idx) => (f.id ?? idx) === featureId);
 
     if (!feature) {
       setWeatherLoading(false);
@@ -157,6 +210,96 @@ export default function App() {
     setWeatherLoading(false);
   };
 
+  useEffect(() => {
+    if (!mapReady) return undefined;
+    const map = mapRef.current;
+    if (!map) return undefined;
+
+    const handleContextMenu = (event) => {
+      event?.preventDefault?.();
+      event?.originalEvent?.preventDefault?.();
+
+      const draw = drawRef.current;
+      if (!draw) return;
+
+      const ids = draw.getFeatureIdsAt(event.point) || [];
+      if (!ids.length) {
+        closeContextMenu();
+        return;
+      }
+
+      const featureId = ids[0];
+      const { feature, index } = findFeatureById(featureId);
+      if (!feature) {
+        closeContextMenu();
+        return;
+      }
+
+      selectFeatureOnMap(featureId);
+
+      const label = buildParcelTitle(feature, index);
+      const clientX = event.originalEvent?.clientX ?? CONTEXT_MENU_MARGIN;
+      const clientY = event.originalEvent?.clientY ?? CONTEXT_MENU_MARGIN;
+      const viewportWidth = typeof window !== "undefined" ? window.innerWidth : 0;
+      const viewportHeight = typeof window !== "undefined" ? window.innerHeight : 0;
+
+      const maxX =
+        viewportWidth && viewportWidth > 0
+          ? Math.max(
+              CONTEXT_MENU_MARGIN,
+              viewportWidth - CONTEXT_MENU_WIDTH - CONTEXT_MENU_MARGIN
+            )
+          : clientX;
+      const maxY =
+        viewportHeight && viewportHeight > 0
+          ? Math.max(
+              CONTEXT_MENU_MARGIN,
+              viewportHeight - CONTEXT_MENU_HEIGHT - CONTEXT_MENU_MARGIN
+            )
+          : clientY;
+
+      const safeMaxX = maxX || CONTEXT_MENU_MARGIN;
+      const safeMaxY = maxY || CONTEXT_MENU_MARGIN;
+
+      const x = Math.min(
+        Math.max(clientX || CONTEXT_MENU_MARGIN, CONTEXT_MENU_MARGIN),
+        safeMaxX
+      );
+      const y = Math.min(
+        Math.max(clientY || CONTEXT_MENU_MARGIN, CONTEXT_MENU_MARGIN),
+        safeMaxY
+      );
+
+      setContextMenu({ open: true, x, y, featureId, label });
+    };
+
+    map.on("contextmenu", handleContextMenu);
+
+    return () => {
+      map.off("contextmenu", handleContextMenu);
+    };
+  }, [mapReady, closeContextMenu, findFeatureById, selectFeatureOnMap, mapRef, drawRef]);
+
+  useEffect(() => {
+    if (!mapReady) return undefined;
+    const map = mapRef.current;
+    if (!map) return undefined;
+
+    const hideMenu = () => closeContextMenu();
+
+    map.on("click", hideMenu);
+    map.on("dragstart", hideMenu);
+    map.on("movestart", hideMenu);
+    map.on("zoomstart", hideMenu);
+
+    return () => {
+      map.off("click", hideMenu);
+      map.off("dragstart", hideMenu);
+      map.off("movestart", hideMenu);
+      map.off("zoomstart", hideMenu);
+    };
+  }, [mapReady, closeContextMenu, mapRef]);
+
   // Petites icônes (chevron uniquement ici)
   const iconStyle = {
     width: 18,
@@ -180,6 +323,50 @@ export default function App() {
 
   return (
     <div style={layoutStyle}>
+      {contextMenu.open && (
+        <div
+          onContextMenu={(e) => e.preventDefault()}
+          style={{
+            position: "fixed",
+            left: contextMenu.x,
+            top: contextMenu.y,
+            zIndex: 40,
+            background: "#ffffff",
+            borderRadius: 12,
+            boxShadow: "0 16px 40px rgba(15,23,42,0.22)",
+            padding: "12px 16px",
+            minWidth: 200,
+            maxWidth: 260,
+          }}
+        >
+          <div style={{ fontSize: 12, color: "#475569", marginBottom: 8 }}>
+            {contextMenu.label}
+          </div>
+          <button
+            type="button"
+            onClick={() => handleRequestWeather(contextMenu.featureId, contextMenu.label)}
+            style={{
+              width: "100%",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 6,
+              padding: "8px 12px",
+              borderRadius: 8,
+              border: "1px solid #2563eb",
+              background: "#2563eb",
+              color: "#fff",
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: "pointer",
+              boxShadow: "0 8px 24px rgba(37,99,235,0.35)",
+              transition: "background-color .2s ease, box-shadow .2s ease",
+            }}
+          >
+            Voir la météo (12 mois)
+          </button>
+        </div>
+      )}
       {/* Carte */}
       <div id="map" style={{ height: "100dvh", width: "100%" }} />
 

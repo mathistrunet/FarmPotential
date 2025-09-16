@@ -8,7 +8,7 @@ export default function ParcelleEditor({
   setFeatures,
   selectedId,
   onSelect,
-  onRequestWeather,
+
 }) {
   const options = entriesCodebook();                 // [[code,label], ...]
   const rowsRef = useRef(new Map());
@@ -63,7 +63,6 @@ export default function ParcelleEditor({
         const surfaceHa = ring ? ringAreaM2(ring) / 10000 : null;
         const hasGeometry = Array.isArray(ring) && ring.length >= 3;
 
-
         return (
           <div
             key={id}
@@ -77,44 +76,7 @@ export default function ParcelleEditor({
             }}
             title="Cliquer pour sélectionner la parcelle sur la carte"
           >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 8,
-                marginBottom: 6,
-              }}
-            >
-              <div style={{ fontWeight: 600 }}>{displayTitle}</div>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (!hasGeometry) return;
-                  onRequestWeather?.(id, displayTitle);
-                }}
-                disabled={!hasGeometry}
-                title={
-                  hasGeometry
-                    ? "Afficher la météo de la dernière année pour cette parcelle"
-                    : "Dessinez d'abord la géométrie de la parcelle"
-                }
-                style={{
-                  padding: "6px 10px",
-                  borderRadius: 8,
-                  border: "1px solid #2563eb",
-                  background: hasGeometry ? "#ffffff" : "#f8fafc",
-                  color: hasGeometry ? "#2563eb" : "#94a3b8",
-                  cursor: hasGeometry ? "pointer" : "not-allowed",
-                  fontSize: 12,
-                  fontWeight: 500,
-                  transition: "background-color .2s ease, color .2s ease",
-                }}
-              >
-                Météo (12 mois)
-              </button>
-            </div>
+            <div style={{ fontWeight: 600, marginBottom: 6 }}>{displayTitle}</div>
             {surfaceHa != null && !Number.isNaN(surfaceHa) && (
               <div style={{ fontSize: 12, color: "#555", marginBottom: 6 }}>
                 Surface : {surfaceHa.toFixed(2)} ha
