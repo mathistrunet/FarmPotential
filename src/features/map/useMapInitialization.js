@@ -14,6 +14,7 @@ export function useMapInitialization() {
   const drawRef = useRef(null);
   const [features, setFeatures] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
+  const [mapReady, setMapReady] = useState(false);
   const ensureRaster = useRasterLayers();
 
   const selectFeatureOnMap = useCallback((id, fit = false) => {
@@ -135,6 +136,8 @@ export function useMapInitialization() {
       map.on("draw.create", updateList);
       map.on("draw.update", updateList);
       map.on("draw.delete", updateList);
+
+      setMapReady(true);
     });
 
     map.on("error", (e) => console.error("Map error:", e && e.error));
@@ -145,6 +148,7 @@ export function useMapInitialization() {
       } catch {
         // ignore
       }
+      setMapReady(false);
     };
   }, [ensureRaster]);
 
@@ -156,5 +160,6 @@ export function useMapInitialization() {
     selectedId,
     setSelectedId,
     selectFeatureOnMap,
+    mapReady,
   };
 }
