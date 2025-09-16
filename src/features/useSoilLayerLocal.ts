@@ -8,11 +8,7 @@ import {
   tileToBBox,
   type LngLatBBox,
 } from "../services/rrpLocal";
-import {
-  intersection,
-  type Polygon as ClipPolygon,
-  type MultiPolygon as ClipMultiPolygon,
-} from "polygon-clipping";
+import bboxClip from "@turf/bbox-clip";
 
 import {
   FIELD_UCS,
@@ -261,55 +257,41 @@ export function useSoilLayerLocal({
 
 function clipTileFeatures(features: GeoJSON.Feature[], bounds: LngLatBBox): GeoJSON.Feature[] {
   if (!features.length) return [];
-  const clipPolygon = boundsToClipPolygon(bounds);
   const clipped: GeoJSON.Feature[] = [];
   features.forEach((feature) => {
-    const geometry = feature.geometry;
-    if (!geometry) return;
-    const next = clipGeometryToBounds(geometry, clipPolygon);
-    if (!next) return;
-    clipped.push(cloneFeatureWithGeometry(feature, next));
+    if (!feature.geometry) return;
+    let clippedFeature: GeoJSON.Feature | null = null;
+    try {
+      clippedFeature = bboxClip(feature as GeoJSON.Feature, bounds) as GeoJSON.Feature;
+    } catch {
+      clippedFeature = null;
+    }
+    if (!clippedFeature?.geometry || geometryIsEmpty(clippedFeature.geometry)) return;
+    clipped.push(cloneFeatureWithGeometry(feature, clippedFeature.geometry));
+
   });
   return clipped;
 }
 
-function clipGeometryToBounds(
-  geometry: GeoJSON.Geometry,
-  clipPolygon: ClipPolygon
-): GeoJSON.Geometry | null {
-  if (geometry.type === "Polygon" || geometry.type === "MultiPolygon") {
-    const subject =
-      geometry.type === "Polygon"
-        ? (geometry.coordinates as ClipPolygon)
-        : (geometry.coordinates as ClipMultiPolygon);
-    const intersectionResult = intersection(subject, clipPolygon);
-    if (!intersectionResult.length) return null;
-    if (intersectionResult.length === 1) {
-      return { type: "Polygon", coordinates: intersectionResult[0] };
-    }
-    return { type: "MultiPolygon", coordinates: intersectionResult };
+function geometryIsEmpty(geometry: GeoJSON.Geometry): boolean {
+  switch (geometry.type) {
+    case "Polygon":
+      return !geometry.coordinates.some((ring) => ring.length >= 4);
+    case "MultiPolygon":
+      return !geometry.coordinates.some((poly) =>
+        poly.some((ring) => ring.length >= 4)
+      );
+    case "LineString":
+      return geometry.coordinates.length < 2;
+    case "MultiLineString":
+      return !geometry.coordinates.some((line) => line.length >= 2);
+    case "MultiPoint":
+      return geometry.coordinates.length === 0;
+    case "GeometryCollection":
+      return !geometry.geometries.some((geom) => !geometryIsEmpty(geom));
+    default:
+      return false;
   }
-  if (geometry.type === "GeometryCollection") {
-    const geometries = geometry.geometries
-      .map((geom) => clipGeometryToBounds(geom, clipPolygon))
-      .filter((geom): geom is GeoJSON.Geometry => Boolean(geom));
-    if (!geometries.length) return null;
-    return { type: "GeometryCollection", geometries };
-  }
-  return geometry;
-}
-
-function boundsToClipPolygon(bounds: LngLatBBox): ClipPolygon {
-  const [west, south, east, north] = bounds;
-  return [
-    [
-      [west, south],
-      [east, south],
-      [east, north],
-      [west, north],
-      [west, south],
-    ],
-  ];
 }
 
 function cloneFeatureWithGeometry(
