@@ -13,6 +13,7 @@ import {
   type Polygon as ClipPolygon,
   type MultiPolygon as ClipMultiPolygon,
 } from "polygon-clipping";
+
 import {
   FIELD_UCS,
   FIELD_LIB,
@@ -141,24 +142,31 @@ export function useSoilLayerLocal({
           ["to-string", ["get", FIELD_LIB[0] ?? FIELD_UCS[0]]],
         ];
 
-        map.addLayer(
-          {
-            id: labelLayerId,
-            type: "symbol",
-            source: sourceId,
-            layout: {
-              "text-field": labelExpr,
-              "text-size": 10,
-              "text-allow-overlap": false,
+        const canRenderLabels = Boolean(map.getStyle()?.glyphs);
+        if (canRenderLabels) {
+          map.addLayer(
+            {
+              id: labelLayerId,
+              type: "symbol",
+              source: sourceId,
+              layout: {
+                "text-field": labelExpr,
+                "text-size": 10,
+                "text-allow-overlap": false,
+              },
+              paint: {
+                "text-color": "#222",
+                "text-halo-color": "#ffffff",
+                "text-halo-width": 1.2,
+              },
             },
-            paint: {
-              "text-color": "#222",
-              "text-halo-color": "#ffffff",
-              "text-halo-width": 1.2,
-            },
-          },
-          getLayerIdBelow(map, zIndex + 2) || undefined
-        );
+            getLayerIdBelow(map, zIndex + 2) || undefined
+          );
+        } else {
+          console.warn(
+            `Skipping "${labelLayerId}" labels because the current style has no glyphs URL.`
+          );
+        }
 
         update = () => {
           if (aborted || freezeRef.current) return;
@@ -183,11 +191,14 @@ export function useSoilLayerLocal({
               } catch {
                 /* ignore tile parsing errors */
               }
+
               const bbox = tileToBBox(z, x, y);
               feats = fc ? clipTileFeatures(fc.features, bbox) : [];
               tileCache.set(key, feats);
             }
-            all.push(...feats);
+            for (const feat of feats) {
+              all.push(feat);
+            }
           });
           const source = map.getSource(sourceId) as maplibregl.GeoJSONSource | undefined;
           if (!source) {
