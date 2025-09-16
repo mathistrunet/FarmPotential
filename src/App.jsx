@@ -90,6 +90,7 @@ export default function App() {
     },
     [features, drawRef]
   );
+  
   // ---- Styles de la barre d’outils bas
   const barBase = {
     position: "fixed",
@@ -454,6 +455,7 @@ export default function App() {
               setFeatures={setFeatures}
               selectedId={selectedId}
               onSelect={(id) => selectFeatureOnMap(id, true)}
+              onRequestWeather={handleRequestWeather}
             />
 
             <p style={{ fontSize: 12, color: "#777", marginTop: 10 }}>
