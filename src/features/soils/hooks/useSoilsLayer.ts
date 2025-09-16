@@ -3,6 +3,12 @@ import maplibregl from "maplibre-gl";
 import { SOILS_LAYERS } from "../config/soilsConfig";
 import { getInfoAtPoint } from "../services/soilsAdapter";
 
+const WEB_MERCATOR_WORLD_WIDTH_METERS = 40075016.68557849;
+const MAX_WMS_TILE_EDGE_METERS = 30_000;
+const MIN_WMS_ZOOM = Math.ceil(
+  Math.log2(WEB_MERCATOR_WORLD_WIDTH_METERS / MAX_WMS_TILE_EDGE_METERS)
+);
+
 export function useSoilsLayer(mapRef: any) {
   const [visible, setVisible] = useState(false);
   const [layerId, setLayerId] = useState<string>(SOILS_LAYERS[0]?.id);
@@ -17,6 +23,9 @@ export function useSoilsLayer(mapRef: any) {
     const lyrId = "soils_lyr";
 
     const clickHandler = (e: maplibregl.MapMouseEvent) => {
+      if (cfg.mode === "wms" && map.getZoom() < MIN_WMS_ZOOM) {
+        return;
+      }
       getInfoAtPoint(map, e.lngLat, cfg)
         .then((info) => {
           const attrsHtml = info
@@ -71,12 +80,15 @@ export function useSoilsLayer(mapRef: any) {
           type: "raster",
           tiles: [`${cfg.wms!.url}?${params.toString()}`],
           tileSize: 256,
+          minzoom: MIN_WMS_ZOOM,
+          maxzoom: MIN_WMS_ZOOM,
           attribution: `<a href="${cfg.attribution.url}" target="_blank">${cfg.attribution.text}</a>`,
         });
         map.addLayer({
           id: lyrId,
           type: "raster",
           source: srcId,
+          minzoom: MIN_WMS_ZOOM,
           paint: { "raster-opacity": cfg.rasterOpacity },
         });
         map.on("click", clickHandler);
