@@ -2,7 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import type maplibregl from "maplibre-gl";
 
 // ⬇️ imports RELATIFS (plus d'alias "@")
-import { loadLocalRrpMbtiles, lonLatToTile } from "../services/rrpLocal";
+import bboxClip from "@turf/bbox-clip";
+import type { BBox } from "geojson";
+
+import { loadLocalRrpMbtiles, lonLatToTile, tileToBBox } from "../services/rrpLocal";
 import {
   FIELD_UCS,
   FIELD_LIB,
@@ -131,24 +134,31 @@ export function useSoilLayerLocal({
           ["to-string", ["get", FIELD_LIB[0] ?? FIELD_UCS[0]]],
         ];
 
-        map.addLayer(
-          {
-            id: labelLayerId,
-            type: "symbol",
-            source: sourceId,
-            layout: {
-              "text-field": labelExpr,
-              "text-size": 10,
-              "text-allow-overlap": false,
+        const canRenderLabels = Boolean(map.getStyle()?.glyphs);
+        if (canRenderLabels) {
+          map.addLayer(
+            {
+              id: labelLayerId,
+              type: "symbol",
+              source: sourceId,
+              layout: {
+                "text-field": labelExpr,
+                "text-size": 10,
+                "text-allow-overlap": false,
+              },
+              paint: {
+                "text-color": "#222",
+                "text-halo-color": "#ffffff",
+                "text-halo-width": 1.2,
+              },
             },
-            paint: {
-              "text-color": "#222",
-              "text-halo-color": "#ffffff",
-              "text-halo-width": 1.2,
-            },
-          },
-          getLayerIdBelow(map, zIndex + 2) || undefined
-        );
+            getLayerIdBelow(map, zIndex + 2) || undefined
+          );
+        } else {
+          console.warn(
+            `Skipping "${labelLayerId}" labels because the current style has no glyphs URL.`
+          );
+        }
 
         update = () => {
           if (aborted || freezeRef.current) return;
@@ -173,10 +183,17 @@ export function useSoilLayerLocal({
               } catch {
                 /* ignore tile parsing errors */
               }
-              feats = fc ? fc.features : [];
+              const bbox = tileToBBox(x, y, z) as BBox;
+              feats = fc
+                ? fc.features
+                    .map((feat) => clipFeatureToBBox(feat, bbox))
+                    .filter((feat): feat is GeoJSON.Feature => Boolean(feat))
+                : [];
               tileCache.set(key, feats);
             }
-            all.push(...feats);
+            for (const feat of feats) {
+              all.push(feat);
+            }
           });
           const source = map.getSource(sourceId) as maplibregl.GeoJSONSource | undefined;
           if (!source) {
@@ -235,6 +252,27 @@ export function useSoilLayerLocal({
     }
   }, [map, fillLayerId, fillOpacity]);
   return { polygonsShown, loadingTiles };
+}
+
+function clipFeatureToBBox(
+  feature: GeoJSON.Feature,
+  bbox: BBox
+): GeoJSON.Feature | null {
+  if (!feature.geometry) return null;
+  try {
+    const clipped = bboxClip(feature as GeoJSON.Feature, bbox) as GeoJSON.Feature;
+    if (!clipped?.geometry) return null;
+    if (feature.id !== undefined) {
+      clipped.id = feature.id;
+    }
+    // ensure properties are preserved when turf returns an empty object
+    if (!clipped.properties && feature.properties) {
+      clipped.properties = feature.properties;
+    }
+    return clipped;
+  } catch {
+    return null;
+  }
 }
 
 function getLayerIdBelow(map: maplibregl.Map, zIndex: number): string | null {
