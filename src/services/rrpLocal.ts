@@ -42,6 +42,27 @@ export function lonLatToTile(lon: number, lat: number, z: number): { x: number; 
   return { x, y };
 }
 
+function tileXToLon(x: number, z: number): number {
+  return (x / (1 << z)) * 360 - 180;
+}
+
+function tileYToLat(y: number, z: number): number {
+  const n = Math.PI - (2 * Math.PI * y) / (1 << z);
+  return (180 / Math.PI) * Math.atan(Math.sinh(n));
+}
+
+export function tileToBBox(
+  x: number,
+  y: number,
+  z: number
+): [minLon: number, minLat: number, maxLon: number, maxLat: number] {
+  const minLon = tileXToLon(x, z);
+  const maxLon = tileXToLon(x + 1, z);
+  const maxLat = tileYToLat(y, z);
+  const minLat = tileYToLat(y + 1, z);
+  return [minLon, minLat, maxLon, maxLat];
+}
+
 export interface MbtilesReader {
   /** Nom de couche (source-layer), ex. "rrp_france" */
   layerName: string;
