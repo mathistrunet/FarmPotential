@@ -1,9 +1,13 @@
 // src/App.jsx
 import React, { useMemo, useState } from "react";
 
+
 import RasterToggles from "./components/RasterToggles";
 import ParcelleEditor from "./components/ParcelleEditor";
 import { useMapInitialization } from "./features/map/useMapInitialization";
+import WeatherModal from "./components/WeatherModal";
+import { fetchWeatherSummary } from "./services/weather";
+import { ringCentroidLonLat } from "./utils/geometry";
 
 // ✅ composant RPG autonome (chemin conservé)
 import RpgFeature from "./Front/useRpgLayer";
@@ -144,6 +148,7 @@ export default function App() {
     setFeatures,
     selectedId,
     selectFeatureOnMap,
+    mapReady,
   } = useMapInitialization();
 
   const [sideOpen, setSideOpen] = useState(true); // panneau latéral ouvert/fermé
@@ -351,6 +356,7 @@ export default function App() {
               setFeatures={setFeatures}
               selectedId={selectedId}
               onSelect={(id) => selectFeatureOnMap(id, true)}
+              onRequestWeather={handleRequestWeather}
             />
 
             <p style={{ fontSize: 12, color: "#777", marginTop: 10 }}>

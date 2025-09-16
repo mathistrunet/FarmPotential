@@ -1,4 +1,4 @@
-import { toLambert93 } from "./proj";
+import { toLambert93, toWgs84 } from "./proj";
 
 // Convertis les sommets du polygone dessiné en WGS en Lambert93
 export function ringToGml(ringLonLat) {
@@ -23,3 +23,4 @@ export function ringAreaM2(ringLonLat) {
 }
 
 // (Le calcul du centroïde utilisé dans une itération précédente a été retiré.)
+

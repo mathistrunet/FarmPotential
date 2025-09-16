@@ -8,6 +8,7 @@ export default function ParcelleEditor({
   setFeatures,
   selectedId,
   onSelect,
+  
 }) {
   const options = entriesCodebook();                 // [[code,label], ...]
   const rowsRef = useRef(new Map());
