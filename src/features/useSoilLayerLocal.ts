@@ -2,7 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import type maplibregl from "maplibre-gl";
 
 // ⬇️ imports RELATIFS (plus d'alias "@")
-import { loadLocalRrpMbtiles, lonLatToTile } from "../services/rrpLocal";
+import {
+  loadLocalRrpMbtiles,
+  lonLatToTile,
+  tileToBBox,
+  type LngLatBBox,
+} from "../services/rrpLocal";
+import bboxClip from "@turf/bbox-clip";
+
 import {
   FIELD_UCS,
   FIELD_LIB,
@@ -131,24 +138,31 @@ export function useSoilLayerLocal({
           ["to-string", ["get", FIELD_LIB[0] ?? FIELD_UCS[0]]],
         ];
 
-        map.addLayer(
-          {
-            id: labelLayerId,
-            type: "symbol",
-            source: sourceId,
-            layout: {
-              "text-field": labelExpr,
-              "text-size": 10,
-              "text-allow-overlap": false,
+        const canRenderLabels = Boolean(map.getStyle()?.glyphs);
+        if (canRenderLabels) {
+          map.addLayer(
+            {
+              id: labelLayerId,
+              type: "symbol",
+              source: sourceId,
+              layout: {
+                "text-field": labelExpr,
+                "text-size": 10,
+                "text-allow-overlap": false,
+              },
+              paint: {
+                "text-color": "#222",
+                "text-halo-color": "#ffffff",
+                "text-halo-width": 1.2,
+              },
             },
-            paint: {
-              "text-color": "#222",
-              "text-halo-color": "#ffffff",
-              "text-halo-width": 1.2,
-            },
-          },
-          getLayerIdBelow(map, zIndex + 2) || undefined
-        );
+            getLayerIdBelow(map, zIndex + 2) || undefined
+          );
+        } else {
+          console.warn(
+            `Skipping "${labelLayerId}" labels because the current style has no glyphs URL.`
+          );
+        }
 
         update = () => {
           if (aborted || freezeRef.current) return;
@@ -173,10 +187,14 @@ export function useSoilLayerLocal({
               } catch {
                 /* ignore tile parsing errors */
               }
-              feats = fc ? fc.features : [];
+
+              const bbox = tileToBBox(z, x, y);
+              feats = fc ? clipTileFeatures(fc.features, bbox) : [];
               tileCache.set(key, feats);
             }
-            all.push(...feats);
+            for (const feat of feats) {
+              all.push(feat);
+            }
           });
           const source = map.getSource(sourceId) as maplibregl.GeoJSONSource | undefined;
           if (!source) {
@@ -235,6 +253,142 @@ export function useSoilLayerLocal({
     }
   }, [map, fillLayerId, fillOpacity]);
   return { polygonsShown, loadingTiles };
+}
+
+function clipTileFeatures(features: GeoJSON.Feature[], bounds: LngLatBBox): GeoJSON.Feature[] {
+  if (!features.length) return [];
+  const clipped: GeoJSON.Feature[] = [];
+  features.forEach((feature) => {
+    if (!feature.geometry) return;
+    if (
+      feature.geometry.type !== "Polygon" &&
+      feature.geometry.type !== "MultiPolygon"
+    ) {
+      return;
+    }
+    let clippedFeature: GeoJSON.Feature | null = null;
+    try {
+      clippedFeature = bboxClip(feature as GeoJSON.Feature, bounds) as GeoJSON.Feature;
+    } catch {
+      clippedFeature = null;
+    }
+    if (!clippedFeature?.geometry || geometryIsEmpty(clippedFeature.geometry)) return;
+    clipped.push(cloneFeatureWithGeometry(feature, clippedFeature.geometry));
+
+  });
+  return clipped;
+}
+
+function geometryIsEmpty(geometry: GeoJSON.Geometry): boolean {
+  switch (geometry.type) {
+    case "Polygon": {
+      const rings = geometry.coordinates;
+      if (!Array.isArray(rings) || rings.length === 0) return true;
+      let hasValidRing = false;
+      for (const ring of rings) {
+        if (!isValidLinearRing(ring)) {
+          return true;
+        }
+        hasValidRing = true;
+      }
+      return !hasValidRing;
+    }
+    case "MultiPolygon": {
+      const polygons = geometry.coordinates;
+      if (!Array.isArray(polygons) || polygons.length === 0) return true;
+      let hasValidPolygon = false;
+      for (const polygon of polygons) {
+        if (!Array.isArray(polygon) || polygon.length === 0) {
+          return true;
+        }
+        for (const ring of polygon) {
+          if (!isValidLinearRing(ring)) {
+            return true;
+          }
+        }
+        hasValidPolygon = true;
+      }
+      return !hasValidPolygon;
+    }
+    case "LineString": {
+      return !isValidLineString(geometry.coordinates);
+    }
+    case "MultiLineString": {
+      const lines = geometry.coordinates;
+      if (!Array.isArray(lines) || lines.length === 0) return true;
+      let hasValidLine = false;
+      for (const line of lines) {
+        if (!isValidLineString(line)) {
+          return true;
+        }
+        hasValidLine = true;
+      }
+      return !hasValidLine;
+    }
+    case "Point":
+      return !isValidPosition(geometry.coordinates);
+    case "MultiPoint": {
+      const points = geometry.coordinates;
+      if (!Array.isArray(points) || points.length === 0) return true;
+      for (const point of points) {
+        if (!isValidPosition(point)) {
+          return true;
+        }
+      }
+      return false;
+    }
+    case "GeometryCollection": {
+      const geometries = geometry.geometries;
+      if (!Array.isArray(geometries) || geometries.length === 0) return true;
+      let hasRenderable = false;
+      for (const geom of geometries) {
+        if (!geom || typeof geom !== "object") {
+          return true;
+        }
+        if (!geometryIsEmpty(geom)) {
+          hasRenderable = true;
+        }
+      }
+      return !hasRenderable;
+    }
+    default:
+      return false;
+  }
+}
+
+function isValidLineString(line: unknown): line is GeoJSON.Position[] {
+  if (!Array.isArray(line) || line.length < 2) return false;
+  return line.every((position) => isValidPosition(position));
+}
+
+function isValidLinearRing(ring: unknown): ring is GeoJSON.Position[] {
+  if (!Array.isArray(ring) || ring.length < 4) return false;
+  if (!ring.every((position) => isValidPosition(position))) return false;
+  return true;
+}
+
+function isValidPosition(position: unknown): position is GeoJSON.Position {
+  if (!Array.isArray(position) || position.length < 2) return false;
+  const [lng, lat, ...rest] = position;
+  if (!isFiniteNumber(lng) || !isFiniteNumber(lat)) return false;
+  for (const value of rest) {
+    if (value != null && !isFiniteNumber(value)) return false;
+  }
+  return true;
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function cloneFeatureWithGeometry(
+  feature: GeoJSON.Feature,
+  geometry: GeoJSON.Geometry
+): GeoJSON.Feature {
+  const { geometry: _oldGeometry, bbox: _oldBBox, ...rest } = feature as GeoJSON.Feature & {
+    bbox?: GeoJSON.BBox;
+  };
+  return { ...rest, geometry };
 }
 
 function getLayerIdBelow(map: maplibregl.Map, zIndex: number): string | null {
