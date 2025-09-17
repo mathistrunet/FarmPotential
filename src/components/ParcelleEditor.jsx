@@ -3,7 +3,13 @@ import React, { useEffect, useRef, useState } from "react";
 import { entriesCodebook, labelFromCode, codeFromLabel } from "../utils/cultureLabels";
 import { ringAreaM2 } from "../utils/geometry";
 
-export default function ParcelleEditor({ features, setFeatures, selectedId, onSelect }) {
+export default function ParcelleEditor({
+  features,
+  setFeatures,
+  selectedId,
+  onSelect,
+  
+}) {
   const options = entriesCodebook();                 // [[code,label], ...]
   const rowsRef = useRef(new Map());
   const [typed, setTyped] = useState({});            // saisie libre par parcelle (id -> string)
@@ -50,11 +56,11 @@ export default function ParcelleEditor({ features, setFeatures, selectedId, onSe
         // Affichage "ilot.numero" si les deux sont présents ; sinon on retombe sur ce qu’on a (numéro seul, ou îlot seul), ou à défaut l'id.
         const ilot = (f.properties?.ilot_numero ?? "").toString().trim();
         const num  = (f.properties?.numero ?? "").toString().trim();
-        const titre = ilot && num ? `${ilot}.${num}` : (ilot || num || "");
+        const titre = ilot && num ? `${ilot}.${num}` : ilot || num || "";
+        const displayTitle = titre ? `Parcelle ${titre}` : `Parcelle ${idx + 1}`;
 
         const ring = f.geometry?.coordinates?.[0];
         const surfaceHa = ring ? ringAreaM2(ring) / 10000 : null;
-
 
         return (
           <div
@@ -69,9 +75,7 @@ export default function ParcelleEditor({ features, setFeatures, selectedId, onSe
             }}
             title="Cliquer pour sélectionner la parcelle sur la carte"
           >
-            <div style={{ fontWeight: 600, marginBottom: 6 }}>
-              Parcelle {titre}
-            </div>
+            <div style={{ fontWeight: 600, marginBottom: 6 }}>{displayTitle}</div>
             {surfaceHa != null && !Number.isNaN(surfaceHa) && (
               <div style={{ fontSize: 12, color: "#555", marginBottom: 6 }}>
                 Surface : {surfaceHa.toFixed(2)} ha

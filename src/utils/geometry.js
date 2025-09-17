@@ -21,3 +21,6 @@ export function ringAreaM2(ringLonLat) {
   }
   return Math.abs(sum) / 2;
 }
+
+// (Le calcul du centroïde utilisé dans une itération précédente a été retiré.)
+

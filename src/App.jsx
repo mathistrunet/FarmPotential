@@ -1,11 +1,10 @@
 // src/App.jsx
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
+import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
 
 import RasterToggles from "./components/RasterToggles";
 import ParcelleEditor from "./components/ParcelleEditor";
 import { useMapInitialization } from "./features/map/useMapInitialization";
-
-// ⛔️ Fonctionnalités sols retirées pour focaliser cette branche sur la météo locale
 
 // ✅ composant RPG autonome (chemin conservé)
 import RpgFeature from "./Front/useRpgLayer";
@@ -13,8 +12,134 @@ import RpgFeature from "./Front/useRpgLayer";
 import DrawToolbar from "./Front/DrawToolbar";
 // ✅ Import/Export Télépac (chemin conservé)
 import ImportTelepacButton, { ExportTelepacButton } from "./Front/TelepacButton";
+import WeatherSummaryPage from "./pages/WeatherSummaryPage";
 
-export default function App() {
+const buildParcelTitle = (feature, index) => {
+  if (!feature) return "Parcelle";
+  const ilot = (feature.properties?.ilot_numero ?? "").toString().trim();
+  const num = (feature.properties?.numero ?? "").toString().trim();
+  const titre = ilot && num ? `${ilot}.${num}` : ilot || num || "";
+  if (titre) return `Parcelle ${titre}`;
+  if (typeof index === "number" && index >= 0) {
+    return `Parcelle ${index + 1}`;
+  }
+  return "Parcelle";
+};
+
+function WeatherWindow({ open, onClose, hasSelection, parcelLabel, centroid }) {
+  if (!open) return null;
+
+  const boxStyle = {
+    width: "min(640px, 92vw)",
+    maxHeight: "85vh",
+    padding: "24px 28px",
+    borderRadius: 16,
+    background: "#ffffff",
+    boxShadow: "0 24px 80px rgba(15,23,42,0.35)",
+    display: "flex",
+    flexDirection: "column",
+    gap: 18,
+  };
+
+  const closeBtnStyle = {
+    padding: "6px 12px",
+    borderRadius: 8,
+    border: "1px solid #cbd5f5",
+    background: "#f8fafc",
+    color: "#1e3a8a",
+    cursor: "pointer",
+    fontWeight: 600,
+  };
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(15,23,42,0.55)",
+        zIndex: 50,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 16,
+      }}
+    >
+      <div style={boxStyle}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 16,
+          }}
+        >
+          <h2 style={{ margin: 0 }}>Fenêtre météo</h2>
+          <button type="button" onClick={onClose} style={closeBtnStyle}>
+            Fermer
+          </button>
+        </div>
+
+        {hasSelection ? (
+          <div style={{ fontSize: 14, color: "#1f2937", lineHeight: 1.6 }}>
+            <p>
+              Parcelle sélectionnée : <strong>{parcelLabel}</strong>
+            </p>
+            {centroid ? (
+              <p style={{ marginTop: 8 }}>
+                Position approximative :
+                <br />
+                Latitude : {centroid.latitude.toFixed(5)}°
+                <br />
+                Longitude : {centroid.longitude.toFixed(5)}°
+              </p>
+            ) : (
+              <p style={{ marginTop: 8 }}>
+                Impossible de déterminer les coordonnées de cette parcelle pour
+                l&apos;instant.
+              </p>
+            )}
+
+            <div
+              style={{
+                marginTop: 18,
+                padding: "12px 16px",
+                borderRadius: 12,
+                background: "#f1f5f9",
+                border: "1px dashed #94a3b8",
+              }}
+            >
+              <p style={{ margin: 0, fontWeight: 600, color: "#0f172a" }}>
+                Les relevés météo des 12 derniers mois s&apos;afficheront ici.
+              </p>
+              <p style={{ margin: "8px 0 0", color: "#475569" }}>
+                Cette fenêtre est prête à accueillir les informations météo les
+                plus proches de votre parcelle sélectionnée.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div
+            style={{
+              fontSize: 14,
+              color: "#1f2937",
+              lineHeight: 1.6,
+              padding: "18px 20px",
+              borderRadius: 12,
+              background: "#fef9c3",
+              border: "1px solid #facc15",
+            }}
+          >
+            Sélectionnez une parcelle sur la carte pour préparer l&apos;affichage
+            des données météo.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function MapExperience() {
+  const navigate = useNavigate();
   const {
     mapRef,
     drawRef,
@@ -24,11 +149,66 @@ export default function App() {
     selectFeatureOnMap,
   } = useMapInitialization();
 
-  // Onglets + panneau latéral repliable
-  const [sideOpen, setSideOpen] = useState(true);          // panneau latéral ouvert/fermé
+  const [sideOpen, setSideOpen] = useState(true); // panneau latéral ouvert/fermé
   const [activeTab, setActiveTab] = useState("parcelles"); // "parcelles" | "calques"
   const [compact, setCompact] = useState(false);
-  // ---- Styles de la barre d’outils bas
+  const [weatherWindowOpen, setWeatherWindowOpen] = useState(false);
+
+  const handleRequestWeather = () => {
+    setWeatherWindowOpen(true);
+  };
+
+  const selectedInfo = useMemo(() => {
+    if (selectedId == null) {
+      return { feature: null, label: "", centroid: null };
+    }
+
+    for (let i = 0; i < features.length; i += 1) {
+      const feature = features[i];
+      const featureId = feature?.id ?? feature?.properties?.id ?? i;
+      if (String(featureId) === String(selectedId)) {
+        const ring = feature?.geometry?.coordinates?.[0];
+        let centroid = null;
+        if (Array.isArray(ring) && ring.length) {
+          let sumLon = 0;
+          let sumLat = 0;
+          let valid = 0;
+          ring.forEach((point) => {
+            if (Array.isArray(point) && point.length >= 2) {
+              const lon = Number(point[0]);
+              const lat = Number(point[1]);
+              if (!Number.isNaN(lon) && !Number.isNaN(lat)) {
+                sumLon += lon;
+                sumLat += lat;
+                valid += 1;
+              }
+            }
+          });
+          if (valid > 0) {
+            centroid = {
+              longitude: sumLon / valid,
+              latitude: sumLat / valid,
+            };
+          }
+        }
+        return {
+          feature,
+          label: buildParcelTitle(feature, i),
+          centroid,
+        };
+      }
+    }
+
+    return { feature: null, label: "", centroid: null };
+  }, [features, selectedId]);
+
+  const layoutStyle = {
+    height: "100%",
+    position: "relative",
+    display: "grid",
+    gridTemplateColumns: sideOpen ? "1fr 420px" : "1fr 0px",
+  };
+
   const barBase = {
     position: "fixed",
     left: 0,
@@ -64,35 +244,16 @@ export default function App() {
   };
   const label = (t) => (compact ? null : <span>{t}</span>);
 
-  // Petites icônes (chevron uniquement ici)
-  const iconStyle = {
-    width: 18,
-    height: 18,
-    display: "inline-block",
-    verticalAlign: "-3px",
-  };
   const IconChevron = ({ up = false }) => (
-    <svg viewBox="0 0 24 24" style={iconStyle}>
+    <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, display: "inline-block" }}>
       <path d={up ? "M7 14l5-5 5 5" : "M7 10l5 5 5-5"} fill="currentColor" />
     </svg>
   );
 
-  // ---- Layout racine (grille 2 colonnes conditionnelle)
-  const layoutStyle = {
-    height: "100%",
-    position: "relative",
-    display: "grid",
-    gridTemplateColumns: sideOpen ? "1fr 420px" : "1fr 0px",
-  };
-
   return (
     <div style={layoutStyle}>
-      {/* Carte */}
       <div id="map" style={{ height: "100dvh", width: "100%" }} />
 
-      {/* ⛔️ Panneau d’info sols supprimé pour laisser place aux futures données météo */}
-
-      {/* Panneau latéral (onglets + repliable) */}
       <div
         style={{
           padding: sideOpen ? 16 : 0,
@@ -101,16 +262,60 @@ export default function App() {
           display: sideOpen ? "block" : "none",
         }}
       >
-        {/* En-tête + bouton pour replier */}
         <div
           style={{
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            gap: 8,
+            gap: 12,
+            flexWrap: "wrap",
           }}
         >
-          <h1 style={{ margin: 0, fontSize: 18 }}>Assolia Telepac Mapper</h1>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              flexWrap: "wrap",
+            }}
+          >
+            <h1 style={{ margin: 0, fontSize: 18 }}>Assolia Telepac Mapper</h1>
+            <button
+              type="button"
+              onClick={() => setWeatherWindowOpen(true)}
+              style={{
+                padding: "6px 12px",
+                borderRadius: 8,
+                border: "1px solid #38bdf8",
+                background: "#0ea5e9",
+                color: "#fff",
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer",
+                boxShadow: "0 10px 30px rgba(14,165,233,0.25)",
+              }}
+            >
+              Ouvrir la fenêtre météo
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate("/synthese")}
+              style={{
+                padding: "6px 12px",
+                borderRadius: 8,
+                border: "1px solid #34d399",
+                background: "#22c55e",
+                color: "#fff",
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer",
+                boxShadow: "0 10px 30px rgba(34,197,94,0.25)",
+              }}
+            >
+              Voir la synthèse météo
+            </button>
+          </div>
+
           <button
             onClick={() => setSideOpen(false)}
             title="Replier le panneau"
@@ -126,10 +331,7 @@ export default function App() {
           </button>
         </div>
 
-        {/* Onglets */}
-        <div
-          style={{ display: "flex", gap: 6, marginTop: 12, marginBottom: 8 }}
-        >
+        <div style={{ display: "flex", gap: 6, marginTop: 12, marginBottom: 8 }}>
           <button
             onClick={() => setActiveTab("parcelles")}
             style={{
@@ -156,18 +358,16 @@ export default function App() {
           </button>
         </div>
 
-        {/* RPG (autonome) */}
         <RpgFeature mapRef={mapRef} drawRef={drawRef} />
 
-        {/* Contenu onglet “Parcelles” */}
         {activeTab === "parcelles" && (
           <>
             <p style={{ color: "#666", marginTop: 0 }}>
-              • “Importer XML Télépac” pour charger un export.
+              • «&nbsp;Importer XML Télépac&nbsp;» pour charger un export.
               <br />
-              • “Dessiner un polygone” pour ajouter une parcelle.
-              <br />• “Exporter XML Télépac” pour générer un fichier compatible
-              Assolia.
+              • «&nbsp;Dessiner un polygone&nbsp;» pour ajouter une parcelle.
+              <br />• «&nbsp;Exporter XML Télépac&nbsp;» pour générer un fichier
+              compatible Assolia.
             </p>
 
             <ParcelleEditor
@@ -175,6 +375,7 @@ export default function App() {
               setFeatures={setFeatures}
               selectedId={selectedId}
               onSelect={(id) => selectFeatureOnMap(id, true)}
+              onRequestWeather={handleRequestWeather}
             />
 
             <p style={{ fontSize: 12, color: "#777", marginTop: 10 }}>
@@ -184,7 +385,6 @@ export default function App() {
           </>
         )}
 
-        {/* Calques (hors sols en ligne ; on garde les rasters/basemaps locaux ou tiers) */}
         {activeTab === "calques" && (
           <div style={{ marginTop: 6 }}>
             <span
@@ -194,13 +394,11 @@ export default function App() {
             </span>
             <div style={{ marginTop: 8 }}>
               <RasterToggles mapRef={mapRef} />
-              {/* ⛔️ Fonctionnalités sols retirées pour focaliser cette branche sur la météo */}
             </div>
           </div>
         )}
       </div>
 
-      {/* Bouton flottant pour ouvrir le panneau quand il est fermé */}
       {!sideOpen && (
         <button
           onClick={() => setSideOpen(true)}
@@ -222,9 +420,7 @@ export default function App() {
         </button>
       )}
 
-      {/* Barre d’outils bas */}
       <div style={barBase}>
-        {/* Import / Export Télépac */}
         <div style={groupStyle}>
           <ImportTelepacButton
             mapRef={mapRef}
@@ -241,7 +437,6 @@ export default function App() {
           />
         </div>
 
-        {/* Dessin */}
         <div style={{ ...groupStyle, borderRight: "none" }}>
           <DrawToolbar
             mapRef={mapRef}
@@ -264,6 +459,24 @@ export default function App() {
           </button>
         </div>
       </div>
+
+      <WeatherWindow
+        open={weatherWindowOpen}
+        onClose={() => setWeatherWindowOpen(false)}
+        hasSelection={!!selectedInfo.feature}
+        parcelLabel={selectedInfo.label}
+        centroid={selectedInfo.centroid}
+      />
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <Routes>
+      <Route path="/" element={<MapExperience />} />
+      <Route path="/synthese" element={<WeatherSummaryPage />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   );
 }
