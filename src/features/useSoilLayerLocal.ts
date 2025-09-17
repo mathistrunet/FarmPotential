@@ -283,41 +283,102 @@ function geometryIsEmpty(geometry: GeoJSON.Geometry): boolean {
   switch (geometry.type) {
     case "Polygon": {
       const rings = geometry.coordinates;
-      if (!Array.isArray(rings)) return true;
-      return !rings.some((ring) => Array.isArray(ring) && ring.length >= 4);
+      if (!Array.isArray(rings) || rings.length === 0) return true;
+      let hasValidRing = false;
+      for (const ring of rings) {
+        if (!isValidLinearRing(ring)) {
+          return true;
+        }
+        hasValidRing = true;
+      }
+      return !hasValidRing;
     }
     case "MultiPolygon": {
       const polygons = geometry.coordinates;
-      if (!Array.isArray(polygons)) return true;
-      return !polygons.some(
-        (poly) =>
-          Array.isArray(poly) &&
-          poly.some((ring) => Array.isArray(ring) && ring.length >= 4)
-      );
+      if (!Array.isArray(polygons) || polygons.length === 0) return true;
+      let hasValidPolygon = false;
+      for (const polygon of polygons) {
+        if (!Array.isArray(polygon) || polygon.length === 0) {
+          return true;
+        }
+        for (const ring of polygon) {
+          if (!isValidLinearRing(ring)) {
+            return true;
+          }
+        }
+        hasValidPolygon = true;
+      }
+      return !hasValidPolygon;
     }
     case "LineString": {
-      const coords = geometry.coordinates;
-      return !Array.isArray(coords) || coords.length < 2;
+      return !isValidLineString(geometry.coordinates);
     }
     case "MultiLineString": {
       const lines = geometry.coordinates;
-      if (!Array.isArray(lines)) return true;
-      return !lines.some((line) => Array.isArray(line) && line.length >= 2);
+      if (!Array.isArray(lines) || lines.length === 0) return true;
+      let hasValidLine = false;
+      for (const line of lines) {
+        if (!isValidLineString(line)) {
+          return true;
+        }
+        hasValidLine = true;
+      }
+      return !hasValidLine;
     }
+    case "Point":
+      return !isValidPosition(geometry.coordinates);
     case "MultiPoint": {
       const points = geometry.coordinates;
-      return !Array.isArray(points) || points.length === 0;
+      if (!Array.isArray(points) || points.length === 0) return true;
+      for (const point of points) {
+        if (!isValidPosition(point)) {
+          return true;
+        }
+      }
+      return false;
     }
     case "GeometryCollection": {
       const geometries = geometry.geometries;
-      if (!Array.isArray(geometries)) return true;
-      return !geometries.some(
-        (geom) => geom && typeof geom === "object" && !geometryIsEmpty(geom)
-      );
+      if (!Array.isArray(geometries) || geometries.length === 0) return true;
+      let hasRenderable = false;
+      for (const geom of geometries) {
+        if (!geom || typeof geom !== "object") {
+          return true;
+        }
+        if (!geometryIsEmpty(geom)) {
+          hasRenderable = true;
+        }
+      }
+      return !hasRenderable;
     }
     default:
       return false;
   }
+}
+
+function isValidLineString(line: unknown): line is GeoJSON.Position[] {
+  if (!Array.isArray(line) || line.length < 2) return false;
+  return line.every((position) => isValidPosition(position));
+}
+
+function isValidLinearRing(ring: unknown): ring is GeoJSON.Position[] {
+  if (!Array.isArray(ring) || ring.length < 4) return false;
+  if (!ring.every((position) => isValidPosition(position))) return false;
+  return true;
+}
+
+function isValidPosition(position: unknown): position is GeoJSON.Position {
+  if (!Array.isArray(position) || position.length < 2) return false;
+  const [lng, lat, ...rest] = position;
+  if (!isFiniteNumber(lng) || !isFiniteNumber(lat)) return false;
+  for (const value of rest) {
+    if (value != null && !isFiniteNumber(value)) return false;
+  }
+  return true;
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
 }
 
 function cloneFeatureWithGeometry(
