@@ -1,7 +1,7 @@
 // rrpLocal.ts — loader MBTiles (Vector Tiles) "blindé" pour Vite/MapLibre
 
-import initSqlJs from "sql.js";
-import wasmUrl from "sql.js/dist/sql-wasm.wasm?url";
+import httpvfsWasmUrl from "sql.js-httpvfs/dist/sql-wasm.wasm?url";
+import type { LazyHttpDatabase, SplitFileConfig } from "sql.js-httpvfs/dist/sqlite.worker";
 import Pbf from "pbf";
 import { VectorTile } from "@mapbox/vector-tile";
 import { ungzip } from "pako";
@@ -9,10 +9,29 @@ import { ungzip } from "pako";
 type VTL = InstanceType<typeof VectorTile>["layers"][string];
 export type TileCoord = { z: number; x: number; y: number };
 
-let SQL: any;
-async function getSQL() {
-  if (!SQL) SQL = await initSqlJs({ locateFile: () => wasmUrl });
-  return SQL;
+type HttpVfsModule = typeof import("sql.js-httpvfs/dist/sqlite.worker");
+
+let httpModulePromise: Promise<HttpVfsModule> | null = null;
+async function getHttpModule(): Promise<HttpVfsModule> {
+  if (!httpModulePromise) {
+    httpModulePromise = import("sql.js-httpvfs/dist/sqlite.worker");
+  }
+  return httpModulePromise;
+}
+
+async function openHttpMbtiles(url: string): Promise<LazyHttpDatabase> {
+  const httpModule = await getHttpModule();
+  const virtualFilename = url.split("/").pop() ?? "mbtiles.sqlite";
+  const config: SplitFileConfig = {
+    from: "inline",
+    virtualFilename,
+    config: {
+      serverMode: "full",
+      requestChunkSize: 4096,
+      url,
+    },
+  };
+  return httpModule.SplitFileHttpDatabase(httpvfsWasmUrl, [config], virtualFilename);
 }
 
 const flipY = (yXYZ: number, z: number) => (1 << z) - 1 - yXYZ;
@@ -68,10 +87,7 @@ export interface MbtilesReader {
 
 /** Ouvre un MBTiles depuis une URL (fetch) et renvoie un lecteur */
 export async function loadLocalRrpMbtiles(url: string): Promise<MbtilesReader> {
-  const SQLmod = await getSQL();
-  const ab = await (await fetch(url)).arrayBuffer();
-  const u8 = new Uint8Array(ab);
-  const db = new SQLmod.Database(u8);
+  const db = await openHttpMbtiles(url);
 
   // --- métadonnées
   const meta: MbtilesReader["meta"] = {};
