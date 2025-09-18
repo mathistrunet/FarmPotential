@@ -1,6 +1,7 @@
 // src/App.jsx
 import React, { useMemo, useState } from "react";
 
+
 import RasterToggles from "./components/RasterToggles";
 import ParcelleEditor from "./components/ParcelleEditor";
 import { useMapInitialization } from "./features/map/useMapInitialization";
