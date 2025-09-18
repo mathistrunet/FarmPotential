@@ -2,12 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type maplibregl from "maplibre-gl";
 
 // ⬇️ imports RELATIFS (plus d'alias "@")
-import {
-  loadLocalRrpMbtiles,
-  lonLatToTile,
-  tileToBBox,
-  type LngLatBBox,
-} from "../services/rrpLocal";
+import { loadLocalRrpMbtiles, type LngLatBBox } from "../services/rrpLocal";
 import bboxClip from "@turf/bbox-clip";
 
 import {
@@ -19,6 +14,14 @@ import {
 } from "../config/soilsLocalConfig";
 import { loadRrpColors } from "../lib/rrpLookup";
 
+const WEB_MERCATOR_WORLD_WIDTH_METERS = 40075016.68557849;
+const MAX_TILE_EDGE_METERS = 30_000;
+const HALF_SQUARE_EDGE_METERS = MAX_TILE_EDGE_METERS / 2;
+const EARTH_RADIUS = WEB_MERCATOR_WORLD_WIDTH_METERS / (2 * Math.PI);
+const MAX_MERCATOR_LAT = 85.05112877980659;
+const MIN_TILE_ZOOM = Math.ceil(
+  Math.log2(WEB_MERCATOR_WORLD_WIDTH_METERS / MAX_TILE_EDGE_METERS)
+);
 
 type Options = {
   map: maplibregl.Map | null;
@@ -167,46 +170,57 @@ export function useSoilLayerLocal({
         update = () => {
           if (aborted || freezeRef.current) return;
           setLoadingTiles(true);
-          const z = Math.floor(map.getZoom());
+          const rawZoom = Math.floor(map.getZoom());
+          const minAllowed = Math.max(
+            MIN_TILE_ZOOM,
+            reader.meta.minzoom != null ? Math.floor(reader.meta.minzoom) : MIN_TILE_ZOOM
+          );
+          const maxAllowed = reader.meta.maxzoom != null ? Math.floor(reader.meta.maxzoom) : rawZoom;
+          const safeMax = Math.max(minAllowed, maxAllowed);
+          const z = Math.min(Math.max(rawZoom, minAllowed), safeMax);
           const center = map.getCenter();
-          const { x, y } = lonLatToTile(center.lng, center.lat, z);
-          const tiles = [
-            { x, y },
-            { x: x + 1, y },
-            { x, y: y + 1 },
-            { x: x + 1, y: y + 1 },
-          ];
+          const squareBounds = getSquareBounds(center.lng, center.lat);
+          const tileRange = getTileRange(squareBounds, z);
           const all: GeoJSON.Feature[] = [];
-          tiles.forEach(({ x, y }) => {
-            const key = `${z}/${x}/${y}`;
-            let feats = tileCache.get(key);
-            if (!feats) {
-              let fc: GeoJSON.FeatureCollection | null = null;
-              try {
-                fc = reader.getTileGeoJSON(z, x, y);
-              } catch {
-                /* ignore tile parsing errors */
-              }
 
-              const bbox = tileToBBox(z, x, y);
-              feats = fc ? clipTileFeatures(fc.features, bbox) : [];
-              tileCache.set(key, feats);
+          for (let tx = tileRange.minX; tx <= tileRange.maxX; tx++) {
+            for (let ty = tileRange.minY; ty <= tileRange.maxY; ty++) {
+              const normX = normalizeTileX(tx, z);
+              const clampY = clampTileY(ty, z);
+              const key = `${z}/${normX}/${clampY}`;
+              let feats = tileCache.get(key);
+              if (!feats) {
+                let fc: GeoJSON.FeatureCollection | null = null;
+                try {
+                  fc = reader.getTileGeoJSON(z, normX, clampY);
+                } catch {
+                  /* ignore tile parsing errors */
+                }
+                feats = fc ? fc.features : [];
+                tileCache.set(key, feats);
+              }
+              if (feats && feats.length) {
+                for (const feat of feats) {
+                  all.push(feat);
+                }
+              }
             }
-            for (const feat of feats) {
-              all.push(feat);
-            }
-          });
+          }
+
           const source = map.getSource(sourceId) as maplibregl.GeoJSONSource | undefined;
           if (!source) {
             if (!aborted) setLoadingTiles(false);
             return;
           }
+
+          const clipped = clipFeaturesToBounds(all, squareBounds);
+
           try {
             source.setData({
               type: "FeatureCollection",
-              features: all,
+              features: clipped,
             });
-            setPolygonsShown(all.length > 0);
+            setPolygonsShown(clipped.length > 0);
           } finally {
             if (!aborted) setLoadingTiles(false);
           }
@@ -255,7 +269,10 @@ export function useSoilLayerLocal({
   return { polygonsShown, loadingTiles };
 }
 
-function clipTileFeatures(features: GeoJSON.Feature[], bounds: LngLatBBox): GeoJSON.Feature[] {
+function clipFeaturesToBounds(
+  features: GeoJSON.Feature[],
+  bounds: LngLatBBox
+): GeoJSON.Feature[] {
   if (!features.length) return [];
   const clipped: GeoJSON.Feature[] = [];
   features.forEach((feature) => {
@@ -274,9 +291,70 @@ function clipTileFeatures(features: GeoJSON.Feature[], bounds: LngLatBBox): GeoJ
     }
     if (!clippedFeature?.geometry || geometryIsEmpty(clippedFeature.geometry)) return;
     clipped.push(cloneFeatureWithGeometry(feature, clippedFeature.geometry));
-
   });
   return clipped;
+}
+
+function getSquareBounds(lng: number, lat: number): LngLatBBox {
+  const center = projectToMercator(lng, lat);
+  const minX = center.x - HALF_SQUARE_EDGE_METERS;
+  const maxX = center.x + HALF_SQUARE_EDGE_METERS;
+  const minY = center.y - HALF_SQUARE_EDGE_METERS;
+  const maxY = center.y + HALF_SQUARE_EDGE_METERS;
+  const sw = mercatorToLngLat(minX, minY);
+  const ne = mercatorToLngLat(maxX, maxY);
+  return [sw.lng, sw.lat, ne.lng, ne.lat];
+}
+
+function getTileRange(bounds: LngLatBBox, z: number) {
+  const [west, south, east, north] = bounds;
+  const nw = lonLatToTileCoords(west, north, z);
+  const se = lonLatToTileCoords(east, south, z);
+  const minX = Math.floor(Math.min(nw.x, se.x));
+  const maxX = Math.max(minX, Math.ceil(Math.max(nw.x, se.x)) - 1);
+  const minY = Math.floor(Math.min(nw.y, se.y));
+  const maxY = Math.max(minY, Math.ceil(Math.max(nw.y, se.y)) - 1);
+  return { minX, maxX, minY, maxY };
+}
+
+function lonLatToTileCoords(lng: number, lat: number, z: number): { x: number; y: number } {
+  const scale = 1 << z;
+  const clampedLat = clampLatitude(lat);
+  const x = ((lng + 180) / 360) * scale;
+  const sinLat = Math.sin((clampedLat * Math.PI) / 180);
+  const y = ((1 - Math.log((1 + sinLat) / (1 - sinLat)) / Math.PI) / 2) * scale;
+  return { x, y };
+}
+
+function normalizeTileX(x: number, z: number): number {
+  const scale = 1 << z;
+  const maxIndex = scale;
+  const wrapped = ((x % maxIndex) + maxIndex) % maxIndex;
+  return wrapped;
+}
+
+function clampTileY(y: number, z: number): number {
+  const maxIndex = (1 << z) - 1;
+  return Math.min(Math.max(y, 0), maxIndex);
+}
+
+function projectToMercator(lng: number, lat: number) {
+  const clampedLat = clampLatitude(lat);
+  const lambda = (lng * Math.PI) / 180;
+  const phi = (clampedLat * Math.PI) / 180;
+  const x = EARTH_RADIUS * lambda;
+  const y = EARTH_RADIUS * Math.log(Math.tan(Math.PI / 4 + phi / 2));
+  return { x, y };
+}
+
+function mercatorToLngLat(x: number, y: number) {
+  const lng = (x / EARTH_RADIUS) * (180 / Math.PI);
+  const lat = (Math.atan(Math.sinh(y / EARTH_RADIUS)) * 180) / Math.PI;
+  return { lng, lat };
+}
+
+function clampLatitude(lat: number) {
+  return Math.max(Math.min(lat, MAX_MERCATOR_LAT), -MAX_MERCATOR_LAT);
 }
 
 function geometryIsEmpty(geometry: GeoJSON.Geometry): boolean {
