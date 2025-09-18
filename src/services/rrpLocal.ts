@@ -3,6 +3,7 @@
 import initSqlJs from "sql.js/dist/sql-wasm.js";
 import sqlWasmUrl from "sql.js/dist/sql-wasm.wasm?url";
 import type { Database } from "sql.js";
+
 import Pbf from "pbf";
 import { VectorTile } from "@mapbox/vector-tile";
 import { ungzip } from "pako";
@@ -21,6 +22,7 @@ async function getSqlModule(): Promise<SqlJsModule> {
     });
   }
   return sqlModulePromise;
+
 }
 
 async function openHttpMbtiles(url: string): Promise<Database> {
