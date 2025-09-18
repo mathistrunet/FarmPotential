@@ -1,13 +1,9 @@
 // src/App.jsx
 import React, { useMemo, useState } from "react";
 
-
 import RasterToggles from "./components/RasterToggles";
 import ParcelleEditor from "./components/ParcelleEditor";
 import { useMapInitialization } from "./features/map/useMapInitialization";
-import WeatherModal from "./components/WeatherModal";
-import { fetchWeatherSummary } from "./services/weather";
-import { ringCentroidLonLat } from "./utils/geometry";
 
 // ✅ composant RPG autonome (chemin conservé)
 import RpgFeature from "./Front/useRpgLayer";
@@ -15,6 +11,7 @@ import RpgFeature from "./Front/useRpgLayer";
 import DrawToolbar from "./Front/DrawToolbar";
 // ✅ Import/Export Télépac (chemin conservé)
 import ImportTelepacButton, { ExportTelepacButton } from "./Front/TelepacButton";
+import WeatherSummaryPage from "./pages/WeatherSummaryPage";
 
 const buildParcelTitle = (feature, index) => {
   if (!feature) return "Parcelle";
@@ -140,7 +137,7 @@ function WeatherWindow({ open, onClose, hasSelection, parcelLabel, centroid }) {
   );
 }
 
-export default function App() {
+function MapExperience({ onOpenSummary = () => {} }) {
   const {
     mapRef,
     drawRef,
@@ -148,13 +145,16 @@ export default function App() {
     setFeatures,
     selectedId,
     selectFeatureOnMap,
-    mapReady,
   } = useMapInitialization();
 
   const [sideOpen, setSideOpen] = useState(true); // panneau latéral ouvert/fermé
   const [activeTab, setActiveTab] = useState("parcelles"); // "parcelles" | "calques"
   const [compact, setCompact] = useState(false);
   const [weatherWindowOpen, setWeatherWindowOpen] = useState(false);
+
+  const handleRequestWeather = () => {
+    setWeatherWindowOpen(true);
+  };
 
   const selectedInfo = useMemo(() => {
     if (selectedId == null) {
@@ -294,6 +294,23 @@ export default function App() {
               }}
             >
               Ouvrir la fenêtre météo
+            </button>
+            <button
+              type="button"
+              onClick={onOpenSummary}
+              style={{
+                padding: "6px 12px",
+                borderRadius: 8,
+                border: "1px solid #34d399",
+                background: "#22c55e",
+                color: "#fff",
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer",
+                boxShadow: "0 10px 30px rgba(34,197,94,0.25)",
+              }}
+            >
+              Voir la synthèse météo
             </button>
           </div>
 
@@ -450,4 +467,14 @@ export default function App() {
       />
     </div>
   );
+}
+
+export default function App() {
+  const [view, setView] = useState("map");
+
+  if (view === "summary") {
+    return <WeatherSummaryPage onReturn={() => setView("map")} />;
+  }
+
+  return <MapExperience onOpenSummary={() => setView("summary")} />;
 }
