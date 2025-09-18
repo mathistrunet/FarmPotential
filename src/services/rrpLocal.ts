@@ -1,8 +1,17 @@
 // rrpLocal.ts — loader MBTiles (Vector Tiles) "blindé" pour Vite/MapLibre
 
+import initSqlJs from "sql.js/dist/sql-wasm.js";
 import sqlWasmUrl from "sql.js/dist/sql-wasm.wasm?url";
-import httpvfsWasmUrl from "sql.js-httpvfs/dist/sql-wasm.wasm?url";
-import type { LazyHttpDatabase, SplitFileConfig } from "sql.js-httpvfs/dist/sqlite.worker";
+import { createLazyFile, type LazyFileConfig } from "sql.js-httpvfs/dist/lazyFile";
+import { SeriesVtab } from "sql.js-httpvfs/dist/vtab";
+import {
+  toObjects,
+  type LazyHttpDatabase,
+  type SplitFileConfig,
+  type SplitFileConfigInner,
+  type SplitFileConfigPure,
+} from "sql.js-httpvfs/dist/sqlite.worker";
+
 import Pbf from "pbf";
 import { VectorTile } from "@mapbox/vector-tile";
 import { ungzip } from "pako";
@@ -10,18 +19,56 @@ import { ungzip } from "pako";
 type VTL = InstanceType<typeof VectorTile>["layers"][string];
 export type TileCoord = { z: number; x: number; y: number };
 
-type HttpVfsModule = typeof import("sql.js-httpvfs/dist/sqlite.worker");
+type SqlJsModule = Awaited<ReturnType<typeof initSqlJs>>;
+type InlineConfig = SplitFileConfigPure;
+type RangeMapper = LazyFileConfig["rangeMapper"];
 
-let httpModulePromise: Promise<HttpVfsModule> | null = null;
-async function getHttpModule(): Promise<HttpVfsModule> {
-  if (!httpModulePromise) {
-    httpModulePromise = import("sql.js-httpvfs/dist/sqlite.worker");
+let sqlModulePromise: Promise<SqlJsModule> | null = null;
+
+async function getSqlModule(): Promise<SqlJsModule> {
+  if (!sqlModulePromise) {
+    sqlModulePromise = initSqlJs({
+      locateFile: () => sqlWasmUrl,
+    });
   }
-  return httpModulePromise;
+  return sqlModulePromise;
+}
+
+async function hydrateConfigs(configs: SplitFileConfig[]): Promise<InlineConfig[]> {
+  const resolved = configs.map(async (config) => {
+    if (config.from === "jsonconfig") {
+      const base = typeof window !== "undefined" ? window.location.href : undefined;
+      const configUrl = new URL(config.configUrl, base);
+      const resp = await fetch(configUrl.toString());
+      if (!resp.ok) {
+        const details = await resp.text().catch(() => "");
+        throw new Error(
+          `Could not load httpvfs config: ${resp.status} ${resp.statusText}${details ? ` – ${details}` : ""}`
+        );
+      }
+      const configOut = (await resp.json()) as SplitFileConfigInner;
+      const inline: InlineConfig = {
+        from: "inline",
+        virtualFilename: config.virtualFilename,
+        config:
+          configOut.serverMode === "chunked"
+            ? {
+                ...configOut,
+                urlPrefix: new URL(configOut.urlPrefix, configUrl).toString(),
+              }
+            : {
+                ...configOut,
+                url: new URL(configOut.url, configUrl).toString(),
+              },
+      };
+      return inline;
+    }
+    return config;
+  });
+  return Promise.all(resolved);
 }
 
 async function openHttpMbtiles(url: string): Promise<LazyHttpDatabase> {
-  const httpModule = await getHttpModule();
   const virtualFilename = url.split("/").pop() ?? "mbtiles.sqlite";
   const config: SplitFileConfig = {
     from: "inline",
@@ -32,7 +79,69 @@ async function openHttpMbtiles(url: string): Promise<LazyHttpDatabase> {
       url,
     },
   };
-  return httpModule.SplitFileHttpDatabase(httpvfsWasmUrl, [config], virtualFilename);
+  const sql = await getSqlModule();
+  const hydratedConfigs = await hydrateConfigs([config]);
+  let mainVirtualFilename = virtualFilename;
+  let mainFileConfig: SplitFileConfigInner | undefined;
+  const lazyFiles = new Map<string, ReturnType<typeof createLazyFile>>();
+  for (const { config: cfg, virtualFilename: vf } of hydratedConfigs) {
+    const id = cfg.serverMode === "chunked" ? cfg.urlPrefix : cfg.url;
+    const filename = vf || id.replace(/\//g, "_");
+    if (!mainVirtualFilename) {
+      mainVirtualFilename = filename;
+      mainFileConfig = cfg;
+    }
+    const suffix = cfg.cacheBust ? `?cb=${cfg.cacheBust}` : "";
+    let rangeMapper: RangeMapper;
+    if (cfg.serverMode === "chunked") {
+      rangeMapper = (fromByte, toByte) => {
+        const serverChunkId = Math.floor(fromByte / cfg.serverChunkSize);
+        const serverFrom = fromByte % cfg.serverChunkSize;
+        const serverTo = serverFrom + (toByte - fromByte);
+        return {
+          url: `${cfg.urlPrefix}${String(serverChunkId).padStart(cfg.suffixLength, "0")}${suffix}`,
+          fromByte: serverFrom,
+          toByte: serverTo,
+        };
+      };
+    } else {
+      rangeMapper = (fromByte, toByte) => ({
+        url: `${cfg.url}${suffix}`,
+        fromByte,
+        toByte,
+      });
+    }
+    const lazyFile = createLazyFile(sql.FS, "/", filename, true, true, {
+      rangeMapper,
+      requestChunkSize: cfg.requestChunkSize,
+      fileLength: cfg.serverMode === "chunked" ? cfg.databaseLengthBytes : undefined,
+      logPageReads: true,
+      maxReadHeads: 3,
+    });
+    lazyFiles.set(filename, lazyFile);
+  }
+
+  const db = new sql.CustomDatabase(mainVirtualFilename) as LazyHttpDatabase & {
+    lazyFiles: typeof lazyFiles;
+    create_vtab: (ctor: typeof SeriesVtab) => void;
+    query: LazyHttpDatabase["query"];
+  };
+  if (!mainFileConfig) {
+    mainFileConfig = hydratedConfigs[0]?.config;
+  }
+  if (mainFileConfig) {
+    const pageSizeResp = db.exec("pragma page_size; pragma cache_size=0");
+    const pageSize = pageSizeResp[0]?.values?.[0]?.[0];
+    if (pageSize != null && pageSize !== mainFileConfig.requestChunkSize) {
+      console.warn(
+        `Chunk size does not match page size: pragma page_size = ${pageSize} but chunkSize = ${mainFileConfig.requestChunkSize}`
+      );
+    }
+  }
+  db.lazyFiles = lazyFiles;
+  db.create_vtab(SeriesVtab);
+  db.query = ((...args: Parameters<LazyHttpDatabase["exec"]>) => toObjects(db.exec(...args))) as LazyHttpDatabase["query"];
+  return db;
 }
 
 const flipY = (yXYZ: number, z: number) => (1 << z) - 1 - yXYZ;
