@@ -1,6 +1,6 @@
 // rrpLocal.ts — loader MBTiles (Vector Tiles) "blindé" pour Vite/MapLibre
 
-import httpvfsWasmUrl from "sql.js-httpvfs/dist/sql-wasm.wasm?url";
+import sqlWasmUrl from "sql.js/dist/sql-wasm.wasm?url";
 import type { LazyHttpDatabase, SplitFileConfig } from "sql.js-httpvfs/dist/sqlite.worker";
 import Pbf from "pbf";
 import { VectorTile } from "@mapbox/vector-tile";
