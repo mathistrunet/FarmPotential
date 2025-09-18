@@ -2,7 +2,7 @@ const API_URL = "https://archive-api.open-meteo.com/v1/archive";
 const DAY_START_HOUR = 6;
 const DAY_END_HOUR = 18;
 
-const MONTH_LABELS = [
+export const MONTH_LABELS = [
   "Janvier",
   "Février",
   "Mars",
