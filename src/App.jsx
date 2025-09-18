@@ -3,6 +3,7 @@ import React, { useMemo, useState } from "react";
 
 
 import RasterToggles from "./components/RasterToggles";
+import WeatherStationsToggle from "./components/WeatherStationsToggle";
 import ParcelleEditor from "./components/ParcelleEditor";
 import { useMapInitialization } from "./features/map/useMapInitialization";
 
@@ -391,8 +392,9 @@ function MapExperience({ onOpenSummary = () => {} }) {
             >
               Calques
             </span>
-            <div style={{ marginTop: 8 }}>
+            <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 8 }}>
               <RasterToggles mapRef={mapRef} />
+              <WeatherStationsToggle mapRef={mapRef} />
             </div>
           </div>
         )}
