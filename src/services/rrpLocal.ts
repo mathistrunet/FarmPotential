@@ -11,6 +11,7 @@ import {
   type SplitFileConfigInner,
   type SplitFileConfigPure,
 } from "sql.js-httpvfs/dist/sqlite.worker";
+
 import Pbf from "pbf";
 import { VectorTile } from "@mapbox/vector-tile";
 import { ungzip } from "pako";
