@@ -54,7 +54,9 @@ export function useWeatherStationsLayer() {
             ["get", "city"],
             ["get", "id"],
           ],
-          "text-font": ["Open Sans Semibold", "Arial Unicode MS Bold"],
+
+          "text-font": ["Open Sans Semibold"],
+
           "text-size": ["interpolate", ["linear"], ["zoom"], 5, 9, 12, 13],
           "text-anchor": "top",
           "text-offset": [0, 1],
