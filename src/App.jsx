@@ -1,6 +1,6 @@
 // src/App.jsx
 import React, { useMemo, useState } from "react";
-import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
+
 
 import RasterToggles from "./components/RasterToggles";
 import ParcelleEditor from "./components/ParcelleEditor";
@@ -138,8 +138,7 @@ function WeatherWindow({ open, onClose, hasSelection, parcelLabel, centroid }) {
   );
 }
 
-function MapExperience() {
-  const navigate = useNavigate();
+function MapExperience({ onOpenSummary = () => {} }) {
   const {
     mapRef,
     drawRef,
@@ -299,7 +298,7 @@ function MapExperience() {
             </button>
             <button
               type="button"
-              onClick={() => navigate("/synthese")}
+              onClick={onOpenSummary}
               style={{
                 padding: "6px 12px",
                 borderRadius: 8,
@@ -472,11 +471,11 @@ function MapExperience() {
 }
 
 export default function App() {
-  return (
-    <Routes>
-      <Route path="/" element={<MapExperience />} />
-      <Route path="/synthese" element={<WeatherSummaryPage />} />
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
-  );
+  const [view, setView] = useState("map");
+
+  if (view === "summary") {
+    return <WeatherSummaryPage onReturn={() => setView("map")} />;
+  }
+
+  return <MapExperience onOpenSummary={() => setView("summary")} />;
 }

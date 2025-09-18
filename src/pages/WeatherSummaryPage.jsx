@@ -1,7 +1,7 @@
-import { useNavigate } from "react-router-dom";
 
-export default function WeatherSummaryPage() {
-  const navigate = useNavigate();
+export default function WeatherSummaryPage({ onReturn }) {
+  const handleReturn = typeof onReturn === "function" ? onReturn : () => {};
+
 
   const containerStyle = {
     minHeight: "100dvh",
@@ -109,7 +109,7 @@ export default function WeatherSummaryPage() {
 
         <button
           type="button"
-          onClick={() => navigate("/")}
+          onClick={handleReturn}
           style={returnButtonStyle}
         >
           Retourner à la carte
