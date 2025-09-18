@@ -1,5 +1,5 @@
 // src/App.jsx
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 
 import RasterToggles from "./components/RasterToggles";
@@ -14,6 +14,9 @@ import DrawToolbar from "./Front/DrawToolbar";
 // ✅ Import/Export Télépac (chemin conservé)
 import ImportTelepacButton, { ExportTelepacButton } from "./Front/TelepacButton";
 import WeatherSummaryPage from "./pages/WeatherSummaryPage";
+import WeatherModal from "./components/WeatherModal";
+import fetchWeatherSummary from "./services/weather";
+import haversineDistanceKm from "./utils/distance";
 
 const buildParcelTitle = (feature, index) => {
   if (!feature) return "Parcelle";
@@ -26,118 +29,6 @@ const buildParcelTitle = (feature, index) => {
   }
   return "Parcelle";
 };
-
-function WeatherWindow({ open, onClose, hasSelection, parcelLabel, centroid }) {
-  if (!open) return null;
-
-  const boxStyle = {
-    width: "min(640px, 92vw)",
-    maxHeight: "85vh",
-    padding: "24px 28px",
-    borderRadius: 16,
-    background: "#ffffff",
-    boxShadow: "0 24px 80px rgba(15,23,42,0.35)",
-    display: "flex",
-    flexDirection: "column",
-    gap: 18,
-  };
-
-  const closeBtnStyle = {
-    padding: "6px 12px",
-    borderRadius: 8,
-    border: "1px solid #cbd5f5",
-    background: "#f8fafc",
-    color: "#1e3a8a",
-    cursor: "pointer",
-    fontWeight: 600,
-  };
-
-  return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(15,23,42,0.55)",
-        zIndex: 50,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 16,
-      }}
-    >
-      <div style={boxStyle}>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            gap: 16,
-          }}
-        >
-          <h2 style={{ margin: 0 }}>Fenêtre météo</h2>
-          <button type="button" onClick={onClose} style={closeBtnStyle}>
-            Fermer
-          </button>
-        </div>
-
-        {hasSelection ? (
-          <div style={{ fontSize: 14, color: "#1f2937", lineHeight: 1.6 }}>
-            <p>
-              Parcelle sélectionnée : <strong>{parcelLabel}</strong>
-            </p>
-            {centroid ? (
-              <p style={{ marginTop: 8 }}>
-                Position approximative :
-                <br />
-                Latitude : {centroid.latitude.toFixed(5)}°
-                <br />
-                Longitude : {centroid.longitude.toFixed(5)}°
-              </p>
-            ) : (
-              <p style={{ marginTop: 8 }}>
-                Impossible de déterminer les coordonnées de cette parcelle pour
-                l&apos;instant.
-              </p>
-            )}
-
-            <div
-              style={{
-                marginTop: 18,
-                padding: "12px 16px",
-                borderRadius: 12,
-                background: "#f1f5f9",
-                border: "1px dashed #94a3b8",
-              }}
-            >
-              <p style={{ margin: 0, fontWeight: 600, color: "#0f172a" }}>
-                Les relevés météo des 12 derniers mois s&apos;afficheront ici.
-              </p>
-              <p style={{ margin: "8px 0 0", color: "#475569" }}>
-                Cette fenêtre est prête à accueillir les informations météo les
-                plus proches de votre parcelle sélectionnée.
-              </p>
-            </div>
-          </div>
-        ) : (
-          <div
-            style={{
-              fontSize: 14,
-              color: "#1f2937",
-              lineHeight: 1.6,
-              padding: "18px 20px",
-              borderRadius: 12,
-              background: "#fef9c3",
-              border: "1px solid #facc15",
-            }}
-          >
-            Sélectionnez une parcelle sur la carte pour préparer l&apos;affichage
-            des données météo.
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
 
 function MapExperience({ onOpenSummary = () => {} }) {
   const {
@@ -152,11 +43,138 @@ function MapExperience({ onOpenSummary = () => {} }) {
   const [sideOpen, setSideOpen] = useState(true); // panneau latéral ouvert/fermé
   const [activeTab, setActiveTab] = useState("parcelles"); // "parcelles" | "calques"
   const [compact, setCompact] = useState(false);
-  const [weatherWindowOpen, setWeatherWindowOpen] = useState(false);
+  const [weatherModalOpen, setWeatherModalOpen] = useState(false);
+  const [stationsState, setStationsState] = useState({ data: null, loading: false, error: null });
+  const [nearestStation, setNearestStation] = useState(null);
+  const [yearOptions, setYearOptions] = useState([]);
+  const [selectedYears, setSelectedYears] = useState([]);
+  const [weatherDatasets, setWeatherDatasets] = useState({});
+  const [loadingYears, setLoadingYears] = useState([]);
+  const [yearErrors, setYearErrors] = useState({});
 
-  const handleRequestWeather = () => {
-    setWeatherWindowOpen(true);
-  };
+  const weatherControllersRef = useRef(new Map());
+  const lastStationKeyRef = useRef(null);
+
+  const handleRequestWeather = useCallback(() => {
+    setWeatherModalOpen(true);
+  }, []);
+
+  const abortAllWeatherRequests = useCallback(() => {
+    weatherControllersRef.current.forEach((controller) => {
+      if (controller && typeof controller.abort === "function") {
+        controller.abort();
+      }
+    });
+    weatherControllersRef.current.clear();
+    setLoadingYears([]);
+  }, []);
+
+  const fetchStations = useCallback(async () => {
+    setStationsState((prev) => ({ ...prev, loading: true, error: null }));
+    try {
+      const response = await fetch("/data/weather-stations-fr.json");
+      if (!response.ok) {
+        throw new Error(
+          `Impossible de récupérer la liste des stations météo (statut ${response.status}).`
+        );
+      }
+      const json = await response.json();
+      const stations = Array.isArray(json?.stations)
+        ? json.stations
+            .map((station) => {
+              const latitude = Number(station?.latitude);
+              const longitude = Number(station?.longitude);
+              if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+                return null;
+              }
+              return {
+                id: station?.id || null,
+                name: station?.name || station?.city || null,
+                city: station?.city || null,
+                latitude,
+                longitude,
+                elevation:
+                  typeof station?.elevation === "number" ? station.elevation : null,
+              };
+            })
+            .filter(Boolean)
+        : [];
+      setStationsState({ data: stations, loading: false, error: null });
+    } catch (error) {
+      console.error("Erreur lors du chargement des stations météo :", error);
+      setStationsState({
+        data: null,
+        loading: false,
+        error:
+          error?.message || "Impossible de récupérer la liste des stations météo.",
+      });
+    }
+  }, []);
+
+  const loadWeatherForYear = useCallback(
+    async (year) => {
+      if (!nearestStation) return;
+
+      const controller = new AbortController();
+      weatherControllersRef.current.set(year, controller);
+      setLoadingYears((prev) => (prev.includes(year) ? prev : [...prev, year]));
+
+      try {
+        const dataset = await fetchWeatherSummary({
+          latitude: nearestStation.latitude,
+          longitude: nearestStation.longitude,
+          startDate: `${year}-01-01`,
+          endDate: `${year}-12-31`,
+          signal: controller.signal,
+        });
+
+        setWeatherDatasets((prev) => ({ ...prev, [year]: dataset }));
+        setYearErrors((prev) => {
+          if (!prev[year]) return prev;
+          const { [year]: _removed, ...rest } = prev;
+          return rest;
+        });
+      } catch (error) {
+        if (error?.name === "AbortError") return;
+        console.error("Erreur lors du chargement des données météo :", error);
+        setYearErrors((prev) => ({
+          ...prev,
+          [year]: error?.message || "Impossible de récupérer les données météo.",
+        }));
+      } finally {
+        setLoadingYears((prev) => prev.filter((value) => value !== year));
+        weatherControllersRef.current.delete(year);
+      }
+    },
+    [nearestStation]
+  );
+
+  const handleToggleYear = useCallback((year) => {
+    setSelectedYears((prev) => {
+      const isSelected = prev.includes(year);
+      if (isSelected) {
+        return prev.filter((value) => value !== year);
+      }
+      setYearErrors((prevErrors) => {
+        if (!prevErrors[year]) return prevErrors;
+        const { [year]: _removed, ...rest } = prevErrors;
+        return rest;
+      });
+      return [...prev, year].sort((a, b) => b - a);
+    });
+  }, []);
+
+  const handleRetryYear = useCallback(
+    (year) => {
+      setYearErrors((prev) => {
+        if (!prev[year]) return prev;
+        const { [year]: _removed, ...rest } = prev;
+        return rest;
+      });
+      loadWeatherForYear(year);
+    },
+    [loadWeatherForYear]
+  );
 
   const selectedInfo = useMemo(() => {
     if (selectedId == null) {
@@ -201,6 +219,125 @@ function MapExperience({ onOpenSummary = () => {} }) {
 
     return { feature: null, label: "", centroid: null };
   }, [features, selectedId]);
+
+  useEffect(() => {
+    if (!weatherModalOpen) {
+      abortAllWeatherRequests();
+    }
+  }, [weatherModalOpen, abortAllWeatherRequests]);
+
+  useEffect(
+    () => () => {
+      abortAllWeatherRequests();
+    },
+    [abortAllWeatherRequests]
+  );
+
+  useEffect(() => {
+    if (!weatherModalOpen) return;
+    if (stationsState.data?.length || stationsState.loading || stationsState.error) {
+      return;
+    }
+    fetchStations();
+  }, [weatherModalOpen, stationsState.data, stationsState.loading, stationsState.error, fetchStations]);
+
+  useEffect(() => {
+    if (!weatherModalOpen) return;
+
+    const centroid = selectedInfo.centroid;
+    if (!centroid || !Number.isFinite(centroid.latitude) || !Number.isFinite(centroid.longitude)) {
+      setNearestStation(null);
+      return;
+    }
+
+    if (!stationsState.data?.length) {
+      setNearestStation(null);
+      return;
+    }
+
+    let bestStation = null;
+    let minDistance = Infinity;
+    stationsState.data.forEach((station) => {
+      const distance = haversineDistanceKm(centroid, station);
+      if (distance == null) return;
+      if (distance < minDistance) {
+        minDistance = distance;
+        bestStation = { ...station, distanceKm: distance };
+      }
+    });
+
+    setNearestStation((current) => {
+      if (!bestStation) return null;
+      if (
+        current &&
+        current.latitude === bestStation.latitude &&
+        current.longitude === bestStation.longitude &&
+        current.id === bestStation.id
+      ) {
+        return current.distanceKm === bestStation.distanceKm ? current : { ...bestStation };
+      }
+      return bestStation;
+    });
+  }, [weatherModalOpen, selectedInfo.centroid, stationsState.data]);
+
+  useEffect(() => {
+    if (!weatherModalOpen) return;
+
+    const key = nearestStation
+      ? `${nearestStation.id || "station"}|${nearestStation.latitude?.toFixed(4) || ""}|${nearestStation.longitude?.toFixed(4) || ""}`
+      : "none";
+
+    if (key !== lastStationKeyRef.current) {
+      lastStationKeyRef.current = key;
+      abortAllWeatherRequests();
+      setWeatherDatasets({});
+      setYearErrors({});
+      setSelectedYears([]);
+      setYearOptions([]);
+    }
+  }, [weatherModalOpen, nearestStation, abortAllWeatherRequests]);
+
+  useEffect(() => {
+    if (!weatherModalOpen || !nearestStation) return;
+
+    const currentYear = new Date().getFullYear();
+    const options = Array.from({ length: 6 }, (_, idx) => currentYear - idx);
+
+    setYearOptions((prev) => {
+      const same =
+        prev.length === options.length && prev.every((value, index) => value === options[index]);
+      return same ? prev : options;
+    });
+
+    setSelectedYears((prev) => {
+      const filtered = prev.filter((value) => options.includes(value));
+      if (filtered.length) {
+        if (filtered.length === prev.length && filtered.every((value, index) => value === prev[index])) {
+          return prev;
+        }
+        return filtered;
+      }
+      return [options[0]];
+    });
+  }, [weatherModalOpen, nearestStation]);
+
+  useEffect(() => {
+    if (!weatherModalOpen || !nearestStation) return;
+    selectedYears.forEach((year) => {
+      if (weatherDatasets[year] || loadingYears.includes(year) || yearErrors[year]) {
+        return;
+      }
+      loadWeatherForYear(year);
+    });
+  }, [
+    weatherModalOpen,
+    nearestStation,
+    selectedYears,
+    weatherDatasets,
+    loadingYears,
+    yearErrors,
+    loadWeatherForYear,
+  ]);
 
   const layoutStyle = {
     height: "100%",
@@ -282,7 +419,7 @@ function MapExperience({ onOpenSummary = () => {} }) {
             <h1 style={{ margin: 0, fontSize: 18 }}>Assolia Telepac Mapper</h1>
             <button
               type="button"
-              onClick={() => setWeatherWindowOpen(true)}
+              onClick={handleRequestWeather}
               style={{
                 padding: "6px 12px",
                 borderRadius: 8,
@@ -461,12 +598,22 @@ function MapExperience({ onOpenSummary = () => {} }) {
         </div>
       </div>
 
-      <WeatherWindow
-        open={weatherWindowOpen}
-        onClose={() => setWeatherWindowOpen(false)}
-        hasSelection={!!selectedInfo.feature}
+      <WeatherModal
+        open={weatherModalOpen}
+        onClose={() => setWeatherModalOpen(false)}
         parcelLabel={selectedInfo.label}
         centroid={selectedInfo.centroid}
+        station={nearestStation}
+        stationLoading={stationsState.loading}
+        stationError={stationsState.error}
+        onRetryStation={fetchStations}
+        yearOptions={yearOptions}
+        selectedYears={selectedYears}
+        onToggleYear={handleToggleYear}
+        loadingYears={loadingYears}
+        weatherByYear={weatherDatasets}
+        yearErrors={yearErrors}
+        onRetryYear={handleRetryYear}
       />
     </div>
   );
