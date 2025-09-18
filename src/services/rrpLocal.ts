@@ -1,7 +1,8 @@
 // rrpLocal.ts — loader MBTiles (Vector Tiles) "blindé" pour Vite/MapLibre
 
+import initSqlJs from "sql.js/dist/sql-wasm.js";
 import sqlWasmUrl from "sql.js/dist/sql-wasm.wasm?url";
-import type { LazyHttpDatabase, SplitFileConfig } from "sql.js-httpvfs/dist/sqlite.worker";
+import type { Database } from "sql.js";
 import Pbf from "pbf";
 import { VectorTile } from "@mapbox/vector-tile";
 import { ungzip } from "pako";
@@ -9,29 +10,32 @@ import { ungzip } from "pako";
 type VTL = InstanceType<typeof VectorTile>["layers"][string];
 export type TileCoord = { z: number; x: number; y: number };
 
-type HttpVfsModule = typeof import("sql.js-httpvfs/dist/sqlite.worker");
+type SqlJsModule = Awaited<ReturnType<typeof initSqlJs>>;
 
-let httpModulePromise: Promise<HttpVfsModule> | null = null;
-async function getHttpModule(): Promise<HttpVfsModule> {
-  if (!httpModulePromise) {
-    httpModulePromise = import("sql.js-httpvfs/dist/sqlite.worker");
+let sqlModulePromise: Promise<SqlJsModule> | null = null;
+
+async function getSqlModule(): Promise<SqlJsModule> {
+  if (!sqlModulePromise) {
+    sqlModulePromise = initSqlJs({
+      locateFile: () => sqlWasmUrl,
+    });
   }
-  return httpModulePromise;
+  return sqlModulePromise;
 }
 
-async function openHttpMbtiles(url: string): Promise<LazyHttpDatabase> {
-  const httpModule = await getHttpModule();
-  const virtualFilename = url.split("/").pop() ?? "mbtiles.sqlite";
-  const config: SplitFileConfig = {
-    from: "inline",
-    virtualFilename,
-    config: {
-      serverMode: "full",
-      requestChunkSize: 4096,
-      url,
-    },
-  };
-  return httpModule.SplitFileHttpDatabase(httpvfsWasmUrl, [config], virtualFilename);
+async function openHttpMbtiles(url: string): Promise<Database> {
+  const base = typeof window !== "undefined" ? window.location.href : undefined;
+  const resolvedUrl = new URL(url, base).toString();
+  const resp = await fetch(resolvedUrl);
+  if (!resp.ok) {
+    const details = await resp.text().catch(() => "");
+    throw new Error(
+      `Could not download MBTiles: ${resp.status} ${resp.statusText}${details ? ` – ${details}` : ""}`
+    );
+  }
+  const arrayBuffer = await resp.arrayBuffer();
+  const sql = await getSqlModule();
+  return new sql.Database(new Uint8Array(arrayBuffer));
 }
 
 const flipY = (yXYZ: number, z: number) => (1 << z) - 1 - yXYZ;
