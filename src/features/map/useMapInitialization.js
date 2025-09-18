@@ -6,6 +6,7 @@ import "@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css";
 import MultipleSelectionMode from "./multipleSelectionMode.js";
 
 import { useRasterLayers } from "./useRasterLayers";
+import { useWeatherStationsLayer } from "./useWeatherStationsLayer";
 
 if (typeof window !== "undefined") window.mapboxgl = maplibregl;
 
@@ -16,6 +17,7 @@ export function useMapInitialization() {
   const [selectedId, setSelectedId] = useState(null);
   const [mapReady, setMapReady] = useState(false);
   const ensureRaster = useRasterLayers();
+  const ensureWeatherStations = useWeatherStationsLayer();
 
   const selectFeatureOnMap = useCallback((id, fit = false) => {
     const map = mapRef.current;
@@ -69,6 +71,9 @@ export function useMapInitialization() {
 
     map.on("load", () => {
       ensureRaster(map);
+      ensureWeatherStations(map).catch((error) => {
+        console.error("Impossible d'initialiser la couche des stations météo", error);
+      });
 
       const draw = new MapboxDraw({
         displayControlsDefault: false,
@@ -150,7 +155,7 @@ export function useMapInitialization() {
       }
       setMapReady(false);
     };
-  }, [ensureRaster]);
+  }, [ensureRaster, ensureWeatherStations]);
 
   return {
     mapRef,
