@@ -1,5 +1,4 @@
 import type { Database } from "sql.js";
-
 import { toWgs84 } from "../utils/proj.js";
 
 import { getSqlModule } from "./rrpLocal";
