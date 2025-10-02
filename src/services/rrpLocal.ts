@@ -15,14 +15,13 @@ type SqlJsModule = Awaited<ReturnType<typeof initSqlJs>>;
 
 let sqlModulePromise: Promise<SqlJsModule> | null = null;
 
-async function getSqlModule(): Promise<SqlJsModule> {
+export async function getSqlModule(): Promise<SqlJsModule> {
   if (!sqlModulePromise) {
     sqlModulePromise = initSqlJs({
       locateFile: () => sqlWasmUrl,
     });
   }
   return sqlModulePromise;
-
 }
 
 async function openHttpMbtiles(url: string): Promise<Database> {
