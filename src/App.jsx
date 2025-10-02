@@ -50,7 +50,7 @@ export default function App() {
   //    Exemple : public/data/rrp_france_wgs84_shp.mbtiles
   const { polygonsShown, loadingTiles } = useSoilLayerLocal({
     map: mapRef.current,
-    mbtilesUrl: "/data/rrp_france_wgs84_shp.mbtiles",
+    dataPath: "/data/soilmap_dep",
     sourceId: "soils-rrp",
     fillLayerId: "soils-rrp-fill",
     lineLayerId: "soils-rrp-outline",
