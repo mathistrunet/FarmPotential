@@ -1,4 +1,5 @@
 import type { Database } from "sql.js";
+import { toWgs84 } from "../utils/proj.js";
 
 import { getSqlModule } from "./rrpLocal";
 
@@ -234,7 +235,8 @@ export async function loadDepartmentGeoJSON(
   const gpkgUrl = `${basePath}/code_insee_${code}.gpkg`;
   const db = await openGeoPackage(gpkgUrl);
   try {
-    const { table, column } = readGeometryInfo(db);
+    const { table, column, srs } = readGeometryInfo(db);
+    const transform = createGeometryTransformer(srs);
     const pkColumn = readPrimaryKey(db, table);
     const result = db.exec(`SELECT * FROM "${table}"`);
     if (!result.length) {
@@ -260,10 +262,11 @@ export async function loadDepartmentGeoJSON(
         }
       });
       if (!geometry) continue;
+      const projected = transform(geometry);
       features.push({
         type: "Feature",
         id,
-        geometry,
+        geometry: projected,
         properties: props,
       });
     }
@@ -271,4 +274,99 @@ export async function loadDepartmentGeoJSON(
   } finally {
     db.close();
   }
+}
+
+type CoordinateProjector = (coords: readonly [number, number]) => [number, number];
+
+const warnedSpatialRefs = new Set<number>();
+
+function createGeometryTransformer(
+  srs: number | null
+): (geometry: GeoJSON.Geometry) => GeoJSON.Geometry {
+  if (srs == null || srs === 4326) {
+    return (geometry: GeoJSON.Geometry) => geometry;
+  }
+
+  if (srs === 2154) {
+    return (geometry: GeoJSON.Geometry) =>
+      transformGeometryCoordinates(geometry, (coords) => toWgs84(coords));
+  }
+
+  if (!warnedSpatialRefs.has(srs)) {
+    console.warn(
+      `Soil GeoPackage uses unsupported spatial reference ID ${srs}; geometries will not be reprojected.`
+    );
+    warnedSpatialRefs.add(srs);
+  }
+
+  return (geometry: GeoJSON.Geometry) => geometry;
+}
+
+function transformGeometryCoordinates(
+  geometry: GeoJSON.Geometry,
+  project: CoordinateProjector
+): GeoJSON.Geometry {
+  switch (geometry.type) {
+    case "Point":
+      return {
+        type: "Point",
+        coordinates: transformPosition(geometry.coordinates, project),
+      };
+    case "MultiPoint":
+      return {
+        type: "MultiPoint",
+        coordinates: geometry.coordinates.map((position) =>
+          transformPosition(position, project)
+        ),
+      };
+    case "LineString":
+      return {
+        type: "LineString",
+        coordinates: geometry.coordinates.map((position) =>
+          transformPosition(position, project)
+        ),
+      };
+    case "MultiLineString":
+      return {
+        type: "MultiLineString",
+        coordinates: geometry.coordinates.map((line) =>
+          line.map((position) => transformPosition(position, project))
+        ),
+      };
+    case "Polygon":
+      return {
+        type: "Polygon",
+        coordinates: geometry.coordinates.map((ring) =>
+          ring.map((position) => transformPosition(position, project))
+        ),
+      };
+    case "MultiPolygon":
+      return {
+        type: "MultiPolygon",
+        coordinates: geometry.coordinates.map((polygon) =>
+          polygon.map((ring) => ring.map((position) => transformPosition(position, project)))
+        ),
+      };
+    case "GeometryCollection":
+      return {
+        type: "GeometryCollection",
+        geometries: geometry.geometries.map((geom) =>
+          geom ? transformGeometryCoordinates(geom, project) : geom
+        ),
+      };
+    default:
+      return geometry;
+  }
+}
+
+function transformPosition(
+  position: GeoJSON.Position,
+  project: CoordinateProjector
+): GeoJSON.Position {
+  if (!Array.isArray(position) || position.length < 2) {
+    return position;
+  }
+  const [x, y, ...rest] = position;
+  const [lng, lat] = project([Number(x), Number(y)]);
+  return [lng, lat, ...rest];
 }
