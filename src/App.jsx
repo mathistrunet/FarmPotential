@@ -1,5 +1,5 @@
 // src/App.jsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import maplibregl from "maplibre-gl";
 
 import RasterToggles from "./components/RasterToggles";
@@ -10,7 +10,7 @@ import { DEFAULT_FILL_OPACITY } from "./config/soilsLocalConfig";
 // ⛔️ retirés car liés aux calques/queries en ligne (Géoportail)
 // import SoilsControl from "./features/soils/components/SoilsControl";
 // import { useSoilsLayer } from "./features/soils/hooks/useSoilsLayer";
-// import SoilInfoPanel from "./components/SoilInfoPanel";
+import SoilInfoPanel from "./components/SoilInfoPanel";
 // import { getRrpAtPoint } from "./utils/rrpGetFeatureInfo";
 
 // ✅ composant RPG autonome (chemin conservé)
@@ -40,6 +40,7 @@ export default function App() {
   const [rrpVisible, setRrpVisible] = useState(false);
   const [rrpOpacity, setRrpOpacity] = useState(DEFAULT_FILL_OPACITY);
   const [freezeTiles, setFreezeTiles] = useState(false);
+  const [soilClickInfo, setSoilClickInfo] = useState(null);
 
   // ✅ expose maplibregl pour les popups utilisés par le hook local
   useEffect(() => {
@@ -48,7 +49,15 @@ export default function App() {
 
   // ✅ Charge la couche RRP France depuis un fichier MBTiles local (placer le fichier dans /public/data/)
   //    Exemple : public/data/rrp_france_wgs84_shp.mbtiles
-  const { polygonsShown, loadingTiles } = useSoilLayerLocal({
+  const {
+    polygonsShown,
+    loadingTiles,
+    freezeCurrentTile,
+    frozenTiles,
+    removeFrozenTile,
+    clearFrozenTiles,
+    currentTileSummary,
+  } = useSoilLayerLocal({
     map: mapRef.current,
     dataPath: "/data/soilmap_dep",
     sourceId: "soils-rrp",
@@ -61,12 +70,71 @@ export default function App() {
     freezeTiles,
   });
 
+  const mapInstance = mapRef.current;
+
+  useEffect(() => {
+    if (!mapInstance) return;
+
+    const handleClick = (event) => {
+      if (!rrpVisible) {
+        setSoilClickInfo(null);
+        return;
+      }
+      const features = mapInstance.queryRenderedFeatures(event.point, {
+        layers: ["soils-rrp-fill"],
+      });
+      const items = features.map((feature, idx) => ({
+        id:
+          feature.id ??
+          feature.properties?.id ??
+          feature.properties?.ID ??
+          `${feature.source}-${feature.sourceLayer ?? ""}-${idx}`,
+        properties: { ...(feature.properties ?? {}) },
+      }));
+      setSoilClickInfo({
+        lngLat:
+          event.lngLat && typeof event.lngLat.wrap === "function"
+            ? event.lngLat.wrap()
+            : event.lngLat,
+        features: items,
+      });
+    };
+
+    mapInstance.on("click", handleClick);
+
+    return () => {
+      mapInstance.off("click", handleClick);
+    };
+  }, [mapInstance, rrpVisible]);
+
+  useEffect(() => {
+    if (!rrpVisible) {
+      setSoilClickInfo(null);
+    }
+  }, [rrpVisible]);
+
+  const totalFrozenFeatures = useMemo(
+    () => frozenTiles.reduce((acc, tile) => acc + tile.features.length, 0),
+    [frozenTiles]
+  );
+
+  const totalVisibleFeatures =
+    totalFrozenFeatures + (currentTileSummary?.featureCount ?? 0);
+
   const soilStatusLabel = (() => {
     if (!rrpVisible) return "couche désactivée";
-    if (freezeTiles) return "tuiles figées (pas de rechargement)";
     if (loadingTiles) return "chargement des tuiles…";
-    return polygonsShown ? "tuiles affichées" : "aucune tuile visible";
+    if (freezeTiles && totalVisibleFeatures === 0)
+      return "rechargement en pause – aucune tuile visible";
+    if (freezeTiles) return "rechargement en pause";
+    if (totalVisibleFeatures === 0) return "aucune tuile visible";
+    if (frozenTiles.length > 0) {
+      return `tuiles figées (${frozenTiles.length}) + tuile active`;
+    }
+    return polygonsShown ? "tuile active affichée" : "aucune tuile visible";
   })();
+
+  const canFreezeCurrentTile = Boolean(currentTileSummary?.featureCount);
 
   // ---- Styles de la barre d’outils bas
   const barBase = {
@@ -130,8 +198,7 @@ export default function App() {
       {/* Carte */}
       <div id="map" style={{ height: "100dvh", width: "100%" }} />
 
-      {/* ⛔️ retiré : panneau d’info sols alimenté par GetFeatureInfo distant */}
-      {/* <SoilInfoPanel info={soilInfo} /> */}
+      <SoilInfoPanel info={soilClickInfo} onClose={() => setSoilClickInfo(null)} />
 
       {/* Panneau latéral (onglets + repliable) */}
       <div
@@ -243,14 +310,14 @@ export default function App() {
                   marginTop: 8,
                 }}
               >
-              <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <input
-                  type="checkbox"
-                  checked={rrpVisible}
-                  onChange={(e) => setRrpVisible(e.target.checked)}
-                />
-                <span>Carte des sols France</span>
-              </label>
+                <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <input
+                    type="checkbox"
+                    checked={rrpVisible}
+                    onChange={(e) => setRrpVisible(e.target.checked)}
+                  />
+                  <span>Carte des sols France</span>
+                </label>
                 <p style={{ color: "#666", fontSize: 12, marginTop: 8 }}>
                   Chargée depuis <code>/public/data/rrp_france_wgs84_shp.mbtiles</code>.
                 </p>
@@ -278,33 +345,156 @@ export default function App() {
                     style={{ width: "100%" }}
                   />
                 </div>
-                <div style={{ fontSize: 12, color: "#666", marginTop: 4 }}>
-                  Statut : {soilStatusLabel}
-                </div>
                 <div style={{ marginTop: 8 }}>
+                  <label
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      fontSize: 12,
+                      color: "#444",
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={freezeTiles}
+                      onChange={(e) => setFreezeTiles(e.target.checked)}
+                      disabled={!rrpVisible}
+                    />
+                    <span>Mettre en pause le rechargement automatique</span>
+                  </label>
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 4,
+                    fontSize: 12,
+                    color: "#444",
+                    marginTop: 8,
+                  }}
+                >
+                  <div>Statut : {soilStatusLabel}</div>
+                  <div>
+                    Tuile visible : {currentTileSummary
+                      ? `${currentTileSummary.featureCount} polygone${
+                          currentTileSummary.featureCount > 1 ? "s" : ""
+                        }`
+                      : "—"}
+                  </div>
+                  <div>
+                    Tuiles figées : {frozenTiles.length} ({totalFrozenFeatures} polygone
+                    {totalFrozenFeatures > 1 ? "s" : ""})
+                  </div>
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 6,
+                    marginTop: 8,
+                  }}
+                >
                   <button
                     type="button"
-                    onClick={() => setFreezeTiles((v) => !v)}
-                    disabled={!rrpVisible}
+                    onClick={() => freezeCurrentTile()}
+                    disabled={!rrpVisible || !canFreezeCurrentTile}
                     style={{
                       padding: "6px 10px",
                       fontSize: 12,
                       borderRadius: 6,
                       border: "1px solid #d1d5db",
-                      background: freezeTiles ? "#eef2ff" : "#fff",
-                      cursor: rrpVisible ? "pointer" : "not-allowed",
-                      opacity: rrpVisible ? 1 : 0.5,
+                      background: canFreezeCurrentTile ? "#fff" : "#f3f4f6",
+                      cursor:
+                        rrpVisible && canFreezeCurrentTile ? "pointer" : "not-allowed",
+                      opacity: rrpVisible && canFreezeCurrentTile ? 1 : 0.6,
                       transition: "background-color 0.2s ease",
                     }}
-                    title={
-                      freezeTiles
-                        ? "Cliquer pour relancer le chargement des tuiles"
-                        : "Cliquer pour figer les tuiles affichées"
-                    }
+                    title="Ajoute la tuile actuellement visible à la liste des tuiles figées"
                   >
-                    {freezeTiles ? "Relancer le chargement" : "Figer les tuiles"}
+                    Figer la tuile visible
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => clearFrozenTiles()}
+                    disabled={!frozenTiles.length}
+                    style={{
+                      padding: "6px 10px",
+                      fontSize: 12,
+                      borderRadius: 6,
+                      border: "1px solid #d1d5db",
+                      background: frozenTiles.length ? "#fff" : "#f3f4f6",
+                      cursor: frozenTiles.length ? "pointer" : "not-allowed",
+                      opacity: frozenTiles.length ? 1 : 0.6,
+                    }}
+                    title="Supprime toutes les tuiles figées"
+                  >
+                    Vider les tuiles figées
                   </button>
                 </div>
+                {frozenTiles.length > 0 && (
+                  <div
+                    style={{
+                      marginTop: 10,
+                      borderTop: "1px solid #eee",
+                      paddingTop: 8,
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 6,
+                      fontSize: 12,
+                      color: "#444",
+                    }}
+                  >
+                    <strong style={{ fontSize: 12 }}>
+                      Tuiles figées ({frozenTiles.length})
+                    </strong>
+                    <ul
+                      style={{
+                        listStyle: "none",
+                        padding: 0,
+                        margin: 0,
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 6,
+                      }}
+                    >
+                      {frozenTiles.map((tile, index) => (
+                        <li
+                          key={tile.id}
+                          style={{
+                            border: "1px solid #e5e7eb",
+                            borderRadius: 6,
+                            padding: 6,
+                            background: "#fafafa",
+                          }}
+                        >
+                          <div style={{ fontWeight: 600 }}>
+                            #{index + 1} – {tile.features.length} polygone
+                            {tile.features.length > 1 ? "s" : ""}
+                          </div>
+                          <div style={{ color: "#666" }}>
+                            Centre : {tile.center[1].toFixed(4)}°, {tile.center[0].toFixed(4)}°
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removeFrozenTile(tile.id)}
+                            style={{
+                              marginTop: 6,
+                              padding: "4px 8px",
+                              fontSize: 12,
+                              borderRadius: 4,
+                              border: "1px solid #d1d5db",
+                              background: "#fff",
+                              cursor: "pointer",
+                            }}
+                          >
+                            Retirer cette tuile
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
               {/* ⛔️ retiré : contrôle sols en ligne (WMS/WFS) */}
               {/* <SoilsControl ... /> */}
