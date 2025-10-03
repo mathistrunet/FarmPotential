@@ -1,3 +1,9 @@
+// Clé WMTS Géoportail : on utilise la clé publique "essentiels" par défaut,
+// mais elle peut être surchargée via VITE_GEO_PORTAIL_API_KEY.
+const GEO_PORTAIL_KEY = import.meta.env.VITE_GEO_PORTAIL_API_KEY || "essentiels";
+const GEO_PORTAIL_SOIL_LAYER =
+  import.meta.env.VITE_GEO_PORTAIL_SOIL_LAYER || "SOL.SOL";
+
 export const RASTER_LAYERS = [
   {
     id: "osm_std",
@@ -29,5 +35,15 @@ export const RASTER_LAYERS = [
     attribution: "© IGN",
     defaultVisible: false,
     defaultOpacity: 1.0,
+  },
+  {
+    id: "ign_soilmap",
+    label: "Carte des sols (Géoportail)",
+    url: `https://wxs.ign.fr/${GEO_PORTAIL_KEY}/geoportail/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=${GEO_PORTAIL_SOIL_LAYER}&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&FORMAT=image/png`,
+    subdomains: null,
+    tileSize: 256,
+    attribution: "© IGN / Géoportail",
+    defaultVisible: false,
+    defaultOpacity: 0.8,
   },
 ];
