@@ -23,7 +23,7 @@ export default function RasterToggles({ mapRef }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       {RASTER_LAYERS.map(def => {
-        const lyrId = `${def.id}_lyr`;
+        const lyrId = def.mapLayerId || `${def.id}_lyr`;
         return (
           <div key={def.id} style={{ border:"1px solid #eee", borderRadius:8, padding:8 }}>
             <label style={{ display:"flex", alignItems:"center", gap:8 }}>

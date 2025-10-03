@@ -9,6 +9,16 @@ import { useRasterLayers } from "./useRasterLayers";
 
 if (typeof window !== "undefined") window.mapboxgl = maplibregl;
 
+const SOIL_LAYER_ID = "soil-wmts";
+const SOIL_TILES =
+  "https://data.geopf.fr/wmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile" +
+  "&LAYER=INRA.CARTE.SOLS&STYLE=normal&FORMAT=image/png" +
+  "&TILEMATRIXSET=PM&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}";
+const SOIL_WMS =
+  "https://data.geopf.fr/wms-r/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap" +
+  "&LAYERS=INRA.CARTE.SOLS&STYLES=&FORMAT=image/png&CRS=EPSG:3857" +
+  "&WIDTH=256&HEIGHT=256&BBOX={bbox-epsg-3857}";
+
 export function useMapInitialization() {
   const mapRef = useRef(null);
   const drawRef = useRef(null);
@@ -67,7 +77,77 @@ export function useMapInitialization() {
     mapRef.current = map;
     map.addControl(new maplibregl.NavigationControl(), "top-left");
 
-    const hydrateRaster = () => ensureRaster(map);
+    let soilTilesTemplate = SOIL_TILES;
+    let soilFallbackActivated = false;
+
+    const ensureSoilLayer = (visibilityOverride) => {
+      if (!map) return;
+
+      const desiredVisibility =
+        typeof visibilityOverride === "string"
+          ? visibilityOverride
+          : map.getLayer(SOIL_LAYER_ID)
+          ? map.getLayoutProperty(SOIL_LAYER_ID, "visibility")
+          : undefined;
+
+      if (!map.getSource(SOIL_LAYER_ID)) {
+        map.addSource(SOIL_LAYER_ID, {
+          type: "raster",
+          tiles: [soilTilesTemplate],
+          tileSize: 256,
+          attribution: "© IGN · © GisSol/INRAE",
+        });
+      }
+
+      if (!map.getLayer(SOIL_LAYER_ID)) {
+        map.addLayer({
+          id: SOIL_LAYER_ID,
+          type: "raster",
+          source: SOIL_LAYER_ID,
+          paint: { "raster-opacity": 0.85 },
+        });
+        map.setLayoutProperty(
+          SOIL_LAYER_ID,
+          "visibility",
+          typeof desiredVisibility === "string" ? desiredVisibility : "none"
+        );
+      } else if (typeof desiredVisibility === "string") {
+        map.setLayoutProperty(SOIL_LAYER_ID, "visibility", desiredVisibility);
+      }
+    };
+
+    const fallbackToSoilWms = (failedUrl) => {
+      if (soilFallbackActivated) return;
+      soilFallbackActivated = true;
+      soilTilesTemplate = SOIL_WMS;
+
+      const currentVisibility = map.getLayer(SOIL_LAYER_ID)
+        ? map.getLayoutProperty(SOIL_LAYER_ID, "visibility")
+        : undefined;
+      const currentOpacity = map.getLayer(SOIL_LAYER_ID)
+        ? map.getPaintProperty(SOIL_LAYER_ID, "raster-opacity")
+        : undefined;
+
+      if (map.getLayer(SOIL_LAYER_ID)) {
+        map.removeLayer(SOIL_LAYER_ID);
+      }
+      if (map.getSource(SOIL_LAYER_ID)) {
+        map.removeSource(SOIL_LAYER_ID);
+      }
+
+      ensureSoilLayer(currentVisibility);
+      if (typeof currentOpacity === "number") {
+        map.setPaintProperty(SOIL_LAYER_ID, "raster-opacity", currentOpacity);
+      }
+      console.warn(
+        `INRA.CARTE.SOLS WMTS tile failed (falling back to WMS). Last URL: ${failedUrl}`
+      );
+    };
+
+    const hydrateRaster = () => {
+      ensureRaster(map);
+      ensureSoilLayer();
+    };
 
     map.on("load", () => {
       hydrateRaster();
@@ -142,7 +222,25 @@ export function useMapInitialization() {
 
     map.on("styledata", hydrateRaster);
 
-    map.on("error", (e) => console.error("Map error:", e && e.error));
+    map.on("error", (e) => {
+      const err = e && e.error;
+      const failingUrl =
+        (err && (err.url || err.resource?.url || err.resource?.getURL?.())) ||
+        undefined;
+      const status = err && (err.status || err.statusCode);
+      const message = (err && typeof err.message === "string" && err.message) || "";
+      if (
+        !soilFallbackActivated &&
+        failingUrl &&
+        failingUrl.includes("INRA.CARTE.SOLS") &&
+        (status === 400 || message.includes("400"))
+      ) {
+        fallbackToSoilWms(failingUrl);
+        return;
+      }
+
+      console.error("Map error:", err);
+    });
 
     return () => {
       map.off("styledata", hydrateRaster);

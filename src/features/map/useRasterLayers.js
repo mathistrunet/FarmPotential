@@ -4,8 +4,11 @@ import { RASTER_LAYERS } from "../../config/rasterLayers";
 export function useRasterLayers() {
   return useCallback((map) => {
     RASTER_LAYERS.forEach((def) => {
-      const srcId = `${def.id}_src`;
-      const lyrId = `${def.id}_lyr`;
+      const srcId = def.sourceId || `${def.id}_src`;
+      const lyrId = def.mapLayerId || `${def.id}_lyr`;
+
+      if (def.managedExternally) return;
+
       if (!map.getSource(srcId)) {
         const sourceConfig = {
           type: "raster",
