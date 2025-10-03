@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type maplibregl from "maplibre-gl";
 import bboxClip from "@turf/bbox-clip";
 
@@ -27,6 +27,26 @@ const META = departementsMeta as Record<
   { bbox: [number, number, number, number]; centroid: [number, number] }
 >;
 
+type FrozenTile = {
+  id: number;
+  bounds: LngLatBBox;
+  center: [number, number];
+  features: GeoJSON.Feature[];
+  capturedAt: number;
+};
+
+type CurrentTile = {
+  bounds: LngLatBBox;
+  center: [number, number];
+  features: GeoJSON.Feature[];
+};
+
+export type TileSummary = {
+  bounds: LngLatBBox;
+  center: [number, number];
+  featureCount: number;
+};
+
 type Options = {
   map: maplibregl.Map | null;
   dataPath?: string;
@@ -54,12 +74,21 @@ export function useSoilLayerLocal({
 }: Options) {
   const [polygonsShown, setPolygonsShown] = useState(false);
   const [loadingTiles, setLoadingTiles] = useState(false);
+  const [frozenTiles, setFrozenTiles] = useState<FrozenTile[]>([]);
+  const [currentTileSummary, setCurrentTileSummary] = useState<TileSummary | null>(null);
 
   const freezeRef = useRef(freezeTiles);
   const updateRef = useRef<(() => void) | null>(null);
   const requestIdRef = useRef(0);
   const departmentCacheRef = useRef(new Map<string, GeoJSON.Feature[]>());
   const departmentPromiseRef = useRef(new Map<string, Promise<GeoJSON.Feature[]>>());
+  const frozenTilesRef = useRef<FrozenTile[]>([]);
+  const currentTileRef = useRef<CurrentTile | null>(null);
+  const nextFrozenIdRef = useRef(1);
+
+  useEffect(() => {
+    frozenTilesRef.current = frozenTiles;
+  }, [frozenTiles]);
 
   useEffect(() => {
     departmentCacheRef.current.clear();
@@ -83,12 +112,29 @@ export function useSoilLayerLocal({
       if (map.getLayer(lineLayerId)) map.removeLayer(lineLayerId);
       if (map.getLayer(fillLayerId)) map.removeLayer(fillLayerId);
       if (map.getSource(sourceId)) map.removeSource(sourceId);
+      currentTileRef.current = null;
+      setCurrentTileSummary(null);
       setPolygonsShown(false);
       setLoadingTiles(false);
       return;
     }
 
     let aborted = false;
+
+    const applyCombinedFeatures = (
+      dynamicFeatures: GeoJSON.Feature[]
+    ): GeoJSON.FeatureCollection => {
+      const allFeatures = [
+        ...frozenTilesRef.current.flatMap((tile) => tile.features),
+        ...dynamicFeatures,
+      ];
+      const source = map.getSource(sourceId) as maplibregl.GeoJSONSource | undefined;
+      if (source) {
+        source.setData({ type: "FeatureCollection", features: allFeatures });
+      }
+      setPolygonsShown(allFeatures.length > 0);
+      return { type: "FeatureCollection", features: allFeatures };
+    };
 
     const ensureDepartment = (code: string) => {
       const cacheKey = normalizeDepartmentCode(code);
@@ -118,9 +164,9 @@ export function useSoilLayerLocal({
       const center = map.getCenter();
       const codes = pickNearestDepartments(center.lng, center.lat, MAX_DEPARTMENTS);
       if (!codes.length) {
-        const source = map.getSource(sourceId) as maplibregl.GeoJSONSource | undefined;
-        source?.setData({ type: "FeatureCollection", features: [] });
-        setPolygonsShown(false);
+        currentTileRef.current = null;
+        setCurrentTileSummary(null);
+        applyCombinedFeatures([]);
         setLoadingTiles(false);
         return;
       }
@@ -134,10 +180,17 @@ export function useSoilLayerLocal({
           departmentCacheRef.current.get(normalizeDepartmentCode(code)) ?? []
         );
         const clipped = clipFeaturesToBounds(features, squareBounds);
-        const source = map.getSource(sourceId) as maplibregl.GeoJSONSource | undefined;
-        if (!source) return;
-        source.setData({ type: "FeatureCollection", features: clipped });
-        setPolygonsShown(clipped.length > 0);
+        currentTileRef.current = {
+          bounds: squareBounds,
+          center: [center.lng, center.lat],
+          features: clipped,
+        };
+        setCurrentTileSummary({
+          bounds: squareBounds,
+          center: [center.lng, center.lat],
+          featureCount: clipped.length,
+        });
+        applyCombinedFeatures(clipped);
       } catch (error) {
         if (!aborted) {
           console.error("Failed to load soil department", error);
@@ -265,6 +318,8 @@ export function useSoilLayerLocal({
       if (map.getLayer(lineLayerId)) map.removeLayer(lineLayerId);
       if (map.getLayer(fillLayerId)) map.removeLayer(fillLayerId);
       if (map.getSource(sourceId)) map.removeSource(sourceId);
+      currentTileRef.current = null;
+      setCurrentTileSummary(null);
       updateRef.current = null;
       requestIdRef.current += 1;
       setPolygonsShown(false);
@@ -289,7 +344,56 @@ export function useSoilLayerLocal({
     }
   }, [map, fillLayerId, fillOpacity]);
 
-  return { polygonsShown, loadingTiles };
+  useEffect(() => {
+    if (!map || !visible) return;
+    const source = map.getSource(sourceId) as maplibregl.GeoJSONSource | undefined;
+    if (!source) return;
+    const dynamicFeatures = currentTileRef.current?.features ?? [];
+    const allFeatures = [
+      ...frozenTiles.map((tile) => tile.features).flat(),
+      ...dynamicFeatures,
+    ];
+    source.setData({ type: "FeatureCollection", features: allFeatures });
+    setPolygonsShown(allFeatures.length > 0);
+  }, [map, visible, sourceId, frozenTiles]);
+
+  useEffect(() => {
+    if (!visible) {
+      setCurrentTileSummary(null);
+    }
+  }, [visible]);
+
+  const freezeCurrentTile = useCallback(() => {
+    const current = currentTileRef.current;
+    if (!current || current.features.length === 0) return null;
+    const tile: FrozenTile = {
+      id: nextFrozenIdRef.current++,
+      bounds: current.bounds,
+      center: current.center,
+      features: current.features.map((feature) => deepCloneFeature(feature)),
+      capturedAt: Date.now(),
+    };
+    setFrozenTiles((prev) => [...prev, tile]);
+    return tile;
+  }, []);
+
+  const removeFrozenTile = useCallback((tileId: number) => {
+    setFrozenTiles((prev) => prev.filter((tile) => tile.id !== tileId));
+  }, []);
+
+  const clearFrozenTiles = useCallback(() => {
+    setFrozenTiles([]);
+  }, []);
+
+  return {
+    polygonsShown,
+    loadingTiles,
+    freezeCurrentTile,
+    frozenTiles,
+    removeFrozenTile,
+    clearFrozenTiles,
+    currentTileSummary,
+  };
 }
 
 function pickNearestDepartments(lng: number, lat: number, limit: number): string[] {
@@ -451,6 +555,10 @@ function cloneFeatureWithGeometry(
     bbox?: GeoJSON.BBox;
   };
   return { ...rest, geometry };
+}
+
+function deepCloneFeature(feature: GeoJSON.Feature): GeoJSON.Feature {
+  return JSON.parse(JSON.stringify(feature)) as GeoJSON.Feature;
 }
 
 function getLayerIdBelow(map: maplibregl.Map, zIndex: number): string | null {
