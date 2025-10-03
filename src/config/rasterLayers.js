@@ -30,4 +30,14 @@ export const RASTER_LAYERS = [
     defaultVisible: false,
     defaultOpacity: 1.0,
   },
+  {
+    id: "fr_soils",
+    label: "Types de sols (GisSol / INRAE)",
+    url: "https://data.geopf.fr/wmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&LAYER=INRA.CARTE.SOLS&STYLE=normal&FORMAT=image/png&TILEMATRIXSET=PM&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}",
+    subdomains: null,
+    tileSize: 256,
+    attribution: "© IGN · © GisSol/INRAE",
+    defaultVisible: false,
+    defaultOpacity: 0.85,
+  },
 ];

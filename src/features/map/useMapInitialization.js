@@ -66,8 +66,10 @@ export function useMapInitialization() {
     mapRef.current = map;
     map.addControl(new maplibregl.NavigationControl(), "top-left");
 
+    const hydrateRaster = () => ensureRaster(map);
+
     map.on("load", () => {
-      ensureRaster(map);
+      hydrateRaster();
 
       const draw = new MapboxDraw({
         displayControlsDefault: false,
@@ -137,9 +139,12 @@ export function useMapInitialization() {
       map.on("draw.delete", updateList);
     });
 
+    map.on("styledata", hydrateRaster);
+
     map.on("error", (e) => console.error("Map error:", e && e.error));
 
     return () => {
+      map.off("styledata", hydrateRaster);
       try {
         map.remove();
       } catch {
