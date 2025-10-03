@@ -1,3 +1,22 @@
+// Clé d'accès GeoPlateforme facultative : plusieurs couches sont publiques,
+// mais VITE_GEO_PORTAIL_API_KEY peut être défini pour accéder aux ressources
+// qui le nécessitent.
+const GEO_PORTAIL_KEY =
+  import.meta.env.VITE_GEO_PORTAIL_API_KEY?.trim() || null;
+
+const withOptionalKey = (baseUrl) => {
+  if (!GEO_PORTAIL_KEY) {
+    return baseUrl;
+  }
+  const [url, hash] = baseUrl.split("#");
+  const separator = url.includes("?") ? "&" : "?";
+  return `${url}${separator}apikey=${encodeURIComponent(
+    GEO_PORTAIL_KEY,
+  )}${hash ? `#${hash}` : ""}`;
+};
+const GEO_PORTAIL_SOIL_LAYER =
+  import.meta.env.VITE_GEO_PORTAIL_SOIL_LAYER || "SOL.SOL";
+
 export const RASTER_LAYERS = [
   {
     id: "osm_std",
@@ -21,9 +40,21 @@ export const RASTER_LAYERS = [
   },
 
   {
+    id: "ign_plan",
+    label: "IGN Plan (GeoPlateforme)",
+    url: withOptionalKey("https://data.geopf.fr/tiles/PLAN.IGN/{z}/{x}/{y}.png"),
+    scheme: "tms",
+    tileSize: 256,
+    attribution: "© IGN",
+    defaultVisible: false,
+    defaultOpacity: 1.0,
+  },
+  {
     id: "ign_satellite",
     label: "IGN Satellite",
-    url: "https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&FORMAT=image/jpeg",
+    url: withOptionalKey(
+      "https://data.geopf.fr/wmts/ORTHOIMAGERY.ORTHOPHOTOS/default/PM/{z}/{x}/{y}.jpeg",
+    ),
     subdomains: null,
     tileSize: 256,
     attribution: "© IGN",
