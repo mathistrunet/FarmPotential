@@ -64,7 +64,7 @@ export const RASTER_LAYERS = [
   {
     id: "fr_soils",
     label: "Types de sols (GisSol / INRAE)",
-    url: "https://data.geopf.fr/wmts/INRA.CARTE.SOLS/normal/default/PM/{z}/{x}/{y}.png",
+    url: "https://data.geopf.fr/wmts/INRA.CARTE.SOLS/normal/default/PM/{z}/{y}/{x}.png",
     subdomains: null,
     tileSize: 256,
     attribution: "© IGN · © GisSol/INRAE",
