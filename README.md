@@ -29,11 +29,61 @@ Preview the built app locally:
 npm run preview
 ```
 
-## IGN API key
-Some raster layers (e.g. IGN plan and ortho imagery) require an API key. Obtain a key from [IGN Geoservices](https://geoservices.ign.fr/) and set it in `src/config/rasterLayers.js`:
+## IGN / GeoPlateforme API key and endpoints
+Some raster layers (e.g. IGN plan and ortho imagery) require an API key. Obtain
+an API key from [IGN GeoPlateforme](https://geoservices.ign.fr/) and set it in
+`src/config/rasterLayers.js`:
 ```js
 const YOUR_IGN_KEY = "your-ign-key";
 ```
+The application now targets the new `https://data.geopf.fr` endpoints. The IGN
+Plan base map is loaded through the GeoPlateforme TMS service and other layers
+(such as orthophotos or the soil map) rely on the WMTS endpoint on the same
+host.
+
+### MapLibre snippets
+```js
+// PLAN.IGN as a TMS raster base (y axis is flipped compared to XYZ)
+map.addSource("planign", {
+  type: "raster",
+  tiles: [
+    `https://data.geopf.fr/tiles/PLAN.IGN/{z}/{x}/{y}.png?apikey=${YOUR_IGN_KEY}`,
+  ],
+  tileSize: 256,
+  attribution: "© IGN",
+  scheme: "tms",
+});
+map.addLayer({ id: "planign", type: "raster", source: "planign" });
+
+// Generic WMTS template (e.g. ORTHOIMAGERY.ORTHOPHOTOS or SOL.SOL)
+map.addSource("wmts-layer", {
+  type: "raster",
+  tiles: [
+    `https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=${LAYER}&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&FORMAT=${FORMAT}&apikey=${YOUR_IGN_KEY}`,
+  ],
+  tileSize: 256,
+  attribution: "© IGN",
+});
+map.addLayer({ id: "wmts-layer", type: "raster", source: "wmts-layer" });
+```
+
+### Reading the GeoPlateforme WMTS capabilities
+Use the GetCapabilities document to confirm the correct `LAYER`,
+`TILEMATRIXSET` (usually `PM` for WebMercator) and `FORMAT` values before
+configuring MapLibre:
+
+```bash
+curl "https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetCapabilities&apikey=${YOUR_IGN_KEY}" \
+  | xmllint --format - \
+  | rg -n "<Layer>" -A6
+```
+
+In the XML output you will find each `<Layer>` block listing the identifier to
+use in the `LAYER` parameter along with compatible `<TileMatrixSetLink>` entries
+(`PM` is the standard WebMercator pyramid) and supported output formats such as
+`image/png` or `image/jpeg`. Pick the matching values for the WMTS URL template
+shown above.
+
 Without a key, only open data layers such as OpenStreetMap will be available.
 
 ## Linting
