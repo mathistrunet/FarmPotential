@@ -62,15 +62,13 @@ export const RASTER_LAYERS = [
     defaultOpacity: 1.0,
   },
   {
-    id: "ign_soilmap",
-    label: "Carte des sols (Géoportail)",
-    url: withOptionalKey(
-      `https://data.geopf.fr/wmts/${GEO_PORTAIL_SOIL_LAYER}/default/PM/{z}/{x}/{y}.png`,
-    ),
+    id: "fr_soils",
+    label: "Types de sols (GisSol / INRAE)",
+    url: "https://data.geopf.fr/wmts/INRA.CARTE.SOLS/normal/default/PM/{z}/{x}/{y}.png",
     subdomains: null,
     tileSize: 256,
-    attribution: "© IGN / Géoportail",
+    attribution: "© IGN · © GisSol/INRAE",
     defaultVisible: false,
-    defaultOpacity: 0.8,
+    defaultOpacity: 0.85,
   },
 ];
