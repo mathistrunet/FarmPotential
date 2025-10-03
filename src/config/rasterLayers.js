@@ -1,6 +1,19 @@
-// Clé d'accès GeoPlateforme : on utilise la clé publique "essentiels" par
-// défaut, mais elle peut être surchargée via VITE_GEO_PORTAIL_API_KEY.
-const GEO_PORTAIL_KEY = import.meta.env.VITE_GEO_PORTAIL_API_KEY || "essentiels";
+// Clé d'accès GeoPlateforme facultative : plusieurs couches sont publiques,
+// mais VITE_GEO_PORTAIL_API_KEY peut être défini pour accéder aux ressources
+// qui le nécessitent.
+const GEO_PORTAIL_KEY =
+  import.meta.env.VITE_GEO_PORTAIL_API_KEY?.trim() || null;
+
+const withOptionalKey = (baseUrl) => {
+  if (!GEO_PORTAIL_KEY) {
+    return baseUrl;
+  }
+  const [url, hash] = baseUrl.split("#");
+  const separator = url.includes("?") ? "&" : "?";
+  return `${url}${separator}apikey=${encodeURIComponent(
+    GEO_PORTAIL_KEY,
+  )}${hash ? `#${hash}` : ""}`;
+};
 const GEO_PORTAIL_SOIL_LAYER =
   import.meta.env.VITE_GEO_PORTAIL_SOIL_LAYER || "SOL.SOL";
 
@@ -29,7 +42,7 @@ export const RASTER_LAYERS = [
   {
     id: "ign_plan",
     label: "IGN Plan (GeoPlateforme)",
-    url: `https://data.geopf.fr/tiles/PLAN.IGN/{z}/{x}/{y}.png?apikey=${GEO_PORTAIL_KEY}`,
+    url: withOptionalKey("https://data.geopf.fr/tiles/PLAN.IGN/{z}/{x}/{y}.png"),
     scheme: "tms",
     tileSize: 256,
     attribution: "© IGN",
@@ -39,7 +52,9 @@ export const RASTER_LAYERS = [
   {
     id: "ign_satellite",
     label: "IGN Satellite",
-    url: `https://data.geopf.fr/wmts/ORTHOIMAGERY.ORTHOPHOTOS/default/PM/{z}/{x}/{y}.jpeg?apikey=${GEO_PORTAIL_KEY}`,
+    url: withOptionalKey(
+      "https://data.geopf.fr/wmts/ORTHOIMAGERY.ORTHOPHOTOS/default/PM/{z}/{x}/{y}.jpeg",
+    ),
     subdomains: null,
     tileSize: 256,
     attribution: "© IGN",
@@ -49,7 +64,9 @@ export const RASTER_LAYERS = [
   {
     id: "ign_soilmap",
     label: "Carte des sols (Géoportail)",
-    url: `https://data.geopf.fr/wmts/${GEO_PORTAIL_SOIL_LAYER}/default/PM/{z}/{x}/{y}.png?apikey=${GEO_PORTAIL_KEY}`,
+    url: withOptionalKey(
+      `https://data.geopf.fr/wmts/${GEO_PORTAIL_SOIL_LAYER}/default/PM/{z}/{x}/{y}.png`,
+    ),
     subdomains: null,
     tileSize: 256,
     attribution: "© IGN / Géoportail",

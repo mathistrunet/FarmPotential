@@ -29,25 +29,33 @@ Preview the built app locally:
 npm run preview
 ```
 
-## IGN / GeoPlateforme API key and endpoints
-Some raster layers (e.g. IGN plan and ortho imagery) require an API key. Obtain
-an API key from [IGN GeoPlateforme](https://geoservices.ign.fr/) and set it in
-`src/config/rasterLayers.js`:
-```js
-const YOUR_IGN_KEY = "your-ign-key";
-```
+## IGN / GeoPlateforme endpoints and optional API key
 The application now targets the new `https://data.geopf.fr` endpoints. The IGN
 Plan base map is loaded through the GeoPlateforme TMS service and other layers
 (such as orthophotos or the soil map) rely on the WMTS endpoint on the same
 host.
 
+Many GeoPlateforme layers are published as open data and work without an API
+key. When you need to unlock additional resources, create a GeoServices account
+on [IGN GeoPlateforme](https://geoservices.ign.fr/) and expose your key to the
+frontend by defining `VITE_GEO_PORTAIL_API_KEY` (for example in an `.env`
+file):
+
+```bash
+VITE_GEO_PORTAIL_API_KEY=your-ign-key
+```
+
 ### MapLibre snippets
 ```js
+const geoPfKey = import.meta.env.VITE_GEO_PORTAIL_API_KEY;
+const withGeoPfKey = (template) =>
+  geoPfKey ? `${template}?apikey=${geoPfKey}` : template;
+
 // PLAN.IGN as a TMS raster base (y axis is flipped compared to XYZ)
 map.addSource("planign", {
   type: "raster",
   tiles: [
-    `https://data.geopf.fr/tiles/PLAN.IGN/{z}/{x}/{y}.png?apikey=${YOUR_IGN_KEY}`,
+    withGeoPfKey("https://data.geopf.fr/tiles/PLAN.IGN/{z}/{x}/{y}.png"),
   ],
   tileSize: 256,
   attribution: "© IGN",
@@ -59,7 +67,9 @@ map.addLayer({ id: "planign", type: "raster", source: "planign" });
 map.addSource("wmts-layer", {
   type: "raster",
   tiles: [
-    `https://data.geopf.fr/wmts/${LAYER}/default/PM/{z}/{x}/{y}.${EXT}?apikey=${YOUR_IGN_KEY}`,
+    withGeoPfKey(
+      `https://data.geopf.fr/wmts/${LAYER}/default/PM/{z}/{x}/{y}.${EXT}`,
+    ),
   ],
   tileSize: 256,
   attribution: "© IGN",
@@ -73,7 +83,7 @@ Use the GetCapabilities document to confirm the correct `LAYER`,
 configuring MapLibre:
 
 ```bash
-curl "https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetCapabilities&apikey=${YOUR_IGN_KEY}" \
+curl "https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetCapabilities" \
   | xmllint --format - \
   | rg -n "<Layer>" -A6
 ```
@@ -83,8 +93,6 @@ use in the `LAYER` parameter along with compatible `<TileMatrixSetLink>` entries
 (`PM` is the standard WebMercator pyramid) and supported output formats such as
 `image/png` or `image/jpeg`. Pick the matching values for the WMTS URL template
 shown above.
-
-Without a key, only open data layers such as OpenStreetMap will be available.
 
 ## Linting
 Run ESLint on the project with:
