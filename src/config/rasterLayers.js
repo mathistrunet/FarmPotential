@@ -1,5 +1,7 @@
+
 // Clé d'accès GeoPlateforme : on utilise la clé publique "essentiels" par
 // défaut, mais elle peut être surchargée via VITE_GEO_PORTAIL_API_KEY.
+
 const GEO_PORTAIL_KEY = import.meta.env.VITE_GEO_PORTAIL_API_KEY || "essentiels";
 const GEO_PORTAIL_SOIL_LAYER =
   import.meta.env.VITE_GEO_PORTAIL_SOIL_LAYER || "SOL.SOL";
