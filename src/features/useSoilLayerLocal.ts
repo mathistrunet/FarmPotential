@@ -24,7 +24,7 @@ import {
   DEFAULT_OUTLINE,
   DEFAULT_FILL_OPACITY,
 } from "../config/soilsLocalConfig";
-import { loadRrpColors } from "../lib/rrpLookup";
+import { buildGerNomColorExpression } from "../config/soilColorbook";
 
 const WEB_MERCATOR_WORLD_WIDTH_METERS = 40075016.68557849;
 const MAX_TILE_EDGE_METERS = 30_000;
@@ -215,15 +215,12 @@ export function useSoilLayerLocal({
       void runUpdate();
     };
 
-    async function add() {
+    function add() {
       try {
         if (map.getLayer(labelLayerId)) map.removeLayer(labelLayerId);
         if (map.getLayer(lineLayerId)) map.removeLayer(lineLayerId);
         if (map.getLayer(fillLayerId)) map.removeLayer(fillLayerId);
         if (map.getSource(sourceId)) map.removeSource(sourceId);
-
-        const colors = await loadRrpColors();
-        if (aborted) return;
 
         map.addSource(sourceId, {
           type: "geojson",
@@ -231,22 +228,13 @@ export function useSoilLayerLocal({
           promoteId: "id",
         });
 
-        const colorExpr: any[] = [
-          "match",
-          ["to-string", ["coalesce", ["get", "code_coul"], ["get", "CODE_COUL"]]],
-        ];
-        Object.entries(colors).forEach(([code, hex]) => {
-          colorExpr.push(code, hex);
-        });
-        colorExpr.push(DEFAULT_FILL);
-
         map.addLayer(
           {
             id: fillLayerId,
             type: "fill",
             source: sourceId,
             paint: {
-              "fill-color": colorExpr,
+              "fill-color": buildGerNomColorExpression(DEFAULT_FILL),
               "fill-opacity": fillOpacity,
             },
           },
