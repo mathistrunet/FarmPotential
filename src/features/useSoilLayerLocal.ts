@@ -1,14 +1,22 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { GeoJsonProperties } from "geojson";
 import type maplibregl from "maplibre-gl";
+import polygonClipping, {
+  type MultiPolygon as ClippingMultiPolygon,
+  type Pair as ClippingPair,
+  type Polygon as ClippingPolygon,
+} from "polygon-clipping";
 
-// ⬇️ imports RELATIFS (plus d'alias "@")
-import {
-  loadLocalRrpMbtiles,
-  lonLatToTile,
-  tileToBBox,
-  type LngLatBBox,
-} from "../services/rrpLocal";
-import bboxClip from "@turf/bbox-clip";
+const clipIntersection = (polygonClipping as unknown as {
+  intersection: (
+    geom: ClippingPolygon | ClippingMultiPolygon,
+    ...geoms: (ClippingPolygon | ClippingMultiPolygon)[]
+  ) => ClippingMultiPolygon;
+}).intersection;
+
+import type { LngLatBBox } from "../services/rrpLocal";
+import { loadDepartmentGeoJSON } from "../services/soilmapLocal";
+import departementsMeta from "../data/departements_meta.json";
 
 import {
   FIELD_UCS,
@@ -17,12 +25,47 @@ import {
   DEFAULT_OUTLINE,
   DEFAULT_FILL_OPACITY,
 } from "../config/soilsLocalConfig";
-import { loadRrpColors } from "../lib/rrpLookup";
+import { applyGerNomColor, buildGerNomColorExpression } from "../config/soilColorbook";
+import {
+  buildSoilWmsUrl,
+  GEO_PORTAIL_SOIL_DEFAULT_OPACITY,
+} from "../config/soilGeoportal";
 
+const WEB_MERCATOR_WORLD_WIDTH_METERS = 40075016.68557849;
+const MAX_TILE_EDGE_METERS = 30_000;
+const HALF_SQUARE_EDGE_METERS = MAX_TILE_EDGE_METERS / 2;
+const EARTH_RADIUS = WEB_MERCATOR_WORLD_WIDTH_METERS / (2 * Math.PI);
+const MAX_MERCATOR_LAT = 85.05112877980659;
+const MAX_DEPARTMENTS = 3;
+
+const META = departementsMeta as Record<
+  string,
+  { bbox: [number, number, number, number]; centroid: [number, number] }
+>;
+
+type FrozenTile = {
+  id: number;
+  bounds: LngLatBBox;
+  center: [number, number];
+  features: GeoJSON.Feature[];
+  capturedAt: number;
+};
+
+type CurrentTile = {
+  bounds: LngLatBBox;
+  center: [number, number];
+  features: GeoJSON.Feature[];
+};
+
+export type TileSummary = {
+  bounds: LngLatBBox;
+  center: [number, number];
+  featureCount: number;
+};
 
 type Options = {
   map: maplibregl.Map | null;
-  mbtilesUrl?: string;
+  dataPath?: string;
   sourceId?: string;
   fillLayerId?: string;
   lineLayerId?: string;
@@ -31,11 +74,12 @@ type Options = {
   visible?: boolean;
   fillOpacity?: number;
   freezeTiles?: boolean;
+  geoportalOpacity?: number;
 };
 
 export function useSoilLayerLocal({
   map,
-  mbtilesUrl = "/data/rrp_france_wgs84_shp.mbtiles",
+  dataPath = "/data/soilmap_dep",
   sourceId = "soils-rrp",
   fillLayerId = "soils-rrp-fill",
   lineLayerId = "soils-rrp-outline",
@@ -44,11 +88,30 @@ export function useSoilLayerLocal({
   visible = true,
   fillOpacity = DEFAULT_FILL_OPACITY,
   freezeTiles = false,
+  geoportalOpacity = GEO_PORTAIL_SOIL_DEFAULT_OPACITY,
 }: Options) {
   const [polygonsShown, setPolygonsShown] = useState(false);
   const [loadingTiles, setLoadingTiles] = useState(false);
+  const [frozenTiles, setFrozenTiles] = useState<FrozenTile[]>([]);
+  const [currentTileSummary, setCurrentTileSummary] = useState<TileSummary | null>(null);
+
   const freezeRef = useRef(freezeTiles);
   const updateRef = useRef<(() => void) | null>(null);
+  const requestIdRef = useRef(0);
+  const departmentCacheRef = useRef(new Map<string, GeoJSON.Feature[]>());
+  const departmentPromiseRef = useRef(new Map<string, Promise<GeoJSON.Feature[]>>());
+  const frozenTilesRef = useRef<FrozenTile[]>([]);
+  const currentTileRef = useRef<CurrentTile | null>(null);
+  const nextFrozenIdRef = useRef(1);
+
+  useEffect(() => {
+    frozenTilesRef.current = frozenTiles;
+  }, [frozenTiles]);
+
+  useEffect(() => {
+    departmentCacheRef.current.clear();
+    departmentPromiseRef.current.clear();
+  }, [dataPath]);
 
   useEffect(() => {
     freezeRef.current = freezeTiles;
@@ -67,28 +130,109 @@ export function useSoilLayerLocal({
       if (map.getLayer(lineLayerId)) map.removeLayer(lineLayerId);
       if (map.getLayer(fillLayerId)) map.removeLayer(fillLayerId);
       if (map.getSource(sourceId)) map.removeSource(sourceId);
+      currentTileRef.current = null;
+      setCurrentTileSummary(null);
       setPolygonsShown(false);
       setLoadingTiles(false);
       return;
     }
-    let aborted = false;
-    let update: (() => void) | undefined;
 
-    async function add() {
+    let aborted = false;
+
+    const applyCombinedFeatures = (
+      dynamicFeatures: GeoJSON.Feature[]
+    ): GeoJSON.FeatureCollection => {
+      const allFeatures = [
+        ...frozenTilesRef.current.flatMap((tile) => tile.features),
+        ...dynamicFeatures,
+      ];
+      allFeatures.forEach((feature) => {
+        if (feature.properties) {
+          applyGerNomColor(feature.properties as GeoJsonProperties);
+        }
+      });
+      const source = map.getSource(sourceId) as maplibregl.GeoJSONSource | undefined;
+      if (source) {
+        source.setData({ type: "FeatureCollection", features: allFeatures });
+      }
+      setPolygonsShown(allFeatures.length > 0);
+      return { type: "FeatureCollection", features: allFeatures };
+    };
+
+    const ensureDepartment = (code: string) => {
+      const cacheKey = normalizeDepartmentCode(code);
+      const cache = departmentCacheRef.current;
+      const promises = departmentPromiseRef.current;
+      if (cache.has(cacheKey)) {
+        return Promise.resolve(cache.get(cacheKey)!);
+      }
+      let promise = promises.get(cacheKey);
+      if (!promise) {
+        promise = loadDepartmentGeoJSON(cacheKey, dataPath)
+          .then((res) => {
+            cache.set(cacheKey, res.features);
+            return res.features;
+          })
+          .catch((err) => {
+            promises.delete(cacheKey);
+            throw err;
+          });
+        promises.set(cacheKey, promise);
+      }
+      return promise;
+    };
+
+    const runUpdate = async () => {
+      if (aborted || freezeRef.current) return;
+      const center = map.getCenter();
+      const codes = pickNearestDepartments(center.lng, center.lat, MAX_DEPARTMENTS);
+      if (!codes.length) {
+        currentTileRef.current = null;
+        setCurrentTileSummary(null);
+        applyCombinedFeatures([]);
+        setLoadingTiles(false);
+        return;
+      }
+      setLoadingTiles(true);
+      const reqId = ++requestIdRef.current;
+      try {
+        await Promise.all(codes.map((code) => ensureDepartment(code)));
+        if (aborted || reqId !== requestIdRef.current) return;
+        const squareBounds = getSquareBounds(center.lng, center.lat);
+        const features = codes.flatMap((code) =>
+          departmentCacheRef.current.get(normalizeDepartmentCode(code)) ?? []
+        );
+        const clipped = clipFeaturesToBounds(features, squareBounds);
+        currentTileRef.current = {
+          bounds: squareBounds,
+          center: [center.lng, center.lat],
+          features: clipped,
+        };
+        setCurrentTileSummary({
+          bounds: squareBounds,
+          center: [center.lng, center.lat],
+          featureCount: clipped.length,
+        });
+        applyCombinedFeatures(clipped);
+      } catch (error) {
+        if (!aborted) {
+          console.error("Failed to load soil department", error);
+        }
+      } finally {
+        if (!aborted) setLoadingTiles(false);
+      }
+    };
+
+    const updateHandler = () => {
+      void runUpdate();
+    };
+
+    function add() {
       try {
         if (map.getLayer(labelLayerId)) map.removeLayer(labelLayerId);
         if (map.getLayer(lineLayerId)) map.removeLayer(lineLayerId);
         if (map.getLayer(fillLayerId)) map.removeLayer(fillLayerId);
         if (map.getSource(sourceId)) map.removeSource(sourceId);
-
-        setLoadingTiles(true);
-        const [reader, colors] = await Promise.all([
-          loadLocalRrpMbtiles(mbtilesUrl),
-          loadRrpColors(),
-        ]);
-        if (aborted) return;
-
-        const tileCache = new Map<string, GeoJSON.Feature[]>();
 
         map.addSource(sourceId, {
           type: "geojson",
@@ -96,22 +240,13 @@ export function useSoilLayerLocal({
           promoteId: "id",
         });
 
-        const colorExpr: any[] = [
-          "match",
-          ["to-string", ["coalesce", ["get", "code_coul"], ["get", "CODE_COUL"]]],
-        ];
-        Object.entries(colors).forEach(([code, hex]) => {
-          colorExpr.push(code, hex);
-        });
-        colorExpr.push(DEFAULT_FILL);
-
         map.addLayer(
           {
             id: fillLayerId,
             type: "fill",
             source: sourceId,
             paint: {
-              "fill-color": colorExpr,
+              "fill-color": buildGerNomColorExpression(DEFAULT_FILL),
               "fill-opacity": fillOpacity,
             },
           },
@@ -164,60 +299,12 @@ export function useSoilLayerLocal({
           );
         }
 
-        update = () => {
-          if (aborted || freezeRef.current) return;
-          setLoadingTiles(true);
-          const z = Math.floor(map.getZoom());
-          const center = map.getCenter();
-          const { x, y } = lonLatToTile(center.lng, center.lat, z);
-          const tiles = [
-            { x, y },
-            { x: x + 1, y },
-            { x, y: y + 1 },
-            { x: x + 1, y: y + 1 },
-          ];
-          const all: GeoJSON.Feature[] = [];
-          tiles.forEach(({ x, y }) => {
-            const key = `${z}/${x}/${y}`;
-            let feats = tileCache.get(key);
-            if (!feats) {
-              let fc: GeoJSON.FeatureCollection | null = null;
-              try {
-                fc = reader.getTileGeoJSON(z, x, y);
-              } catch {
-                /* ignore tile parsing errors */
-              }
-
-              const bbox = tileToBBox(z, x, y);
-              feats = fc ? clipTileFeatures(fc.features, bbox) : [];
-              tileCache.set(key, feats);
-            }
-            for (const feat of feats) {
-              all.push(feat);
-            }
-          });
-          const source = map.getSource(sourceId) as maplibregl.GeoJSONSource | undefined;
-          if (!source) {
-            if (!aborted) setLoadingTiles(false);
-            return;
-          }
-          try {
-            source.setData({
-              type: "FeatureCollection",
-              features: all,
-            });
-            setPolygonsShown(all.length > 0);
-          } finally {
-            if (!aborted) setLoadingTiles(false);
-          }
-        };
-
-        updateRef.current = update;
-        update();
-        map.on("move", update);
-        map.on("zoom", update);
+        updateRef.current = updateHandler;
+        updateHandler();
+        map.on("move", updateHandler);
+        map.on("zoom", updateHandler);
       } catch (err) {
-        console.error("RRP local error:", err);
+        console.error("RRP GeoPackage error:", err);
         setLoadingTiles(false);
       }
     }
@@ -236,15 +323,30 @@ export function useSoilLayerLocal({
     return () => {
       aborted = true;
       map.off("load", start);
-      if (update) {
-        map.off("move", update);
-        map.off("zoom", update);
-      }
+      map.off("move", updateHandler);
+      map.off("zoom", updateHandler);
+      if (map.getLayer(labelLayerId)) map.removeLayer(labelLayerId);
+      if (map.getLayer(lineLayerId)) map.removeLayer(lineLayerId);
+      if (map.getLayer(fillLayerId)) map.removeLayer(fillLayerId);
+      if (map.getSource(sourceId)) map.removeSource(sourceId);
+      currentTileRef.current = null;
+      setCurrentTileSummary(null);
       updateRef.current = null;
+      requestIdRef.current += 1;
       setPolygonsShown(false);
       setLoadingTiles(false);
     };
-  }, [map, visible, mbtilesUrl, sourceId, fillLayerId, lineLayerId, labelLayerId, zIndex]);
+  }, [
+    map,
+    visible,
+    dataPath,
+    sourceId,
+    fillLayerId,
+    lineLayerId,
+    labelLayerId,
+    zIndex,
+    fillOpacity,
+  ]);
 
   useEffect(() => {
     if (!map) return;
@@ -252,31 +354,302 @@ export function useSoilLayerLocal({
       map.setPaintProperty(fillLayerId, "fill-opacity", fillOpacity);
     }
   }, [map, fillLayerId, fillOpacity]);
-  return { polygonsShown, loadingTiles };
+
+  useEffect(() => {
+    if (!map || !visible) return;
+    const source = map.getSource(sourceId) as maplibregl.GeoJSONSource | undefined;
+    if (!source) return;
+    const dynamicFeatures = currentTileRef.current?.features ?? [];
+    const allFeatures = [
+      ...frozenTiles.map((tile) => tile.features).flat(),
+      ...dynamicFeatures,
+    ];
+    allFeatures.forEach((feature) => {
+      if (feature.properties) {
+        applyGerNomColor(feature.properties as GeoJsonProperties);
+      }
+    });
+    source.setData({ type: "FeatureCollection", features: allFeatures });
+    setPolygonsShown(allFeatures.length > 0);
+  }, [map, visible, sourceId, frozenTiles]);
+
+  useEffect(() => {
+    if (!visible) {
+      setCurrentTileSummary(null);
+    }
+  }, [visible]);
+
+  useGeoportalOverlays({
+    map,
+    visible,
+    sourceId,
+    lineLayerId,
+    overlayOpacity: geoportalOpacity,
+    currentTileSummary,
+    frozenTiles,
+  });
+
+  const freezeCurrentTile = useCallback(() => {
+    const current = currentTileRef.current;
+    if (!current || current.features.length === 0) return null;
+    const tile: FrozenTile = {
+      id: nextFrozenIdRef.current++,
+      bounds: current.bounds,
+      center: current.center,
+      features: current.features.map((feature) => deepCloneFeature(feature)),
+      capturedAt: Date.now(),
+    };
+    setFrozenTiles((prev) => [...prev, tile]);
+    return tile;
+  }, []);
+
+  const removeFrozenTile = useCallback((tileId: number) => {
+    setFrozenTiles((prev) => prev.filter((tile) => tile.id !== tileId));
+  }, []);
+
+  const clearFrozenTiles = useCallback(() => {
+    setFrozenTiles([]);
+  }, []);
+
+  return {
+    polygonsShown,
+    loadingTiles,
+    freezeCurrentTile,
+    frozenTiles,
+    removeFrozenTile,
+    clearFrozenTiles,
+    currentTileSummary,
+  };
 }
 
-function clipTileFeatures(features: GeoJSON.Feature[], bounds: LngLatBBox): GeoJSON.Feature[] {
+type GeoportalOverlayOptions = {
+  map: maplibregl.Map | null;
+  visible: boolean;
+  sourceId: string;
+  lineLayerId: string;
+  overlayOpacity: number;
+  currentTileSummary: TileSummary | null;
+  frozenTiles: FrozenTile[];
+};
+
+function useGeoportalOverlays({
+  map,
+  visible,
+  sourceId,
+  lineLayerId,
+  overlayOpacity,
+  currentTileSummary,
+  frozenTiles,
+}: GeoportalOverlayOptions) {
+  const overlayStateRef = useRef(new Map<string, LngLatBBox>());
+
+  useEffect(() => {
+    if (!map) return;
+    const overlayState = overlayStateRef.current;
+
+    const removeOverlay = (key: string) => {
+      const { sourceId: overlaySourceId, layerId } = getOverlayIdentifiers(sourceId, key);
+      if (map.getLayer(layerId)) {
+        map.removeLayer(layerId);
+      }
+      if (map.getSource(overlaySourceId)) {
+        map.removeSource(overlaySourceId);
+      }
+      overlayState.delete(key);
+    };
+
+    if (!visible) {
+      overlayState.forEach((_, key) => removeOverlay(key));
+      overlayState.clear();
+      return;
+    }
+
+    const desired = new Map<string, LngLatBBox>();
+    if (currentTileSummary && currentTileSummary.featureCount > 0) {
+      desired.set("current", currentTileSummary.bounds);
+    }
+    frozenTiles.forEach((tile) => {
+      if (tile.features.length > 0) {
+        desired.set(`frozen-${tile.id}`, tile.bounds);
+      }
+    });
+
+    overlayState.forEach((_, key) => {
+      if (!desired.has(key)) {
+        removeOverlay(key);
+      }
+    });
+
+    desired.forEach((bounds, key) => {
+      const { sourceId: overlaySourceId, layerId } = getOverlayIdentifiers(sourceId, key);
+      const previous = overlayState.get(key);
+
+      if (
+        previous &&
+        boundsEqual(previous, bounds) &&
+        map.getLayer(layerId)
+      ) {
+        map.setPaintProperty(layerId, "raster-opacity", overlayOpacity);
+        return;
+      }
+
+      if (map.getLayer(layerId)) {
+        map.removeLayer(layerId);
+      }
+      if (map.getSource(overlaySourceId)) {
+        map.removeSource(overlaySourceId);
+      }
+
+      const coordinates: [number, number][] = [
+        [bounds[0], bounds[3]],
+        [bounds[2], bounds[3]],
+        [bounds[2], bounds[1]],
+        [bounds[0], bounds[1]],
+      ];
+
+      map.addSource(overlaySourceId, {
+        type: "image",
+        url: buildSoilWmsUrl(bounds),
+        coordinates,
+      });
+
+      map.addLayer(
+        {
+          id: layerId,
+          type: "raster",
+          source: overlaySourceId,
+          paint: { "raster-opacity": overlayOpacity },
+        },
+        map.getLayer(lineLayerId) ? lineLayerId : undefined
+      );
+
+      overlayState.set(key, bounds.slice() as LngLatBBox);
+    });
+  }, [
+    map,
+    visible,
+    sourceId,
+    lineLayerId,
+    overlayOpacity,
+    currentTileSummary,
+    frozenTiles,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      if (!map) return;
+      const overlayState = overlayStateRef.current;
+      overlayState.forEach((_, key) => {
+        const { sourceId: overlaySourceId, layerId } = getOverlayIdentifiers(sourceId, key);
+        if (map.getLayer(layerId)) {
+          map.removeLayer(layerId);
+        }
+        if (map.getSource(overlaySourceId)) {
+          map.removeSource(overlaySourceId);
+        }
+      });
+      overlayState.clear();
+    };
+  }, [map, sourceId]);
+}
+
+function pickNearestDepartments(lng: number, lat: number, limit: number): string[] {
+  const scores = Object.entries(META).map(([code, info]) => {
+    const [minX, minY, maxX, maxY] = info.bbox;
+    const inside = lng >= minX && lng <= maxX && lat >= minY && lat <= maxY;
+    const [cx, cy] = info.centroid;
+    const dx = lng - cx;
+    const dy = lat - cy;
+    return { code, inside, dist2: dx * dx + dy * dy };
+  });
+
+  scores.sort((a, b) => {
+    if (a.inside && !b.inside) return -1;
+    if (!a.inside && b.inside) return 1;
+    if (a.dist2 === b.dist2) return a.code.localeCompare(b.code);
+    return a.dist2 - b.dist2;
+  });
+
+  return scores.slice(0, limit).map((entry) => entry.code);
+}
+
+function getOverlayIdentifiers(baseId: string, key: string) {
+  const sanitizedBase = baseId.replace(/[^a-zA-Z0-9_-]/g, "_");
+  const sanitizedKey = key.replace(/[^a-zA-Z0-9_-]/g, "_");
+  const sourceId = `${sanitizedBase}-geoportal-${sanitizedKey}`;
+  const layerId = `${sanitizedBase}-geoportal-layer-${sanitizedKey}`;
+  return { sourceId, layerId };
+}
+
+function boundsEqual(a: LngLatBBox, b: LngLatBBox, epsilon = 1e-9) {
+  for (let i = 0; i < 4; i += 1) {
+    if (Math.abs(a[i] - b[i]) > epsilon) return false;
+  }
+  return true;
+}
+
+function normalizeDepartmentCode(code: string): string {
+  return code.trim().toUpperCase();
+}
+
+function clipFeaturesToBounds(
+  features: GeoJSON.Feature[],
+  bounds: LngLatBBox
+): GeoJSON.Feature[] {
   if (!features.length) return [];
   const clipped: GeoJSON.Feature[] = [];
   features.forEach((feature) => {
     if (!feature.geometry) return;
     if (
       feature.geometry.type !== "Polygon" &&
-      feature.geometry.type !== "MultiPolygon"
+      feature.geometry.type !== "MultiPolygon" &&
+      feature.geometry.type !== "GeometryCollection"
     ) {
       return;
     }
     let clippedFeature: GeoJSON.Feature | null = null;
     try {
-      clippedFeature = bboxClip(feature as GeoJSON.Feature, bounds) as GeoJSON.Feature;
+      const clippedGeometry = clipGeometryToBounds(feature.geometry, bounds);
+      clippedFeature = clippedGeometry
+        ? cloneFeatureWithGeometry(feature, clippedGeometry)
+        : null;
     } catch {
       clippedFeature = null;
     }
     if (!clippedFeature?.geometry || geometryIsEmpty(clippedFeature.geometry)) return;
-    clipped.push(cloneFeatureWithGeometry(feature, clippedFeature.geometry));
-
+    clipped.push(clippedFeature);
   });
   return clipped;
+}
+
+function getSquareBounds(lng: number, lat: number): LngLatBBox {
+  const center = projectToMercator(lng, lat);
+  const minX = center.x - HALF_SQUARE_EDGE_METERS;
+  const maxX = center.x + HALF_SQUARE_EDGE_METERS;
+  const minY = center.y - HALF_SQUARE_EDGE_METERS;
+  const maxY = center.y + HALF_SQUARE_EDGE_METERS;
+  const sw = mercatorToLngLat(minX, minY);
+  const ne = mercatorToLngLat(maxX, maxY);
+  return [sw.lng, sw.lat, ne.lng, ne.lat];
+}
+
+function projectToMercator(lng: number, lat: number) {
+  const clampedLat = clampLatitude(lat);
+  const lambda = (lng * Math.PI) / 180;
+  const phi = (clampedLat * Math.PI) / 180;
+  const x = EARTH_RADIUS * lambda;
+  const y = EARTH_RADIUS * Math.log(Math.tan(Math.PI / 4 + phi / 2));
+  return { x, y };
+}
+
+function mercatorToLngLat(x: number, y: number) {
+  const lng = (x / EARTH_RADIUS) * (180 / Math.PI);
+  const lat = (Math.atan(Math.sinh(y / EARTH_RADIUS)) * 180) / Math.PI;
+  return { lng, lat };
+}
+
+function clampLatitude(lat: number) {
+  return Math.max(Math.min(lat, MAX_MERCATOR_LAT), -MAX_MERCATOR_LAT);
 }
 
 function geometryIsEmpty(geometry: GeoJSON.Geometry): boolean {
@@ -310,33 +683,6 @@ function geometryIsEmpty(geometry: GeoJSON.Geometry): boolean {
       }
       return !hasValidPolygon;
     }
-    case "LineString": {
-      return !isValidLineString(geometry.coordinates);
-    }
-    case "MultiLineString": {
-      const lines = geometry.coordinates;
-      if (!Array.isArray(lines) || lines.length === 0) return true;
-      let hasValidLine = false;
-      for (const line of lines) {
-        if (!isValidLineString(line)) {
-          return true;
-        }
-        hasValidLine = true;
-      }
-      return !hasValidLine;
-    }
-    case "Point":
-      return !isValidPosition(geometry.coordinates);
-    case "MultiPoint": {
-      const points = geometry.coordinates;
-      if (!Array.isArray(points) || points.length === 0) return true;
-      for (const point of points) {
-        if (!isValidPosition(point)) {
-          return true;
-        }
-      }
-      return false;
-    }
     case "GeometryCollection": {
       const geometries = geometry.geometries;
       if (!Array.isArray(geometries) || geometries.length === 0) return true;
@@ -354,11 +700,6 @@ function geometryIsEmpty(geometry: GeoJSON.Geometry): boolean {
     default:
       return false;
   }
-}
-
-function isValidLineString(line: unknown): line is GeoJSON.Position[] {
-  if (!Array.isArray(line) || line.length < 2) return false;
-  return line.every((position) => isValidPosition(position));
 }
 
 function isValidLinearRing(ring: unknown): ring is GeoJSON.Position[] {
@@ -389,6 +730,70 @@ function cloneFeatureWithGeometry(
     bbox?: GeoJSON.BBox;
   };
   return { ...rest, geometry };
+}
+
+function deepCloneFeature(feature: GeoJSON.Feature): GeoJSON.Feature {
+  return JSON.parse(JSON.stringify(feature)) as GeoJSON.Feature;
+}
+
+function clipGeometryToBounds(
+  geometry: GeoJSON.Geometry,
+  bounds: LngLatBBox
+): GeoJSON.Geometry | null {
+  switch (geometry.type) {
+    case "Polygon": {
+      const clipped = clipPolygonsToBounds([geometry.coordinates], bounds);
+      if (!clipped.length) return null;
+      if (clipped.length === 1) {
+        return { type: "Polygon", coordinates: clipped[0] };
+      }
+      return { type: "MultiPolygon", coordinates: clipped };
+    }
+    case "MultiPolygon": {
+      const clipped = clipPolygonsToBounds(geometry.coordinates, bounds);
+      if (!clipped.length) return null;
+      return { type: "MultiPolygon", coordinates: clipped };
+    }
+    case "GeometryCollection": {
+      const geometries = geometry.geometries
+        .map((geom) => (geom ? clipGeometryToBounds(geom, bounds) : null))
+        .filter((geom): geom is GeoJSON.Geometry => geom != null);
+      if (!geometries.length) return null;
+      return { type: "GeometryCollection", geometries };
+    }
+    default:
+      return null;
+  }
+}
+
+function clipPolygonsToBounds(
+  polygons: GeoJSON.Position[][][],
+  bounds: LngLatBBox
+): GeoJSON.Position[][][] {
+  if (!polygons.length) return [];
+  const subject = polygons.map((poly) =>
+    poly.map((ring) =>
+      ring.map((position) => [position[0], position[1]] as ClippingPair)
+    )
+  ) as ClippingMultiPolygon;
+  const clipped = clipIntersection(subject, boundsToClippingPolygon(bounds));
+  if (!clipped.length) return [];
+  return clipped.map((poly) =>
+    poly.map((ring) => ring.map(([lng, lat]) => [lng, lat] as GeoJSON.Position))
+  );
+}
+
+function boundsToClippingPolygon(bounds: LngLatBBox): ClippingPolygon {
+  const [minX, minY, maxX, maxY] = bounds;
+  return [
+    [
+      [minX, minY],
+      [maxX, minY],
+      [maxX, maxY],
+      [minX, maxY],
+      [minX, minY],
+    ],
+  ];
 }
 
 function getLayerIdBelow(map: maplibregl.Map, zIndex: number): string | null {

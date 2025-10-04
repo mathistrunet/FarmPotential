@@ -1,7 +1,9 @@
 // rrpLocal.ts — loader MBTiles (Vector Tiles) "blindé" pour Vite/MapLibre
 
-import initSqlJs from "sql.js";
-import wasmUrl from "sql.js/dist/sql-wasm.wasm?url";
+import initSqlJs from "sql.js/dist/sql-wasm.js";
+import sqlWasmUrl from "sql.js/dist/sql-wasm.wasm?url";
+import type { Database } from "sql.js";
+
 import Pbf from "pbf";
 import { VectorTile } from "@mapbox/vector-tile";
 import { ungzip } from "pako";
@@ -9,10 +11,32 @@ import { ungzip } from "pako";
 type VTL = InstanceType<typeof VectorTile>["layers"][string];
 export type TileCoord = { z: number; x: number; y: number };
 
-let SQL: any;
-async function getSQL() {
-  if (!SQL) SQL = await initSqlJs({ locateFile: () => wasmUrl });
-  return SQL;
+type SqlJsModule = Awaited<ReturnType<typeof initSqlJs>>;
+
+let sqlModulePromise: Promise<SqlJsModule> | null = null;
+
+export async function getSqlModule(): Promise<SqlJsModule> {
+  if (!sqlModulePromise) {
+    sqlModulePromise = initSqlJs({
+      locateFile: () => sqlWasmUrl,
+    });
+  }
+  return sqlModulePromise;
+}
+
+async function openHttpMbtiles(url: string): Promise<Database> {
+  const base = typeof window !== "undefined" ? window.location.href : undefined;
+  const resolvedUrl = new URL(url, base).toString();
+  const resp = await fetch(resolvedUrl);
+  if (!resp.ok) {
+    const details = await resp.text().catch(() => "");
+    throw new Error(
+      `Could not download MBTiles: ${resp.status} ${resp.statusText}${details ? ` – ${details}` : ""}`
+    );
+  }
+  const arrayBuffer = await resp.arrayBuffer();
+  const sql = await getSqlModule();
+  return new sql.Database(new Uint8Array(arrayBuffer));
 }
 
 const flipY = (yXYZ: number, z: number) => (1 << z) - 1 - yXYZ;
@@ -68,10 +92,7 @@ export interface MbtilesReader {
 
 /** Ouvre un MBTiles depuis une URL (fetch) et renvoie un lecteur */
 export async function loadLocalRrpMbtiles(url: string): Promise<MbtilesReader> {
-  const SQLmod = await getSQL();
-  const ab = await (await fetch(url)).arrayBuffer();
-  const u8 = new Uint8Array(ab);
-  const db = new SQLmod.Database(u8);
+  const db = await openHttpMbtiles(url);
 
   // --- métadonnées
   const meta: MbtilesReader["meta"] = {};
