@@ -1,4 +1,4 @@
-const API_URL = "https://archive-api.open-meteo.com/v1/archive";
+const API_URL = "/api/weather/summary";
 const DAY_START_HOUR = 6;
 const DAY_END_HOUR = 18;
 
@@ -16,19 +16,6 @@ export const MONTH_LABELS = [
   "Novembre",
   "Décembre",
 ];
-
-const DAY_IN_MS = 24 * 60 * 60 * 1000;
-
-function normalizeDate(date) {
-  if (!(date instanceof Date) || Number.isNaN(date)) {
-    return null;
-  }
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-}
-
-function toISODate(date) {
-  return date.toISOString().slice(0, 10);
-}
 
 function toNumber(value) {
   const num = Number(value);
@@ -184,13 +171,7 @@ export function aggregateWeatherDataset(rawData, { startDate, endDate } = {}) {
   return { summary, monthly: monthlyAggregates, metadata };
 }
 
-export async function fetchWeatherSummary({
-  latitude,
-  longitude,
-  startDate,
-  endDate,
-  signal,
-} = {}) {
+export async function fetchWeatherSummary({ latitude, longitude, year, signal } = {}) {
   const latNum = toNumber(latitude);
   const lonNum = toNumber(longitude);
 
@@ -198,57 +179,25 @@ export async function fetchWeatherSummary({
     throw new Error("Coordonnées invalides pour la requête météo.");
   }
 
-  const endRaw = endDate ? normalizeDate(new Date(endDate)) : normalizeDate(new Date());
-  if (!endRaw) {
-    throw new Error("Date de fin invalide pour la requête météo.");
+  const params = new URLSearchParams();
+  params.set("lat", latNum.toString());
+  params.set("lon", lonNum.toString());
+  if (year != null) {
+    const yearNum = Number(year);
+    if (!Number.isFinite(yearNum)) {
+      throw new Error("Année invalide pour la requête météo.");
+    }
+    params.set("year", yearNum.toString());
   }
-
-  const startRaw = startDate
-    ? normalizeDate(new Date(startDate))
-    : normalizeDate(new Date(endRaw.getTime() - 365 * DAY_IN_MS));
-
-  if (!startRaw) {
-    throw new Error("Date de début invalide pour la requête météo.");
-  }
-
-  if (startRaw > endRaw) {
-    throw new Error("La date de début doit être antérieure à la date de fin.");
-  }
-
-  const params = new URLSearchParams({
-    latitude: latNum.toFixed(4),
-    longitude: lonNum.toFixed(4),
-    start_date: toISODate(startRaw),
-    end_date: toISODate(endRaw),
-    hourly: "temperature_2m,relativehumidity_2m,windspeed_10m",
-    daily: "precipitation_sum",
-    timezone: "auto",
-  });
 
   const response = await fetch(`${API_URL}?${params.toString()}`, { signal });
   if (!response.ok) {
     throw new Error(
-      `Impossible de récupérer les données météo (code ${response.status}).`
+      `Impossible de récupérer les données météo Infoclimat (statut ${response.status}).`
     );
   }
 
-  const json = await response.json();
-  if (json?.error) {
-    throw new Error(json?.reason || "Le service météo a retourné une erreur.");
-  }
-
-  const aggregates = aggregateWeatherDataset(json, {
-    startDate: toISODate(startRaw),
-    endDate: toISODate(endRaw),
-  });
-
-  return {
-    ...aggregates,
-    metadata: {
-      ...aggregates.metadata,
-      query: { latitude: latNum, longitude: lonNum },
-    },
-  };
+  return response.json();
 }
 
 export default fetchWeatherSummary;

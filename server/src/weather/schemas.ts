@@ -111,6 +111,7 @@ const TrendSummarySchema = z.object({
 const StationSchema = z.object({
   id: z.string(),
   name: z.string(),
+  city: z.string().nullable().optional(),
   lat: z.number(),
   lon: z.number(),
   altitude: z.number().nullable(),

@@ -41,6 +41,7 @@ function initialiseSchema(database: DatabaseInstance) {
     CREATE TABLE IF NOT EXISTS stations (
       id TEXT PRIMARY KEY,
       name TEXT,
+      city TEXT,
       lat REAL,
       lon REAL,
       altitude REAL,
@@ -73,11 +74,13 @@ function initialiseSchema(database: DatabaseInstance) {
 export function upsertStations(stations: Station[]): void {
   if (!stations.length) return;
   const database = getDatabase();
+  ensureStationCityColumn(database);
   const statement = database.prepare(
-    `INSERT INTO stations (id, name, lat, lon, altitude, type)
-     VALUES (@id, @name, @lat, @lon, @altitude, @type)
+    `INSERT INTO stations (id, name, city, lat, lon, altitude, type)
+     VALUES (@id, @name, @city, @lat, @lon, @altitude, @type)
      ON CONFLICT(id) DO UPDATE SET
        name = excluded.name,
+       city = excluded.city,
        lat = excluded.lat,
        lon = excluded.lon,
        altitude = excluded.altitude,
@@ -88,6 +91,7 @@ export function upsertStations(stations: Station[]): void {
       statement.run({
         id: row.id,
         name: row.name,
+        city: row.city,
         lat: row.lat,
         lon: row.lon,
         altitude: row.altitude,
@@ -96,6 +100,33 @@ export function upsertStations(stations: Station[]): void {
     }
   });
   insertMany(stations);
+}
+
+function ensureStationCityColumn(database: DatabaseInstance): void {
+  const columns = database.prepare("PRAGMA table_info(stations)").all() as Array<{ name: string }>;
+  const hasCity = columns.some((column) => column.name === 'city');
+  if (!hasCity) {
+    database.exec('ALTER TABLE stations ADD COLUMN city TEXT');
+  }
+}
+
+export function listStations(): Station[] {
+  const database = getDatabase();
+  ensureStationCityColumn(database);
+  const rows = database
+    .prepare('SELECT id, name, city, lat, lon, altitude, type FROM stations WHERE lat IS NOT NULL AND lon IS NOT NULL')
+    .all() as Array<Record<string, unknown>>;
+  return rows
+    .map((row) => ({
+      id: String(row.id),
+      name: typeof row.name === 'string' && row.name ? row.name : String(row.id),
+      city: typeof row.city === 'string' && row.city ? row.city : null,
+      lat: Number(row.lat),
+      lon: Number(row.lon),
+      altitude: row.altitude != null ? Number(row.altitude) : null,
+      type: typeof row.type === 'string' && row.type ? row.type : null,
+    }))
+    .filter((station) => Number.isFinite(station.lat) && Number.isFinite(station.lon));
 }
 
 export function upsertObservations(stationId: string, observations: ObservationRecord[]): void {

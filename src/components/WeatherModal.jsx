@@ -637,6 +637,18 @@ export default function WeatherModal({
       .filter(Boolean);
   }, [selectedYears, weatherByYear, getColor]);
 
+  const sourceLabels = useMemo(() => {
+    if (!selectedYears?.length) return [];
+    const labels = selectedYears
+      .map((year) => weatherByYear?.[year]?.metadata?.source)
+      .filter((value) => typeof value === "string" && value.trim());
+    return Array.from(new Set(labels));
+  }, [selectedYears, weatherByYear]);
+
+  const fallbackSourceLabel = sourceLabels.length
+    ? sourceLabels.join(", ")
+    : "Open-Meteo (archive)";
+
   if (!open) return null;
 
   return (
@@ -874,7 +886,7 @@ export default function WeatherModal({
           )}
 
           <p style={{ marginTop: 36, fontSize: 12, color: "#64748b" }}>
-            Source : Open-Meteo (archive). Données agrégées via les relevés horaires les plus proches de la parcelle
+            Source : {fallbackSourceLabel}. Données agrégées via les relevés horaires les plus proches de la parcelle
             sélectionnée.
           </p>
         </div>
