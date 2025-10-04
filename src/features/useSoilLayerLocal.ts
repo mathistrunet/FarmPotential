@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { GeoJsonProperties } from "geojson";
 import type maplibregl from "maplibre-gl";
 import polygonClipping, {
   type MultiPolygon as ClippingMultiPolygon,
@@ -24,7 +25,7 @@ import {
   DEFAULT_OUTLINE,
   DEFAULT_FILL_OPACITY,
 } from "../config/soilsLocalConfig";
-import { buildGerNomColorExpression } from "../config/soilColorbook";
+import { applyGerNomColor, buildGerNomColorExpression } from "../config/soilColorbook";
 
 const WEB_MERCATOR_WORLD_WIDTH_METERS = 40075016.68557849;
 const MAX_TILE_EDGE_METERS = 30_000;
@@ -139,6 +140,11 @@ export function useSoilLayerLocal({
         ...frozenTilesRef.current.flatMap((tile) => tile.features),
         ...dynamicFeatures,
       ];
+      allFeatures.forEach((feature) => {
+        if (feature.properties) {
+          applyGerNomColor(feature.properties as GeoJsonProperties);
+        }
+      });
       const source = map.getSource(sourceId) as maplibregl.GeoJSONSource | undefined;
       if (source) {
         source.setData({ type: "FeatureCollection", features: allFeatures });
@@ -352,6 +358,11 @@ export function useSoilLayerLocal({
       ...frozenTiles.map((tile) => tile.features).flat(),
       ...dynamicFeatures,
     ];
+    allFeatures.forEach((feature) => {
+      if (feature.properties) {
+        applyGerNomColor(feature.properties as GeoJsonProperties);
+      }
+    });
     source.setData({ type: "FeatureCollection", features: allFeatures });
     setPolygonsShown(allFeatures.length > 0);
   }, [map, visible, sourceId, frozenTiles]);
