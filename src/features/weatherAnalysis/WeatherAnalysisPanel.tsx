@@ -1,0 +1,323 @@
+import { useMemo, useState } from 'react';
+import useWeatherAnalysis, { type WeatherAnalysisParams } from './useWeatherAnalysis';
+import type { Probability, WeatherAnalysisResponse, YearIndicators } from './types';
+
+const PRESETS = [
+  {
+    id: 'wheat_establishment',
+    label: 'Blé tendre — Semis à levée',
+    crop: 'blé_tendre',
+    phaseStart: 288, // 15 octobre
+    phaseEnd: 320, // 15 novembre
+    drySpellThreshold: 10,
+  },
+  {
+    id: 'corn_flowering',
+    label: 'Maïs — Floraison',
+    crop: 'maïs',
+    phaseStart: 180, // fin juin
+    phaseEnd: 220, // début août
+    drySpellThreshold: 10,
+  },
+  {
+    id: 'sunflower_bud',
+    label: 'Tournesol — Bouton floral',
+    crop: 'tournesol',
+    phaseStart: 150,
+    phaseEnd: 200,
+    drySpellThreshold: 10,
+  },
+] as const;
+
+const YEARS_OPTIONS = [10, 20, 30] as const;
+
+function formatProbability(probability?: Probability): string {
+  if (!probability || probability.probability == null) return '—';
+  return `${Math.round(probability.probability * 100)} %`;
+}
+
+function probabilityWidth(probability?: Probability): string {
+  if (!probability || probability.probability == null) return '0%';
+  return `${Math.round(probability.probability * 100)}%`;
+}
+
+function formatDayOfYear(day: number): string {
+  const date = new Date(Date.UTC(2024, 0, 1));
+  date.setUTCDate(day);
+  return date.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
+}
+
+function confidenceLabel(value: number): { label: string; color: string } {
+  if (value >= 0.75) return { label: 'Confiance élevée', color: '#16a34a' };
+  if (value >= 0.5) return { label: 'Confiance moyenne', color: '#f59e0b' };
+  return { label: 'Confiance faible', color: '#ef4444' };
+}
+
+function rainfallSparkline(years: YearIndicators[]): string {
+  if (!years.length) return '';
+  const values = years.map((year) => year.rainfall.total);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const width = 180;
+  const height = 40;
+  const points = values
+    .map((value, index) => {
+      const x = (index / (values.length - 1 || 1)) * width;
+      const normalized = max === min ? 0.5 : 1 - (value - min) / (max - min);
+      const y = normalized * height;
+      return `${x},${y}`;
+    })
+    .join(' ');
+  return points;
+}
+
+function StationsList({ stations }: { stations: WeatherAnalysisResponse['stationsUsed'] }) {
+  if (!stations.length) return <p style={{ margin: 0 }}>Stations inconnues.</p>;
+  return (
+    <ul style={{ margin: 0, paddingLeft: 18 }}>
+      {stations.map((station) => (
+        <li key={station.id} style={{ fontSize: 14, color: '#1f2937', marginBottom: 2 }}>
+          <strong>{station.name}</strong>
+          {station.distanceKm != null ? ` — ${station.distanceKm.toFixed(1)} km` : ''}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+export interface WeatherAnalysisPanelProps {
+  lat: number | null | undefined;
+  lon: number | null | undefined;
+  parcelLabel?: string;
+}
+
+export default function WeatherAnalysisPanel({ lat, lon, parcelLabel }: WeatherAnalysisPanelProps) {
+  const [presetId, setPresetId] = useState<typeof PRESETS[number]['id']>(PRESETS[0].id);
+  const [yearsBack, setYearsBack] = useState<number>(20);
+
+  const preset = PRESETS.find((item) => item.id === presetId) ?? PRESETS[0];
+
+  const requestParams: WeatherAnalysisParams | null = useMemo(() => {
+    if (lat == null || lon == null || Number.isNaN(lat) || Number.isNaN(lon)) {
+      return null;
+    }
+    return {
+      lat,
+      lon,
+      crop: preset.crop,
+      phaseStart: preset.phaseStart,
+      phaseEnd: preset.phaseEnd,
+      yearsBack,
+    };
+  }, [lat, lon, preset, yearsBack]);
+
+  const { data, loading, error, refetch } = useWeatherAnalysis(requestParams);
+
+  const confidence = data ? confidenceLabel(data.confidence) : null;
+
+  return (
+    <section style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      <header style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16 }}>
+          <div>
+            <h1 style={{ margin: 0, fontSize: 24, color: '#0f172a' }}>Analyse météo</h1>
+            {parcelLabel ? (
+              <p style={{ margin: '4px 0 0', color: '#475569', fontSize: 14 }}>Parcelle : {parcelLabel}</p>
+            ) : null}
+          </div>
+          {confidence ? (
+            <span
+              style={{
+                alignSelf: 'flex-start',
+                background: `${confidence.color}20`,
+                color: confidence.color,
+                padding: '6px 12px',
+                borderRadius: 999,
+                fontSize: 12,
+                fontWeight: 600,
+              }}
+            >
+              {confidence.label}
+            </span>
+          ) : null}
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}>
+          <label style={{ display: 'flex', flexDirection: 'column', fontSize: 13, color: '#1e293b' }}>
+            Période agronomique
+            <select
+              value={presetId}
+              onChange={(event) => setPresetId(event.target.value as typeof PRESETS[number]['id'])}
+              style={{
+                marginTop: 4,
+                borderRadius: 8,
+                border: '1px solid #cbd5f5',
+                padding: '8px 12px',
+                fontSize: 14,
+              }}
+            >
+              {PRESETS.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label style={{ display: 'flex', flexDirection: 'column', fontSize: 13, color: '#1e293b' }}>
+            Fenêtre historique
+            <select
+              value={yearsBack}
+              onChange={(event) => setYearsBack(Number(event.target.value))}
+              style={{
+                marginTop: 4,
+                borderRadius: 8,
+                border: '1px solid #cbd5f5',
+                padding: '8px 12px',
+                fontSize: 14,
+              }}
+            >
+              {YEARS_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option} ans
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            onClick={refetch}
+            style={{
+              marginTop: 20,
+              padding: '8px 14px',
+              borderRadius: 8,
+              border: '1px solid #38bdf8',
+              background: '#0ea5e9',
+              color: '#fff',
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            Rafraîchir
+          </button>
+        </div>
+      </header>
+
+      {!requestParams ? (
+        <div style={{ padding: 24, borderRadius: 12, background: '#f8fafc', border: '1px dashed #cbd5f5' }}>
+          <p style={{ margin: 0, color: '#475569' }}>
+            Sélectionnez une parcelle sur la carte pour lancer l'analyse météo.
+          </p>
+        </div>
+      ) : null}
+
+      {loading ? (
+        <div style={{ padding: 24, borderRadius: 12, background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+          <p style={{ margin: 0, color: '#475569' }}>Chargement des données Infoclimat…</p>
+        </div>
+      ) : null}
+
+      {error ? (
+        <div style={{ padding: 24, borderRadius: 12, background: '#fef2f2', border: '1px solid #fecaca' }}>
+          <p style={{ margin: 0, color: '#b91c1c' }}>{error}</p>
+        </div>
+      ) : null}
+
+      {data ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+          <section
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+              gap: 16,
+            }}
+          >
+            <div style={{ borderRadius: 12, padding: 16, background: '#ffffff', border: '1px solid #e2e8f0' }}>
+              <h3 style={{ margin: '0 0 8px', fontSize: 16, color: '#0f172a' }}>Stations utilisées</h3>
+              <StationsList stations={data.stationsUsed} />
+            </div>
+            <div style={{ borderRadius: 12, padding: 16, background: '#ffffff', border: '1px solid #e2e8f0' }}>
+              <h3 style={{ margin: '0 0 8px', fontSize: 16, color: '#0f172a' }}>Période analysée</h3>
+              <p style={{ margin: 0, fontSize: 14, color: '#1f2937' }}>
+                {formatDayOfYear(data.phase.startDayOfYear)} → {formatDayOfYear(data.phase.endDayOfYear)}
+              </p>
+              <p style={{ margin: '6px 0 0', fontSize: 13, color: '#475569' }}>
+                {data.yearsAnalyzed} campagnes agrégées ({yearsBack} ans demandés)
+              </p>
+            </div>
+            <div style={{ borderRadius: 12, padding: 16, background: '#ffffff', border: '1px solid #e2e8f0' }}>
+              <h3 style={{ margin: '0 0 8px', fontSize: 16, color: '#0f172a' }}>Pluie cumulée (mm)</h3>
+              <p style={{ margin: 0, fontSize: 14, color: '#1f2937' }}>
+                P10 : {data.rainfallQuantiles.p10?.toFixed(1) ?? '—'}
+              </p>
+              <p style={{ margin: '4px 0', fontSize: 14, color: '#1f2937' }}>
+                Médiane : {data.rainfallQuantiles.p50?.toFixed(1) ?? '—'}
+              </p>
+              <p style={{ margin: 0, fontSize: 14, color: '#1f2937' }}>
+                P90 : {data.rainfallQuantiles.p90?.toFixed(1) ?? '—'}
+              </p>
+            </div>
+          </section>
+
+          <section style={{ borderRadius: 12, padding: 16, background: '#ffffff', border: '1px solid #e2e8f0' }}>
+            <h3 style={{ margin: '0 0 12px', fontSize: 16, color: '#0f172a' }}>Probabilités d'événements défavorables</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {[
+                { label: 'Vague de chaleur (≥1 épisode ≥35°C)', value: data.risks.heatwave },
+                { label: 'Jours très chauds (≥3 jours ≥35°C)', value: data.risks.extremeHeat },
+                { label: `Séquence sèche ≥ ${preset.drySpellThreshold} jours`, value: data.risks.drySpell },
+                { label: 'Gel tardif (Tmin ≤0°C après début de phase)', value: data.risks.lateFrost },
+              ].map((item) => (
+                <div key={item.label} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#1f2937' }}>
+                    <span>{item.label}</span>
+                    <strong>{formatProbability(item.value)}</strong>
+                  </div>
+                  <div
+                    style={{
+                      height: 8,
+                      borderRadius: 999,
+                      background: '#e2e8f0',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: probabilityWidth(item.value),
+                        height: '100%',
+                        background: '#ef4444',
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section style={{ borderRadius: 12, padding: 16, background: '#ffffff', border: '1px solid #e2e8f0' }}>
+            <h3 style={{ margin: '0 0 12px', fontSize: 16, color: '#0f172a' }}>Tendance pluviométrie</h3>
+            {data.indicators.years.length > 1 ? (
+              <svg viewBox="0 0 180 40" width="100%" height="60">
+                <polyline
+                  fill="none"
+                  stroke="#0ea5e9"
+                  strokeWidth={2}
+                  points={rainfallSparkline(data.indicators.years)}
+                />
+              </svg>
+            ) : (
+              <p style={{ margin: 0, fontSize: 13, color: '#475569' }}>Données insuffisantes pour tracer une tendance.</p>
+            )}
+            <p style={{ margin: '8px 0 0', fontSize: 13, color: '#475569' }}>
+              Direction : {data.trends.rainfall.direction} — slope {data.trends.rainfall.ols?.slope ?? 'n/a'}
+            </p>
+          </section>
+
+          <footer style={{ fontSize: 12, color: '#64748b', display: 'flex', justifyContent: 'space-between' }}>
+            <span>Source : Infoclimat (Open Data)</span>
+            <span>Dernier rafraîchissement : {new Date().toLocaleString('fr-FR')}</span>
+          </footer>
+        </div>
+      ) : null}
+    </section>
+  );
+}

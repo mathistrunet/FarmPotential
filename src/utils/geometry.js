@@ -22,5 +22,33 @@ export function ringAreaM2(ringLonLat) {
   return Math.abs(sum) / 2;
 }
 
+export function ringCentroidLonLat(ringLonLat) {
+  if (!Array.isArray(ringLonLat) || ringLonLat.length < 3) {
+    return null;
+  }
+  const coords = ringLonLat.filter((point) => Array.isArray(point) && point.length >= 2);
+  if (!coords.length) return null;
+  const first = coords[0];
+  const last = coords[coords.length - 1];
+  const effective =
+    coords.length > 1 && first && last && first[0] === last[0] && first[1] === last[1]
+      ? coords.slice(0, -1)
+      : coords;
+  if (!effective.length) return null;
+  let sumLon = 0;
+  let sumLat = 0;
+  let count = 0;
+  effective.forEach((point) => {
+    const [lon, lat] = point;
+    if (Number.isFinite(lon) && Number.isFinite(lat)) {
+      sumLon += lon;
+      sumLat += lat;
+      count += 1;
+    }
+  });
+  if (!count) return null;
+  return [sumLon / count, sumLat / count];
+}
+
 // (Le calcul du centroïde utilisé dans une itération précédente a été retiré.)
 
