@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { GeoJsonProperties } from "geojson";
 import type maplibregl from "maplibre-gl";
 import polygonClipping, {
   type MultiPolygon as ClippingMultiPolygon,
@@ -24,7 +25,11 @@ import {
   DEFAULT_OUTLINE,
   DEFAULT_FILL_OPACITY,
 } from "../config/soilsLocalConfig";
-import { loadRrpColors } from "../lib/rrpLookup";
+import { applyGerNomColor, buildGerNomColorExpression } from "../config/soilColorbook";
+import {
+  buildSoilWmsUrl,
+  GEO_PORTAIL_SOIL_DEFAULT_OPACITY,
+} from "../config/soilGeoportal";
 
 const WEB_MERCATOR_WORLD_WIDTH_METERS = 40075016.68557849;
 const MAX_TILE_EDGE_METERS = 30_000;
@@ -69,6 +74,7 @@ type Options = {
   visible?: boolean;
   fillOpacity?: number;
   freezeTiles?: boolean;
+  geoportalOpacity?: number;
 };
 
 export function useSoilLayerLocal({
@@ -82,6 +88,7 @@ export function useSoilLayerLocal({
   visible = true,
   fillOpacity = DEFAULT_FILL_OPACITY,
   freezeTiles = false,
+  geoportalOpacity = GEO_PORTAIL_SOIL_DEFAULT_OPACITY,
 }: Options) {
   const [polygonsShown, setPolygonsShown] = useState(false);
   const [loadingTiles, setLoadingTiles] = useState(false);
@@ -139,6 +146,11 @@ export function useSoilLayerLocal({
         ...frozenTilesRef.current.flatMap((tile) => tile.features),
         ...dynamicFeatures,
       ];
+      allFeatures.forEach((feature) => {
+        if (feature.properties) {
+          applyGerNomColor(feature.properties as GeoJsonProperties);
+        }
+      });
       const source = map.getSource(sourceId) as maplibregl.GeoJSONSource | undefined;
       if (source) {
         source.setData({ type: "FeatureCollection", features: allFeatures });
@@ -215,15 +227,12 @@ export function useSoilLayerLocal({
       void runUpdate();
     };
 
-    async function add() {
+    function add() {
       try {
         if (map.getLayer(labelLayerId)) map.removeLayer(labelLayerId);
         if (map.getLayer(lineLayerId)) map.removeLayer(lineLayerId);
         if (map.getLayer(fillLayerId)) map.removeLayer(fillLayerId);
         if (map.getSource(sourceId)) map.removeSource(sourceId);
-
-        const colors = await loadRrpColors();
-        if (aborted) return;
 
         map.addSource(sourceId, {
           type: "geojson",
@@ -231,22 +240,13 @@ export function useSoilLayerLocal({
           promoteId: "id",
         });
 
-        const colorExpr: any[] = [
-          "match",
-          ["to-string", ["coalesce", ["get", "code_coul"], ["get", "CODE_COUL"]]],
-        ];
-        Object.entries(colors).forEach(([code, hex]) => {
-          colorExpr.push(code, hex);
-        });
-        colorExpr.push(DEFAULT_FILL);
-
         map.addLayer(
           {
             id: fillLayerId,
             type: "fill",
             source: sourceId,
             paint: {
-              "fill-color": colorExpr,
+              "fill-color": buildGerNomColorExpression(DEFAULT_FILL),
               "fill-opacity": fillOpacity,
             },
           },
@@ -364,6 +364,11 @@ export function useSoilLayerLocal({
       ...frozenTiles.map((tile) => tile.features).flat(),
       ...dynamicFeatures,
     ];
+    allFeatures.forEach((feature) => {
+      if (feature.properties) {
+        applyGerNomColor(feature.properties as GeoJsonProperties);
+      }
+    });
     source.setData({ type: "FeatureCollection", features: allFeatures });
     setPolygonsShown(allFeatures.length > 0);
   }, [map, visible, sourceId, frozenTiles]);
@@ -373,6 +378,16 @@ export function useSoilLayerLocal({
       setCurrentTileSummary(null);
     }
   }, [visible]);
+
+  useGeoportalOverlays({
+    map,
+    visible,
+    sourceId,
+    lineLayerId,
+    overlayOpacity: geoportalOpacity,
+    currentTileSummary,
+    frozenTiles,
+  });
 
   const freezeCurrentTile = useCallback(() => {
     const current = currentTileRef.current;
@@ -407,6 +422,137 @@ export function useSoilLayerLocal({
   };
 }
 
+type GeoportalOverlayOptions = {
+  map: maplibregl.Map | null;
+  visible: boolean;
+  sourceId: string;
+  lineLayerId: string;
+  overlayOpacity: number;
+  currentTileSummary: TileSummary | null;
+  frozenTiles: FrozenTile[];
+};
+
+function useGeoportalOverlays({
+  map,
+  visible,
+  sourceId,
+  lineLayerId,
+  overlayOpacity,
+  currentTileSummary,
+  frozenTiles,
+}: GeoportalOverlayOptions) {
+  const overlayStateRef = useRef(new Map<string, LngLatBBox>());
+
+  useEffect(() => {
+    if (!map) return;
+    const overlayState = overlayStateRef.current;
+
+    const removeOverlay = (key: string) => {
+      const { sourceId: overlaySourceId, layerId } = getOverlayIdentifiers(sourceId, key);
+      if (map.getLayer(layerId)) {
+        map.removeLayer(layerId);
+      }
+      if (map.getSource(overlaySourceId)) {
+        map.removeSource(overlaySourceId);
+      }
+      overlayState.delete(key);
+    };
+
+    if (!visible) {
+      overlayState.forEach((_, key) => removeOverlay(key));
+      overlayState.clear();
+      return;
+    }
+
+    const desired = new Map<string, LngLatBBox>();
+    if (currentTileSummary && currentTileSummary.featureCount > 0) {
+      desired.set("current", currentTileSummary.bounds);
+    }
+    frozenTiles.forEach((tile) => {
+      if (tile.features.length > 0) {
+        desired.set(`frozen-${tile.id}`, tile.bounds);
+      }
+    });
+
+    overlayState.forEach((_, key) => {
+      if (!desired.has(key)) {
+        removeOverlay(key);
+      }
+    });
+
+    desired.forEach((bounds, key) => {
+      const { sourceId: overlaySourceId, layerId } = getOverlayIdentifiers(sourceId, key);
+      const previous = overlayState.get(key);
+
+      if (
+        previous &&
+        boundsEqual(previous, bounds) &&
+        map.getLayer(layerId)
+      ) {
+        map.setPaintProperty(layerId, "raster-opacity", overlayOpacity);
+        return;
+      }
+
+      if (map.getLayer(layerId)) {
+        map.removeLayer(layerId);
+      }
+      if (map.getSource(overlaySourceId)) {
+        map.removeSource(overlaySourceId);
+      }
+
+      const coordinates: [number, number][] = [
+        [bounds[0], bounds[3]],
+        [bounds[2], bounds[3]],
+        [bounds[2], bounds[1]],
+        [bounds[0], bounds[1]],
+      ];
+
+      map.addSource(overlaySourceId, {
+        type: "image",
+        url: buildSoilWmsUrl(bounds),
+        coordinates,
+      });
+
+      map.addLayer(
+        {
+          id: layerId,
+          type: "raster",
+          source: overlaySourceId,
+          paint: { "raster-opacity": overlayOpacity },
+        },
+        map.getLayer(lineLayerId) ? lineLayerId : undefined
+      );
+
+      overlayState.set(key, bounds.slice() as LngLatBBox);
+    });
+  }, [
+    map,
+    visible,
+    sourceId,
+    lineLayerId,
+    overlayOpacity,
+    currentTileSummary,
+    frozenTiles,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      if (!map) return;
+      const overlayState = overlayStateRef.current;
+      overlayState.forEach((_, key) => {
+        const { sourceId: overlaySourceId, layerId } = getOverlayIdentifiers(sourceId, key);
+        if (map.getLayer(layerId)) {
+          map.removeLayer(layerId);
+        }
+        if (map.getSource(overlaySourceId)) {
+          map.removeSource(overlaySourceId);
+        }
+      });
+      overlayState.clear();
+    };
+  }, [map, sourceId]);
+}
+
 function pickNearestDepartments(lng: number, lat: number, limit: number): string[] {
   const scores = Object.entries(META).map(([code, info]) => {
     const [minX, minY, maxX, maxY] = info.bbox;
@@ -425,6 +571,21 @@ function pickNearestDepartments(lng: number, lat: number, limit: number): string
   });
 
   return scores.slice(0, limit).map((entry) => entry.code);
+}
+
+function getOverlayIdentifiers(baseId: string, key: string) {
+  const sanitizedBase = baseId.replace(/[^a-zA-Z0-9_-]/g, "_");
+  const sanitizedKey = key.replace(/[^a-zA-Z0-9_-]/g, "_");
+  const sourceId = `${sanitizedBase}-geoportal-${sanitizedKey}`;
+  const layerId = `${sanitizedBase}-geoportal-layer-${sanitizedKey}`;
+  return { sourceId, layerId };
+}
+
+function boundsEqual(a: LngLatBBox, b: LngLatBBox, epsilon = 1e-9) {
+  for (let i = 0; i < 4; i += 1) {
+    if (Math.abs(a[i] - b[i]) > epsilon) return false;
+  }
+  return true;
 }
 
 function normalizeDepartmentCode(code: string): string {

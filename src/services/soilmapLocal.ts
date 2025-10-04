@@ -1,4 +1,6 @@
+import type { GeoJsonProperties } from "geojson";
 import type { Database } from "sql.js";
+import { applyGerNomColor } from "../config/soilColorbook";
 import { toWgs84 } from "../utils/proj.js";
 
 import { getSqlModule } from "./rrpLocal";
@@ -263,6 +265,7 @@ export async function loadDepartmentGeoJSON(
       });
       if (!geometry) continue;
       const projected = transform(geometry);
+      applyGerNomColor(props as GeoJsonProperties);
       features.push({
         type: "Feature",
         id,

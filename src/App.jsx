@@ -6,6 +6,7 @@ import RasterToggles from "./components/RasterToggles";
 import ParcelleEditor from "./components/ParcelleEditor";
 import { useMapInitialization } from "./features/map/useMapInitialization";
 import { DEFAULT_FILL_OPACITY } from "./config/soilsLocalConfig";
+import { GEO_PORTAIL_SOIL_DEFAULT_OPACITY } from "./config/soilGeoportal";
 
 // ⛔️ retirés car liés aux calques/queries en ligne (Géoportail)
 // import SoilsControl from "./features/soils/components/SoilsControl";
@@ -39,6 +40,9 @@ export default function App() {
   const [compact, setCompact] = useState(false);
   const [rrpVisible, setRrpVisible] = useState(false);
   const [rrpOpacity, setRrpOpacity] = useState(DEFAULT_FILL_OPACITY);
+  const [geoportalOpacity, setGeoportalOpacity] = useState(
+    GEO_PORTAIL_SOIL_DEFAULT_OPACITY
+  );
   const [freezeTiles, setFreezeTiles] = useState(false);
   const [soilClickInfo, setSoilClickInfo] = useState(null);
 
@@ -68,6 +72,7 @@ export default function App() {
     visible: rrpVisible,
     fillOpacity: rrpOpacity,
     freezeTiles,
+    geoportalOpacity,
   });
 
   const mapInstance = mapRef.current;
@@ -341,6 +346,30 @@ export default function App() {
                       setRrpOpacity(v);
                       const map = mapRef.current;
                       if (map) map.setPaintProperty("soils-rrp-fill", "fill-opacity", v);
+                    }}
+                    style={{ width: "100%" }}
+                  />
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    marginTop: 6,
+                  }}
+                >
+                  <span style={{ fontSize: 12, color: "#666" }}>
+                    Opacité couleurs Géoportail
+                  </span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={geoportalOpacity}
+                    onInput={(e) => {
+                      const v = parseFloat(e.currentTarget.value);
+                      setGeoportalOpacity(v);
                     }}
                     style={{ width: "100%" }}
                   />
