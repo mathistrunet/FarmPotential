@@ -220,6 +220,13 @@ function MapExperience({ onOpenSummary = () => {} }) {
     return { feature: null, label: "", centroid: null };
   }, [features, selectedId]);
 
+  const handleOpenSummaryView = useCallback(() => {
+    onOpenSummary({
+      centroid: selectedInfo.centroid,
+      parcelLabel: selectedInfo.label,
+    });
+  }, [onOpenSummary, selectedInfo.centroid, selectedInfo.label]);
+
   useEffect(() => {
     if (!weatherModalOpen) {
       abortAllWeatherRequests();
@@ -436,7 +443,7 @@ function MapExperience({ onOpenSummary = () => {} }) {
             </button>
             <button
               type="button"
-              onClick={onOpenSummary}
+              onClick={handleOpenSummaryView}
               style={{
                 padding: "6px 12px",
                 borderRadius: 8,
@@ -621,10 +628,18 @@ function MapExperience({ onOpenSummary = () => {} }) {
 
 export default function App() {
   const [view, setView] = useState("map");
+  const [analysisContext, setAnalysisContext] = useState(null);
 
   if (view === "summary") {
-    return <WeatherSummaryPage onReturn={() => setView("map")} />;
+    return <WeatherSummaryPage onReturn={() => setView("map")} context={analysisContext} />;
   }
 
-  return <MapExperience onOpenSummary={() => setView("summary")} />;
+  return (
+    <MapExperience
+      onOpenSummary={(payload) => {
+        setAnalysisContext(payload || null);
+        setView("summary");
+      }}
+    />
+  );
 }

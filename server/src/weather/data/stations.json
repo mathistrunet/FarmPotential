@@ -1,0 +1,82 @@
+[
+  {
+    "id": "07130",
+    "name": "Paris-Montsouris",
+    "lat": 48.821,
+    "lon": 2.337,
+    "altitude": 75,
+    "type": "synop"
+  },
+  {
+    "id": "07460",
+    "name": "Lyon-Bron",
+    "lat": 45.726,
+    "lon": 4.944,
+    "altitude": 200,
+    "type": "synop"
+  },
+  {
+    "id": "07630",
+    "name": "Marseille-Marignane",
+    "lat": 43.438,
+    "lon": 5.214,
+    "altitude": 32,
+    "type": "synop"
+  },
+  {
+    "id": "07020",
+    "name": "Lille-Lesquin",
+    "lat": 50.571,
+    "lon": 3.103,
+    "altitude": 47,
+    "type": "synop"
+  },
+  {
+    "id": "07240",
+    "name": "Bordeaux-Mérignac",
+    "lat": 44.828,
+    "lon": -0.715,
+    "altitude": 49,
+    "type": "synop"
+  },
+  {
+    "id": "07168",
+    "name": "Clermont-Ferrand",
+    "lat": 45.786,
+    "lon": 3.159,
+    "altitude": 331,
+    "type": "synop"
+  },
+  {
+    "id": "07050",
+    "name": "Strasbourg-Entzheim",
+    "lat": 48.539,
+    "lon": 7.628,
+    "altitude": 150,
+    "type": "synop"
+  },
+  {
+    "id": "07335",
+    "name": "Toulouse-Blagnac",
+    "lat": 43.63,
+    "lon": 1.363,
+    "altitude": 151,
+    "type": "synop"
+  },
+  {
+    "id": "07790",
+    "name": "Nice-Côte d'Azur",
+    "lat": 43.658,
+    "lon": 7.215,
+    "altitude": 4,
+    "type": "synop"
+  },
+  {
+    "id": "07690",
+    "name": "Montpellier-Fréjorgues",
+    "lat": 43.576,
+    "lon": 3.963,
+    "altitude": 5,
+    "type": "synop"
+  }
+]
