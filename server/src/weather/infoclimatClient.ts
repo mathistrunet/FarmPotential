@@ -1,5 +1,4 @@
 import { parse } from 'csv-parse/sync';
-import fetch from 'node-fetch';
 import { z } from 'zod';
 import {
   hashRequest,
@@ -9,6 +8,13 @@ import {
   upsertObservations,
 } from './db.js';
 import type { ObservationRecord } from './db.js';
+import {
+  INFOCLIMAT_API_KEY,
+  INFOCLIMAT_OBSERVATIONS_URL,
+  assertApiKey,
+  fetchCsv,
+  toNumber,
+} from './infoclimatShared.js';
 
 const ObsSchema = z.object({
   ts: z.string(),
@@ -25,45 +31,7 @@ const ObsSchema = z.object({
 
 export type Obs = z.infer<typeof ObsSchema>;
 
-const API_KEY = process.env.INFOCLIMAT_API_KEY ?? '';
-const API_BASE = process.env.INFOCLIMAT_API_BASE ?? 'https://www.infoclimat.fr/opendata/produits-stations.csv';
 const CACHE_TTL_HOURS = Number(process.env.WEATHER_CACHE_TTL_HOURS ?? '24');
-const MIN_REQUEST_INTERVAL_MS = Number(process.env.WEATHER_API_MIN_INTERVAL_MS ?? '900');
-const MAX_RETRIES = 3;
-const RETRY_BASE_DELAY_MS = 500;
-
-let lastRequestTimestamp = 0;
-
-function assertApiKey() {
-  if (!API_KEY) {
-    throw new Error('Missing INFOCLIMAT_API_KEY environment variable');
-  }
-}
-
-async function rateLimit() {
-  const now = Date.now();
-  const elapsed = now - lastRequestTimestamp;
-  const wait = MIN_REQUEST_INTERVAL_MS - elapsed;
-  if (wait > 0) {
-    await new Promise((resolve) => setTimeout(resolve, wait));
-  }
-  lastRequestTimestamp = Date.now();
-}
-
-function toNumber(value: unknown): number | null {
-  if (value == null) return null;
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return value;
-  }
-  if (typeof value === 'string') {
-    const normalized = value.replace(',', '.').trim();
-    if (!normalized) return null;
-    const parsed = Number(normalized);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-  return null;
-}
-
 function parseCsvObservations(csvContent: string): Obs[] {
   const rows = parse(csvContent, {
     columns: true,
@@ -95,33 +63,14 @@ function parseCsvObservations(csvContent: string): Obs[] {
 
 async function fetchObservationsFromApi(stationId: string, startISO: string, endISO: string): Promise<Obs[]> {
   assertApiKey();
-  const url = new URL(API_BASE);
+  const url = new URL(INFOCLIMAT_OBSERVATIONS_URL);
   url.searchParams.set('station', stationId);
   url.searchParams.set('start', startISO);
   url.searchParams.set('end', endISO);
-  url.searchParams.set('token', API_KEY);
+  url.searchParams.set('token', INFOCLIMAT_API_KEY);
 
-  let attempt = 0;
-  for (;;) {
-    try {
-      await rateLimit();
-      const response = await fetch(url.toString(), {
-        headers: { 'User-Agent': 'FarmPotential/WeatherAnalysis' },
-      });
-      if (!response.ok) {
-        throw new Error(`Infoclimat API responded with status ${response.status}`);
-      }
-      const text = await response.text();
-      return parseCsvObservations(text);
-    } catch (error) {
-      attempt += 1;
-      if (attempt >= MAX_RETRIES) {
-        throw error;
-      }
-      const delay = RETRY_BASE_DELAY_MS * 2 ** (attempt - 1);
-      await new Promise((resolve) => setTimeout(resolve, delay));
-    }
-  }
+  const csvContent = await fetchCsv(url);
+  return parseCsvObservations(csvContent);
 }
 
 function mergeObservations(existing: Obs[], incoming: Obs[]): Obs[] {

@@ -72,18 +72,22 @@ function MapExperience({ onOpenSummary = () => {} }) {
   const fetchStations = useCallback(async () => {
     setStationsState((prev) => ({ ...prev, loading: true, error: null }));
     try {
-      const response = await fetch("/data/weather-stations-fr.json");
+      const response = await fetch("/api/weather/stations");
       if (!response.ok) {
         throw new Error(
           `Impossible de récupérer la liste des stations météo (statut ${response.status}).`
         );
       }
       const json = await response.json();
-      const stations = Array.isArray(json?.stations)
+      let stations = Array.isArray(json?.stations)
         ? json.stations
             .map((station) => {
-              const latitude = Number(station?.latitude);
-              const longitude = Number(station?.longitude);
+              const latitude = Number(
+                station?.latitude ?? station?.lat ?? station?.geometry?.coordinates?.[1]
+              );
+              const longitude = Number(
+                station?.longitude ?? station?.lon ?? station?.geometry?.coordinates?.[0]
+              );
               if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
                 return null;
               }
@@ -94,11 +98,42 @@ function MapExperience({ onOpenSummary = () => {} }) {
                 latitude,
                 longitude,
                 elevation:
-                  typeof station?.elevation === "number" ? station.elevation : null,
+                  typeof station?.elevation === "number"
+                    ? station.elevation
+                    : typeof station?.altitude === "number"
+                    ? station.altitude
+                    : null,
               };
             })
             .filter(Boolean)
         : [];
+
+      if (!stations.length) {
+        const fallbackResponse = await fetch("/data/weather-stations-fr.json");
+        if (fallbackResponse.ok) {
+          const fallbackJson = await fallbackResponse.json();
+          stations = Array.isArray(fallbackJson?.stations)
+            ? fallbackJson.stations
+                .map((station) => {
+                  const latitude = Number(station?.latitude);
+                  const longitude = Number(station?.longitude);
+                  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+                    return null;
+                  }
+                  return {
+                    id: station?.id || null,
+                    name: station?.name || station?.city || null,
+                    city: station?.city || null,
+                    latitude,
+                    longitude,
+                    elevation:
+                      typeof station?.elevation === "number" ? station.elevation : null,
+                  };
+                })
+                .filter(Boolean)
+            : [];
+        }
+      }
       setStationsState({ data: stations, loading: false, error: null });
     } catch (error) {
       console.error("Erreur lors du chargement des stations météo :", error);
@@ -123,8 +158,7 @@ function MapExperience({ onOpenSummary = () => {} }) {
         const dataset = await fetchWeatherSummary({
           latitude: nearestStation.latitude,
           longitude: nearestStation.longitude,
-          startDate: `${year}-01-01`,
-          endDate: `${year}-12-31`,
+          year,
           signal: controller.signal,
         });
 
