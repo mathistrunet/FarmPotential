@@ -38,18 +38,6 @@ const geoPfKey = import.meta.env.VITE_GEO_PORTAIL_API_KEY;
 const withGeoPfKey = (template) =>
   geoPfKey ? `${template}?apikey=${geoPfKey}` : template;
 
-// PLAN.IGN as a TMS raster base (y axis is flipped compared to XYZ)
-map.addSource("planign", {
-  type: "raster",
-  tiles: [
-    withGeoPfKey("https://data.geopf.fr/tiles/PLAN.IGN/{z}/{x}/{y}.png"),
-  ],
-  tileSize: 256,
-  attribution: "© IGN",
-  scheme: "tms",
-});
-map.addLayer({ id: "planign", type: "raster", source: "planign" });
-
 // Generic WMTS template (e.g. ORTHOIMAGERY.ORTHOPHOTOS or SOL.SOL)
 map.addSource("wmts-layer", {
   type: "raster",
@@ -75,9 +63,9 @@ curl "https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetCapabilities" \
   | rg -n "<Layer>" -A6
 ```
 The application now targets the new `https://data.geopf.fr` endpoints. The IGN
-Plan base map is loaded through the GeoPlateforme TMS service and other layers
-(such as orthophotos or the soil map) rely on the WMTS endpoint on the same
-host.
+Plan base map can be loaded through the GeoPlateforme TMS service and other
+layers (such as orthophotos or the soil map) rely on the WMTS endpoint on the
+same host.
 
 ### MapLibre snippets
 ```js
