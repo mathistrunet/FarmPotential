@@ -78,41 +78,70 @@ export function useWeatherStationsLayer() {
       if (!cacheRef.current.data && !cacheRef.current.loading && !cacheRef.current.error) {
         cacheRef.current.loading = true;
         try {
-          const response = await fetch("/data/weather-stations-fr.json");
-          if (!response.ok) {
-            throw new Error(`Impossible de récupérer la liste des stations météo (statut ${response.status}).`);
-          }
-          const json = await response.json();
-          const features = Array.isArray(json?.stations)
-            ? json.stations
-                .map((station) => {
-                  const lon = Number(station?.longitude);
-                  const lat = Number(station?.latitude);
-                  if (!Number.isFinite(lon) || !Number.isFinite(lat)) {
-                    return null;
-                  }
-                  const name = station?.name || station?.city || station?.id || "Station";
-                  const city = station?.city || null;
-                  return {
-                    type: "Feature",
-                    id: station?.id || name,
-                    properties: {
-                      id: station?.id || null,
-                      name,
-                      city,
-                    },
-                    geometry: {
-                      type: "Point",
-                      coordinates: [lon, lat],
-                    },
-                  };
-                })
-                .filter(Boolean)
-            : [];
+          const buildFeatures = (stations) =>
+            Array.isArray(stations)
+              ? stations
+                  .map((station) => {
+                    const lon = Number(
+                      station?.longitude ?? station?.lon ?? station?.geometry?.coordinates?.[0]
+                    );
+                    const lat = Number(
+                      station?.latitude ?? station?.lat ?? station?.geometry?.coordinates?.[1]
+                    );
+                    if (!Number.isFinite(lon) || !Number.isFinite(lat)) {
+                      return null;
+                    }
+                    const name = station?.name || station?.city || station?.id || "Station";
+                    const city = station?.city || null;
+                    return {
+                      type: "Feature",
+                      id: station?.id || name,
+                      properties: {
+                        id: station?.id || null,
+                        name,
+                        city,
+                      },
+                      geometry: {
+                        type: "Point",
+                        coordinates: [lon, lat],
+                      },
+                    };
+                  })
+                  .filter(Boolean)
+              : [];
 
+          const loadFeatures = async (url) => {
+            try {
+              const response = await fetch(url);
+              if (!response.ok) {
+                return [];
+              }
+              const contentType = (response.headers.get("content-type") || "").toLowerCase();
+              if (!contentType.includes("application/json")) {
+                return [];
+              }
+              const json = await response.json();
+              return buildFeatures(json?.stations);
+            } catch (error) {
+              console.warn(`Erreur lors du chargement des stations depuis ${url} :`, error);
+              return [];
+            }
+          };
+
+          let features = await loadFeatures("/api/weather/stations");
+          if (!features.length) {
+            features = await loadFeatures("/data/weather-stations-fr.json");
+          }
+
+          if (!features.length) {
+            throw new Error("Aucune station météo n'a pu être chargée.");
+          }
+
+          cacheRef.current.error = null;
           cacheRef.current.data = { type: "FeatureCollection", features };
         } catch (error) {
           cacheRef.current.error = error;
+          cacheRef.current.data = buildEmptyCollection();
           console.error("Erreur lors du chargement des stations météo :", error);
         } finally {
           cacheRef.current.loading = false;

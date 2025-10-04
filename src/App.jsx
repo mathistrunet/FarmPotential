@@ -70,20 +70,16 @@ function MapExperience({ onOpenSummary = () => {} }) {
   }, []);
 
   const fetchStations = useCallback(async () => {
-    setStationsState((prev) => ({ ...prev, loading: true, error: null }));
-    try {
-      const response = await fetch("/data/weather-stations-fr.json");
-      if (!response.ok) {
-        throw new Error(
-          `Impossible de récupérer la liste des stations météo (statut ${response.status}).`
-        );
-      }
-      const json = await response.json();
-      const stations = Array.isArray(json?.stations)
-        ? json.stations
+    const normaliseStations = (rawStations) =>
+      Array.isArray(rawStations)
+        ? rawStations
             .map((station) => {
-              const latitude = Number(station?.latitude);
-              const longitude = Number(station?.longitude);
+              const latitude = Number(
+                station?.latitude ?? station?.lat ?? station?.geometry?.coordinates?.[1]
+              );
+              const longitude = Number(
+                station?.longitude ?? station?.lon ?? station?.geometry?.coordinates?.[0]
+              );
               if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
                 return null;
               }
@@ -94,11 +90,65 @@ function MapExperience({ onOpenSummary = () => {} }) {
                 latitude,
                 longitude,
                 elevation:
-                  typeof station?.elevation === "number" ? station.elevation : null,
+                  typeof station?.elevation === "number"
+                    ? station.elevation
+                    : typeof station?.altitude === "number"
+                    ? station.altitude
+                    : null,
               };
             })
             .filter(Boolean)
         : [];
+
+    const loadFromApi = async () => {
+      try {
+        const response = await fetch("/api/weather/stations");
+        if (!response.ok) {
+          console.warn(
+            `Impossible de récupérer la liste des stations météo (statut ${response.status}).`
+          );
+          return [];
+        }
+        const contentType = response.headers.get("content-type") || "";
+        if (!contentType.toLowerCase().includes("application/json")) {
+          console.warn(
+            "La réponse /api/weather/stations n'est pas au format JSON, utilisation du jeu de données local."
+          );
+          return [];
+        }
+        const json = await response.json();
+        return normaliseStations(json?.stations);
+      } catch (error) {
+        console.warn("Erreur réseau lors de l'appel /api/weather/stations :", error);
+        return [];
+      }
+    };
+
+    const loadFromFallback = async () => {
+      try {
+        const response = await fetch("/data/weather-stations-fr.json");
+        if (!response.ok) {
+          return [];
+        }
+        const json = await response.json();
+        return normaliseStations(json?.stations);
+      } catch (error) {
+        console.warn("Erreur lors du chargement du jeu de stations local :", error);
+        return [];
+      }
+    };
+
+    setStationsState((prev) => ({ ...prev, loading: true, error: null }));
+    try {
+      let stations = await loadFromApi();
+      if (!stations.length) {
+        stations = await loadFromFallback();
+      }
+
+      if (!stations.length) {
+        throw new Error("Aucune station météo n'a pu être chargée.");
+      }
+
       setStationsState({ data: stations, loading: false, error: null });
     } catch (error) {
       console.error("Erreur lors du chargement des stations météo :", error);
@@ -123,8 +173,7 @@ function MapExperience({ onOpenSummary = () => {} }) {
         const dataset = await fetchWeatherSummary({
           latitude: nearestStation.latitude,
           longitude: nearestStation.longitude,
-          startDate: `${year}-01-01`,
-          endDate: `${year}-12-31`,
+          year,
           signal: controller.signal,
         });
 
