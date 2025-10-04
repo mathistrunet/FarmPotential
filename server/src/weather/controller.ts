@@ -1,5 +1,10 @@
 import express from 'express';
-import { findNearestStations, type StationWithDistance } from './stations.js';
+import {
+  findNearestStations,
+  getAllStations,
+  refreshStations,
+  type StationWithDistance,
+} from './stations.js';
 import { getObservationsForStation, type Obs } from './infoclimatClient.js';
 import {
   sliceByPhase,
@@ -21,88 +26,10 @@ import {
   WeatherAnalysisResponseSchema,
   type WeatherAnalysisInput,
 } from './schemas.js';
+import { mergeStationsObservations } from './observations.js';
+import { buildWeatherSummary } from './summary.js';
 
 export const router = express.Router();
-
-function haversineDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371;
-  const toRad = (value: number) => (value * Math.PI) / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-}
-
-function mergeStationsObservations(
-  stations: StationWithDistance[],
-  observations: Obs[][],
-  targetLat: number,
-  targetLon: number
-): Obs[] {
-  const weights = stations.map((station) => {
-    const distance = haversineDistanceKm(targetLat, targetLon, station.lat, station.lon);
-    const weight = 1 / Math.max(distance, 0.1);
-    return weight;
-  });
-
-  const accumulator = new Map<
-    string,
-    {
-      fields: Partial<Record<keyof Obs, { value: number; weight: number }>>;
-    }
-  >();
-
-  observations.forEach((stationObs, index) => {
-    const weight = weights[index] ?? 0;
-    stationObs.forEach((obs) => {
-      const key = obs.ts;
-      if (!accumulator.has(key)) {
-        accumulator.set(key, {
-          fields: {},
-        });
-      }
-      const entry = accumulator.get(key)!;
-      (['t', 'tmin', 'tmax', 'rr', 'rr24', 'ff', 'fx', 'rh', 'p'] as Array<keyof Obs>).forEach((field) => {
-        const rawValue = obs[field];
-        if (typeof rawValue !== 'number' || !Number.isFinite(rawValue)) return;
-        const existing = entry.fields[field];
-        if (!existing) {
-          entry.fields[field] = { value: rawValue * weight, weight };
-        } else {
-          existing.value += rawValue * weight;
-          existing.weight += weight;
-        }
-      });
-    });
-  });
-
-  const merged: Obs[] = [];
-  for (const [ts, entry] of accumulator.entries()) {
-    const result: Obs = {
-      ts: new Date(ts).toISOString(),
-      t: null,
-      tmin: null,
-      tmax: null,
-      rr: null,
-      rr24: null,
-      ff: null,
-      fx: null,
-      rh: null,
-      p: null,
-    };
-    (['t', 'tmin', 'tmax', 'rr', 'rr24', 'ff', 'fx', 'rh', 'p'] as Array<keyof Obs>).forEach((field) => {
-      const stats = entry.fields[field];
-      if (!stats || stats.weight === 0) return;
-      const numericValue = Number((stats.value / stats.weight).toFixed(2));
-      (result as Record<string, unknown>)[field as string] = numericValue;
-    });
-    merged.push(result);
-  }
-  return merged.sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime());
-}
 
 function buildInputFromQuery(query: Record<string, unknown>): WeatherAnalysisInput {
   const lat = Number(query.lat);
@@ -251,6 +178,80 @@ router.get('/analyze', async (req, res, next) => {
     });
 
     res.json(response);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/summary', async (req, res, next) => {
+  try {
+    const lat = Number(req.query.lat);
+    const lon = Number(req.query.lon);
+    const year = req.query.year != null ? Number(req.query.year) : new Date().getUTCFullYear();
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      res.status(400).json({ error: 'Paramètres lat/lon invalides.' });
+      return;
+    }
+    if (!Number.isFinite(year) || year < 1900 || year > 2100) {
+      res.status(400).json({ error: 'Année cible invalide.' });
+      return;
+    }
+
+    const stations = await findNearestStations(lat, lon, 3);
+    if (!stations.length) {
+      res.status(404).json({ error: 'Aucune station météo disponible pour cette localisation.' });
+      return;
+    }
+
+    const startISO = new Date(Date.UTC(year, 0, 1)).toISOString();
+    const endISO = new Date(Date.UTC(year, 11, 31, 23, 59, 59)).toISOString();
+
+    const observationsByStation = await Promise.all(
+      stations.map((station: StationWithDistance) => getObservationsForStation(station.id, startISO, endISO))
+    );
+
+    const merged = mergeStationsObservations(stations, observationsByStation, lat, lon);
+    if (!merged.length) {
+      res.status(404).json({ error: "Aucune observation disponible pour l'année demandée." });
+      return;
+    }
+
+    const summary = buildWeatherSummary(merged, {
+      startISO,
+      endISO,
+      latitude: lat,
+      longitude: lon,
+      stations,
+    });
+
+    res.json(summary);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/stations', async (req, res, next) => {
+  try {
+    if (req.query.refresh) {
+      try {
+        await refreshStations();
+      } catch (error) {
+        console.warn('Unable to refresh stations from Infoclimat:', error);
+      }
+    }
+    const stations = await getAllStations();
+    res.json({
+      stations: stations.map((station) => ({
+        id: station.id,
+        name: station.name,
+        city: station.city,
+        latitude: station.lat,
+        longitude: station.lon,
+        elevation: station.altitude,
+        type: station.type,
+      })),
+      source: 'Infoclimat (Open Data)',
+    });
   } catch (error) {
     next(error);
   }

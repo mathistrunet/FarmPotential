@@ -78,37 +78,52 @@ export function useWeatherStationsLayer() {
       if (!cacheRef.current.data && !cacheRef.current.loading && !cacheRef.current.error) {
         cacheRef.current.loading = true;
         try {
-          const response = await fetch("/data/weather-stations-fr.json");
-          if (!response.ok) {
-            throw new Error(`Impossible de récupérer la liste des stations météo (statut ${response.status}).`);
+          const buildFeatures = (stations) =>
+            Array.isArray(stations)
+              ? stations
+                  .map((station) => {
+                    const lon = Number(
+                      station?.longitude ?? station?.lon ?? station?.geometry?.coordinates?.[0]
+                    );
+                    const lat = Number(
+                      station?.latitude ?? station?.lat ?? station?.geometry?.coordinates?.[1]
+                    );
+                    if (!Number.isFinite(lon) || !Number.isFinite(lat)) {
+                      return null;
+                    }
+                    const name = station?.name || station?.city || station?.id || "Station";
+                    const city = station?.city || null;
+                    return {
+                      type: "Feature",
+                      id: station?.id || name,
+                      properties: {
+                        id: station?.id || null,
+                        name,
+                        city,
+                      },
+                      geometry: {
+                        type: "Point",
+                        coordinates: [lon, lat],
+                      },
+                    };
+                  })
+                  .filter(Boolean)
+              : [];
+
+          const response = await fetch("/api/weather/stations");
+          let features = [];
+          if (response.ok) {
+            const json = await response.json();
+            features = buildFeatures(json?.stations);
           }
-          const json = await response.json();
-          const features = Array.isArray(json?.stations)
-            ? json.stations
-                .map((station) => {
-                  const lon = Number(station?.longitude);
-                  const lat = Number(station?.latitude);
-                  if (!Number.isFinite(lon) || !Number.isFinite(lat)) {
-                    return null;
-                  }
-                  const name = station?.name || station?.city || station?.id || "Station";
-                  const city = station?.city || null;
-                  return {
-                    type: "Feature",
-                    id: station?.id || name,
-                    properties: {
-                      id: station?.id || null,
-                      name,
-                      city,
-                    },
-                    geometry: {
-                      type: "Point",
-                      coordinates: [lon, lat],
-                    },
-                  };
-                })
-                .filter(Boolean)
-            : [];
+
+          if (!features.length) {
+            const fallback = await fetch("/data/weather-stations-fr.json");
+            if (fallback.ok) {
+              const json = await fallback.json();
+              features = buildFeatures(json?.stations);
+            }
+          }
 
           cacheRef.current.data = { type: "FeatureCollection", features };
         } catch (error) {
