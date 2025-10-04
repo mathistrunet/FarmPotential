@@ -1,3 +1,5 @@
+import type { GeoJsonProperties } from "geojson";
+
 const RAW_GER_COLORBOOK: Record<string, string> = {
   "Lithosols": "#e9e9e9",
   "Régosols": "#eedddc",
@@ -149,36 +151,42 @@ export const GER_NOM_COLOR_MATCH_PAIRS_ASCII = buildColorPairs(true);
 export const GER_NOM_PRE_NORMALIZERS = PRE_NORMALIZERS;
 export const GER_NOM_ACCENT_REPLACEMENTS = ACCENT_REPLACEMENTS;
 
-export function buildGerNomColorExpression(fallbackColor: string): any[] {
-  const baseExpr: any[] = ["coalesce"];
+const GER_NOM_COLOR_MAP = new Map(GER_NOM_COLOR_MATCH_PAIRS);
+const GER_NOM_COLOR_MAP_ASCII = new Map(GER_NOM_COLOR_MATCH_PAIRS_ASCII);
+
+export const GER_NOM_COLOR_PROPERTY = "__ger_nom_hex";
+
+export function resolveGerNomColor(
+  properties: GeoJsonProperties | null | undefined
+): string | undefined {
+  if (!properties) return undefined;
   for (const key of GER_NOM_PROPERTY_KEYS) {
-    baseExpr.push(["to-string", ["get", key]]);
+    const raw = properties[key];
+    if (typeof raw !== "string") continue;
+    const normalized = normalizeLabel(raw, false);
+    const color = GER_NOM_COLOR_MAP.get(normalized);
+    if (color) return color;
+    const asciiNormalized = normalizeLabel(raw, true);
+    const asciiColor = GER_NOM_COLOR_MAP_ASCII.get(asciiNormalized);
+    if (asciiColor) return asciiColor;
   }
-  baseExpr.push("");
+  return undefined;
+}
 
-  let normalized: any = baseExpr;
-  for (const [search, replacement] of GER_NOM_PRE_NORMALIZERS) {
-    normalized = ["replace", normalized, search, replacement];
+export function applyGerNomColor(
+  properties: GeoJsonProperties | null | undefined
+): string | undefined {
+  if (!properties) return undefined;
+  const color = resolveGerNomColor(properties);
+  if (color) {
+    properties[GER_NOM_COLOR_PROPERTY] = color;
+  } else if (GER_NOM_COLOR_PROPERTY in properties) {
+    delete properties[GER_NOM_COLOR_PROPERTY];
   }
-  normalized = ["upcase", normalized];
+  return color;
+}
 
-  let asciiExpr: any = normalized;
-  for (const [search, replacement] of GER_NOM_ACCENT_REPLACEMENTS) {
-    asciiExpr = ["replace", asciiExpr, search, replacement];
-  }
-
-  const asciiMatch: any[] = ["match", asciiExpr];
-  for (const [key, color] of GER_NOM_COLOR_MATCH_PAIRS_ASCII) {
-    asciiMatch.push(key, color);
-  }
-  asciiMatch.push(fallbackColor);
-
-  const accentMatch: any[] = ["match", normalized];
-  for (const [key, color] of GER_NOM_COLOR_MATCH_PAIRS) {
-    accentMatch.push(key, color);
-  }
-  accentMatch.push(asciiMatch);
-
-  return accentMatch;
+export function buildGerNomColorExpression(fallbackColor: string): any[] {
+  return ["coalesce", ["get", GER_NOM_COLOR_PROPERTY], fallbackColor];
 }
 
