@@ -110,24 +110,38 @@ export function useWeatherStationsLayer() {
                   .filter(Boolean)
               : [];
 
-          const response = await fetch("/api/weather/stations");
-          let features = [];
-          if (response.ok) {
-            const json = await response.json();
-            features = buildFeatures(json?.stations);
+          const loadFeatures = async (url) => {
+            try {
+              const response = await fetch(url);
+              if (!response.ok) {
+                return [];
+              }
+              const contentType = (response.headers.get("content-type") || "").toLowerCase();
+              if (!contentType.includes("application/json")) {
+                return [];
+              }
+              const json = await response.json();
+              return buildFeatures(json?.stations);
+            } catch (error) {
+              console.warn(`Erreur lors du chargement des stations depuis ${url} :`, error);
+              return [];
+            }
+          };
+
+          let features = await loadFeatures("/api/weather/stations");
+          if (!features.length) {
+            features = await loadFeatures("/data/weather-stations-fr.json");
           }
 
           if (!features.length) {
-            const fallback = await fetch("/data/weather-stations-fr.json");
-            if (fallback.ok) {
-              const json = await fallback.json();
-              features = buildFeatures(json?.stations);
-            }
+            throw new Error("Aucune station météo n'a pu être chargée.");
           }
 
+          cacheRef.current.error = null;
           cacheRef.current.data = { type: "FeatureCollection", features };
         } catch (error) {
           cacheRef.current.error = error;
+          cacheRef.current.data = buildEmptyCollection();
           console.error("Erreur lors du chargement des stations météo :", error);
         } finally {
           cacheRef.current.loading = false;
