@@ -27,6 +27,7 @@ import {
   type WeatherAnalysisInput,
 } from './schemas.js';
 import { mergeStationsObservations } from './observations.js';
+import { fetchOpenMeteoObservations } from './openMeteoFallback.js';
 import { buildWeatherSummary } from './summary.js';
 
 export const router = express.Router();
@@ -206,13 +207,59 @@ router.get('/summary', async (req, res, next) => {
     const startISO = new Date(Date.UTC(year, 0, 1)).toISOString();
     const endISO = new Date(Date.UTC(year, 11, 31, 23, 59, 59)).toISOString();
 
+    const fetchErrors: Error[] = [];
     const observationsByStation = await Promise.all(
-      stations.map((station: StationWithDistance) => getObservationsForStation(station.id, startISO, endISO))
+      stations.map(async (station: StationWithDistance) => {
+        try {
+          return await getObservationsForStation(station.id, startISO, endISO);
+        } catch (error) {
+          const normalizedError = error instanceof Error ? error : new Error(String(error));
+          fetchErrors.push(normalizedError);
+          console.warn(
+            `Unable to load Infoclimat observations for station ${station.id}:`,
+            normalizedError
+          );
+          return [];
+        }
+      })
     );
 
-    const merged = mergeStationsObservations(stations, observationsByStation, lat, lon);
+    let merged = mergeStationsObservations(stations, observationsByStation, lat, lon);
+    let summaryStations: StationWithDistance[] = stations;
+    let source = 'Infoclimat (Open Data)';
+
     if (!merged.length) {
-      res.status(404).json({ error: "Aucune observation disponible pour l'année demandée." });
+      const fallback = await fetchOpenMeteoObservations(lat, lon, startISO, endISO);
+      if (fallback.length) {
+        merged = fallback;
+        summaryStations = [
+          {
+            id: 'open-meteo-grid',
+            name: 'Open-Meteo (grille)',
+            city: null,
+            lat,
+            lon,
+            altitude: null,
+            type: 'grid',
+            distanceKm: 0,
+          },
+        ];
+        source = 'Open-Meteo (Archive API – fallback)';
+      }
+    }
+
+    if (!merged.length) {
+      if (fetchErrors.length) {
+        const missingKey = fetchErrors.some((error) =>
+          /INFOCLIMAT_API_KEY/i.test(error.message ?? '')
+        );
+        const message = missingKey
+          ? "Impossible de contacter l'API Infoclimat : configurez la variable d'environnement INFOCLIMAT_API_KEY."
+          : "Impossible de récupérer les observations Infoclimat pour la période demandée.";
+        res.status(502).json({ error: message });
+      } else {
+        res.status(404).json({ error: "Aucune observation disponible pour l'année demandée." });
+      }
       return;
     }
 
@@ -221,7 +268,8 @@ router.get('/summary', async (req, res, next) => {
       endISO,
       latitude: lat,
       longitude: lon,
-      stations,
+      stations: summaryStations,
+      source,
     });
 
     res.json(summary);

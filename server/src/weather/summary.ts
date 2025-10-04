@@ -93,6 +93,7 @@ export function buildWeatherSummary(
     latitude: number;
     longitude: number;
     stations: StationWithDistance[];
+    source?: string;
   }
 ): WeatherSummaryResponse {
   const startMs = new Date(options.startISO).getTime();
@@ -206,7 +207,7 @@ export function buildWeatherSummary(
       latitude: options.latitude,
       longitude: options.longitude,
       hourlySampleCount: dayCount + nightCount,
-      source: 'Infoclimat (Open Data)',
+      source: options.source ?? 'Infoclimat (Open Data)',
       stationsUsed: options.stations.map((station) => ({
         id: station.id,
         name: station.name,
