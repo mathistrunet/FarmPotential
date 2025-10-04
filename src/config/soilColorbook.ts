@@ -121,10 +121,10 @@ function normalizeLabel(label: string, accentless: boolean): string {
   const collapsedSpaces = withNormalizedHyphen.replace(/\s+/g, " ").trim();
   const upper = collapsedSpaces.toLocaleUpperCase("fr-FR");
   if (!accentless) return upper;
-  const accentless = ACCENT_REPLACEMENTS.reduce((value, [search, replacement]) => {
+  const accentlessUpper = ACCENT_REPLACEMENTS.reduce((value, [search, replacement]) => {
     return value.split(search).join(replacement);
   }, upper);
-  return accentless
+  return accentlessUpper
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "");
 }
