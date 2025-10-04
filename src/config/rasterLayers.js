@@ -38,22 +38,11 @@ export const RASTER_LAYERS = [
     defaultVisible: false,
     defaultOpacity: 0.8,
   },
-
-  {
-    id: "ign_plan",
-    label: "IGN Plan (GeoPlateforme)",
-    url: withOptionalKey("https://data.geopf.fr/tiles/PLAN.IGN/{z}/{x}/{y}.png"),
-    scheme: "tms",
-    tileSize: 256,
-    attribution: "© IGN",
-    defaultVisible: false,
-    defaultOpacity: 1.0,
-  },
   {
     id: "ign_satellite",
     label: "IGN Satellite",
     url: withOptionalKey(
-      "https://data.geopf.fr/wmts/ORTHOIMAGERY.ORTHOPHOTOS/default/PM/{z}/{x}/{y}.jpeg",
+      "https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&FORMAT=image/jpeg",
     ),
     subdomains: null,
     tileSize: 256,

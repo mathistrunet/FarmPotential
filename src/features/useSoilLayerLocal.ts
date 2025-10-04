@@ -1,6 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type maplibregl from "maplibre-gl";
-import bboxClip from "@turf/bbox-clip";
+import polygonClipping, {
+  type MultiPolygon as ClippingMultiPolygon,
+  type Pair as ClippingPair,
+  type Polygon as ClippingPolygon,
+} from "polygon-clipping";
+
+const clipIntersection = (polygonClipping as unknown as {
+  intersection: (
+    geom: ClippingPolygon | ClippingMultiPolygon,
+    ...geoms: (ClippingPolygon | ClippingMultiPolygon)[]
+  ) => ClippingMultiPolygon;
+}).intersection;
 
 import type { LngLatBBox } from "../services/rrpLocal";
 import { loadDepartmentGeoJSON } from "../services/soilmapLocal";
@@ -437,12 +448,15 @@ function clipFeaturesToBounds(
     }
     let clippedFeature: GeoJSON.Feature | null = null;
     try {
-      clippedFeature = bboxClip(feature as GeoJSON.Feature, bounds) as GeoJSON.Feature;
+      const clippedGeometry = clipGeometryToBounds(feature.geometry, bounds);
+      clippedFeature = clippedGeometry
+        ? cloneFeatureWithGeometry(feature, clippedGeometry)
+        : null;
     } catch {
       clippedFeature = null;
     }
     if (!clippedFeature?.geometry || geometryIsEmpty(clippedFeature.geometry)) return;
-    clipped.push(cloneFeatureWithGeometry(feature, clippedFeature.geometry));
+    clipped.push(clippedFeature);
   });
   return clipped;
 }
@@ -559,6 +573,66 @@ function cloneFeatureWithGeometry(
 
 function deepCloneFeature(feature: GeoJSON.Feature): GeoJSON.Feature {
   return JSON.parse(JSON.stringify(feature)) as GeoJSON.Feature;
+}
+
+function clipGeometryToBounds(
+  geometry: GeoJSON.Geometry,
+  bounds: LngLatBBox
+): GeoJSON.Geometry | null {
+  switch (geometry.type) {
+    case "Polygon": {
+      const clipped = clipPolygonsToBounds([geometry.coordinates], bounds);
+      if (!clipped.length) return null;
+      if (clipped.length === 1) {
+        return { type: "Polygon", coordinates: clipped[0] };
+      }
+      return { type: "MultiPolygon", coordinates: clipped };
+    }
+    case "MultiPolygon": {
+      const clipped = clipPolygonsToBounds(geometry.coordinates, bounds);
+      if (!clipped.length) return null;
+      return { type: "MultiPolygon", coordinates: clipped };
+    }
+    case "GeometryCollection": {
+      const geometries = geometry.geometries
+        .map((geom) => (geom ? clipGeometryToBounds(geom, bounds) : null))
+        .filter((geom): geom is GeoJSON.Geometry => geom != null);
+      if (!geometries.length) return null;
+      return { type: "GeometryCollection", geometries };
+    }
+    default:
+      return null;
+  }
+}
+
+function clipPolygonsToBounds(
+  polygons: GeoJSON.Position[][][],
+  bounds: LngLatBBox
+): GeoJSON.Position[][][] {
+  if (!polygons.length) return [];
+  const subject = polygons.map((poly) =>
+    poly.map((ring) =>
+      ring.map((position) => [position[0], position[1]] as ClippingPair)
+    )
+  ) as ClippingMultiPolygon;
+  const clipped = clipIntersection(subject, boundsToClippingPolygon(bounds));
+  if (!clipped.length) return [];
+  return clipped.map((poly) =>
+    poly.map((ring) => ring.map(([lng, lat]) => [lng, lat] as GeoJSON.Position))
+  );
+}
+
+function boundsToClippingPolygon(bounds: LngLatBBox): ClippingPolygon {
+  const [minX, minY, maxX, maxY] = bounds;
+  return [
+    [
+      [minX, minY],
+      [maxX, minY],
+      [maxX, maxY],
+      [minX, maxY],
+      [minX, minY],
+    ],
+  ];
 }
 
 function getLayerIdBelow(map: maplibregl.Map, zIndex: number): string | null {
