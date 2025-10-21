@@ -8,16 +8,41 @@ Telepac Mapper is a small React application for viewing and editing agricultural
 - Toggle various raster layers and overlays (OpenStreetMap, OpenTopoMap, IGN).
 - Load RPG (Registre Parcellaire Graphique) data for the map's current extent.
 
-## Getting started
-1. Install dependencies:
+## Guide d'installation pour une utilisation locale
+
+1. **Prérequis**
+   - [Node.js](https://nodejs.org/) (version LTS recommandée) et `npm` installés sur votre machine.
+   - L'accès à un terminal (macOS/Linux) ou PowerShell (Windows).
+
+2. **Cloner le dépôt**
+   ```bash
+   git clone https://github.com/<votre-compte>/FarmPotential.git
+   cd FarmPotential
+   ```
+
+3. **Installer les dépendances**
    ```bash
    npm install
    ```
-2. Start the development server:
+
+4. **Configurer la clé API IGN (optionnel)**
+   - Certaines couches cartographiques nécessitent une clé API IGN.
+   - Ouvrez `src/config/rasterLayers.js` et remplacez la valeur de `YOUR_IGN_KEY` par votre clé.
+
+5. **Démarrer le serveur de développement**
    ```bash
    npm run dev
    ```
-   The app is served at [http://localhost:5173](http://localhost:5173).
+   L'application est accessible sur [http://localhost:5173](http://localhost:5173).
+
+6. **Construire une version de production (facultatif)**
+   ```bash
+   npm run build
+   ```
+   Pour prévisualiser le build :
+   ```bash
+   npm run preview
+   ```
 
 ## Building
 Create a production build in `dist/`:
