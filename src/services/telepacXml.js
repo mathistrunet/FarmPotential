@@ -1,7 +1,7 @@
 // src/services/telepacXml.js
 import { toWgs84 } from "../utils/proj";
 import { ringToGml, ringAreaM2 } from "../utils/geometry";
-import { readTelepacMesParcellesXml } from "../lib/importers/readTelepacMesParcellesXml";
+import { telepacMesParcellesImporter } from "../lib/importers";
 
 let autoNumero = 1;
 
@@ -249,7 +249,7 @@ export async function parseTelepacXmlToFeatures(file) {
   }
 
   try {
-    const mesParcelles = await readTelepacMesParcellesXml(arrayBuffer);
+    const mesParcelles = await telepacMesParcellesImporter.read(arrayBuffer);
     const mesParcellesFeatures = normaliseMesParcellesFeatures(mesParcelles);
     if (mesParcellesFeatures.length > 0) {
       return mesParcellesFeatures;
