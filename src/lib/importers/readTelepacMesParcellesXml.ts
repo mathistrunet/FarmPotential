@@ -1,3 +1,4 @@
+import { DOMParser } from '@xmldom/xmldom';
 import { polygonFromGml, type GmlPolygon } from '../utils/gml';
 import { isLambert93Collection, toWgs842154 } from '../utils/reproject';
 import type {
@@ -11,101 +12,14 @@ import type {
 const TELEPAC_SOURCE: TelepacParcelleProperties['source'] = 'telepac-mesparcelles-xml';
 const ELEMENT_NODE = 1;
 
-function createDomParser(): DOMParser {
-  const ctor = (globalThis as typeof globalThis & { DOMParser?: typeof DOMParser }).DOMParser;
-  if (!ctor) {
-    throw new Error('TELEPAC_XML: DOMParser is not available in this environment');
-  }
-
-  return new ctor();
-}
-
 type Nullable<T> = T | null | undefined;
-
-const XML_ENCODING_REGEX = /<\?xml[^>]*encoding=['"]([^'"]+)['"][^>]*\?>/i;
-
-function normalizeEncodingLabel(label: string): string | null {
-  if (!label) {
-    return null;
-  }
-
-  const normalized = label.trim().toLowerCase();
-  if (!normalized) {
-    return null;
-  }
-
-  if (normalized === 'utf8') {
-    return 'utf-8';
-  }
-
-  if (normalized === 'iso8859-1' || normalized === 'iso_8859-1' || normalized === 'latin1') {
-    return 'iso-8859-1';
-  }
-
-  if (normalized === 'iso8859-15' || normalized === 'iso-8859-15') {
-    return 'iso-8859-15';
-  }
-
-  if (normalized === 'windows-1252' || normalized === 'cp1252') {
-    return 'windows-1252';
-  }
-
-  return normalized;
-}
-
-function decodeWithEncoding(buffer: ArrayBuffer, encoding: string): string | null {
-  try {
-    return new TextDecoder(encoding, { fatal: false }).decode(buffer);
-  } catch (error) {
-    // eslint-disable-next-line no-console
-    console.warn(`TELEPAC_XML: TextDecoder does not support encoding "${encoding}"`, error);
-    return null;
-  }
-}
-
-function extractDeclaredEncoding(text: string): string | null {
-  const match = XML_ENCODING_REGEX.exec(text);
-  if (!match) {
-    return null;
-  }
-  return normalizeEncodingLabel(match[1]);
-}
-
-function decodeArrayBuffer(buffer: ArrayBuffer): string {
-  const utf8 = decodeWithEncoding(buffer, 'utf-8') ?? '';
-
-  const declaredEncoding = extractDeclaredEncoding(utf8);
-  if (declaredEncoding && declaredEncoding !== 'utf-8') {
-    const declaredText = decodeWithEncoding(buffer, declaredEncoding);
-    if (declaredText != null) {
-      return declaredText;
-    }
-  }
-
-  if (utf8.includes('\uFFFD')) {
-    const latin1 = decodeWithEncoding(buffer, 'iso-8859-1');
-    if (latin1 != null) {
-      return latin1;
-    }
-  }
-
-  return utf8;
-}
 
 function decodeInput(input: string | ArrayBuffer): string {
   if (typeof input === 'string') {
     return input;
   }
 
-  return decodeArrayBuffer(input);
-}
-
-function normalizeLocalName(value: Nullable<string>): string | null {
-  if (!value) {
-    return null;
-  }
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed.toLowerCase() : null;
+  return new TextDecoder('utf-8').decode(input);
 }
 
 function childElementsByLocalName(parent: Nullable<Element>, localName: string): Element[] {
@@ -114,12 +28,11 @@ function childElementsByLocalName(parent: Nullable<Element>, localName: string):
   }
 
   const result: Element[] = [];
-  const expected = localName.toLowerCase();
   for (let i = 0; i < parent.childNodes.length; i += 1) {
     const node = parent.childNodes[i];
     if (node.nodeType === ELEMENT_NODE) {
       const element = node as Element;
-      if (normalizeLocalName(element.localName) === expected) {
+      if (element.localName === localName) {
         result.push(element);
       }
     }
@@ -132,12 +45,11 @@ function firstChildByLocalName(parent: Nullable<Element>, localName: string): El
     return null;
   }
 
-  const expected = localName.toLowerCase();
   for (let i = 0; i < parent.childNodes.length; i += 1) {
     const node = parent.childNodes[i];
     if (node.nodeType === ELEMENT_NODE) {
       const element = node as Element;
-      if (normalizeLocalName(element.localName) === expected) {
+      if (element.localName === localName) {
         return element;
       }
     }
@@ -153,7 +65,6 @@ function descendantsByLocalName(parent: Nullable<Element>, localName: string): E
 
   const stack: Element[] = [parent];
   const result: Element[] = [];
-  const expected = localName.toLowerCase();
 
   while (stack.length > 0) {
     const current = stack.pop();
@@ -165,7 +76,7 @@ function descendantsByLocalName(parent: Nullable<Element>, localName: string): E
       const node = current.childNodes[i];
       if (node.nodeType === ELEMENT_NODE) {
         const element = node as Element;
-        if (normalizeLocalName(element.localName) === expected) {
+        if (element.localName === localName) {
           result.push(element);
         }
         stack.push(element);
@@ -252,41 +163,6 @@ function collectPoints(polygons: GmlPolygon[]): Array<[number, number]> {
   return points;
 }
 
-function collectIlotElements(producteur: Element): Element[] {
-  const seen = new Set<Element>();
-  const rpg = firstChildByLocalName(producteur, 'rpg');
-  const ilotsContainer = firstChildByLocalName(rpg, 'ilots');
-  childElementsByLocalName(ilotsContainer, 'ilot').forEach((ilot) => {
-    seen.add(ilot);
-  });
-
-  if (seen.size === 0) {
-    descendantsByLocalName(producteur, 'ilot').forEach((ilot) => {
-      seen.add(ilot);
-    });
-  }
-
-  return Array.from(seen);
-}
-
-function collectParcelleElements(ilot: Element): Element[] {
-  const seen = new Set<Element>();
-  const parcellesContainers = childElementsByLocalName(ilot, 'parcelles');
-  parcellesContainers.forEach((container) => {
-    childElementsByLocalName(container, 'parcelle').forEach((parcelle) => {
-      seen.add(parcelle);
-    });
-  });
-
-  if (seen.size === 0) {
-    descendantsByLocalName(ilot, 'parcelle').forEach((parcelle) => {
-      seen.add(parcelle);
-    });
-  }
-
-  return Array.from(seen);
-}
-
 function interpretSrsName(value: Nullable<string>): '2154' | '4326' | undefined {
   if (!value) {
     return undefined;
@@ -335,7 +211,7 @@ function convertPolygonToWgs84(polygon: GmlPolygon, polygonElement: Element): Po
 
 function polygonsToGeometry(polygonElements: Element[], polygons: GmlPolygon[]): TelepacGeometry {
   if (polygons.length === 0) {
-    throw new Error('GML: Polygon manquant');
+    throw new Error('GML: Unsupported geometry');
   }
 
   const rings = polygons.map((polygon, index) => convertPolygonToWgs84(polygon, polygonElements[index]));
@@ -402,7 +278,7 @@ function buildProperties(
 
 export async function readTelepacMesParcellesXml(input: string | ArrayBuffer): Promise<TelepacFeatureCollection> {
   const xml = decodeInput(input);
-  const parser = createDomParser();
+  const parser = new DOMParser();
   const document = parser.parseFromString(xml, 'application/xml');
   const root = document.documentElement;
 
@@ -417,7 +293,9 @@ export async function readTelepacMesParcellesXml(input: string | ArrayBuffer): P
 
   producteurElements.forEach((producteur) => {
     const pacage = producteur.getAttribute('numero-pacage') ?? '';
-    const ilots = collectIlotElements(producteur);
+    const rpg = firstChildByLocalName(producteur, 'rpg');
+    const ilotsContainer = firstChildByLocalName(rpg, 'ilots');
+    const ilots = childElementsByLocalName(ilotsContainer, 'ilot');
     ilotCount += ilots.length;
 
     ilots.forEach((ilot) => {
@@ -431,7 +309,8 @@ export async function readTelepacMesParcellesXml(input: string | ArrayBuffer): P
       const justificationMotif = textContentOfChild(justification, 'motifOperation');
       const justificationTexte = textContentOfChild(justification, 'justification');
       const communeFromIlot = textContentOfChild(ilot, 'commune');
-      const parcelles = collectParcelleElements(ilot);
+      const parcellesContainer = firstChildByLocalName(ilot, 'parcelles');
+      const parcelles = childElementsByLocalName(parcellesContainer, 'parcelle');
 
       parcelles.forEach((parcelle) => {
         const descriptif = firstChildByLocalName(parcelle, 'descriptif-parcelle');
@@ -475,12 +354,12 @@ export async function readTelepacMesParcellesXml(input: string | ArrayBuffer): P
 
         const geometrie = firstChildByLocalName(parcelle, 'geometrie');
         if (!geometrie) {
-          throw new Error('GML: Polygon manquant');
+          throw new Error('GML: Unsupported geometry');
         }
 
         const polygonElements = descendantsByLocalName(geometrie, 'Polygon');
         if (polygonElements.length === 0) {
-          throw new Error('GML: Polygon manquant');
+          throw new Error('GML: Unsupported geometry');
         }
 
         const polygons = polygonElements.map((polygonElement) => polygonFromGml(polygonElement));
@@ -515,8 +394,8 @@ export async function readTelepacMesParcellesXml(input: string | ArrayBuffer): P
     });
   });
 
-  if (ilotCount === 0 || features.length === 0) {
-    throw new Error('TELEPAC_XML: structure invalide (aucun ilot/parcelle)');
+  if (ilotCount === 0) {
+    throw new Error('TELEPAC_XML: No ilots found');
   }
 
   return {
