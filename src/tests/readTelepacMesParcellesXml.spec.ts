@@ -1,0 +1,171 @@
+// @vitest-environment jsdom
+import { describe, expect, it } from 'vitest';
+import { readTelepacMesParcellesXml } from '../lib/importers/readTelepacMesParcellesXml';
+import type { TelepacFeature } from '../lib/types/telepac';
+
+const SAMPLE_XML = `<?xml version="1.0" encoding="UTF-8"?>
+<producteurs xmlns="urn:x-telepac:fr.gouv.agriculture.telepac:echange-producteur-import" xmlns:gml="http://www.opengis.net/gml">
+  <producteur numero-pacage="018003509">
+    <rpg>
+      <ilots>
+        <ilot numero-ilot="3" numero-ilot-reference="018015876118">
+          <commune>18173</commune>
+          <justification>
+            <motifOperation>ILOT_M2</motifOperation>
+            <justification>Photo aérienne ne reflétant pas le terrain. Modification du dessin pour correspondre aux évolutions du terrain.</justification>
+          </justification>
+          <parcelles>
+            <parcelle>
+              <descriptif-parcelle numero-parcelle="1">
+                <commune>18173</commune>
+                <culture-principale production-semences="false" production-fermiers="false" deshydratation="false" culture-secondaire="A00" date-labour="000">
+                  <code-culture>BTH</code-culture>
+                  <precision>001</precision>
+                  <reconversion-pp>false</reconversion-pp>
+                  <obligation-reimplantation-pp>false</obligation-reimplantation-pp>
+                </culture-principale>
+                <agri-bio conduite-bio="false" />
+                <engagements-maec surface-cible="false" elevage-monogastrique="false" />
+              </descriptif-parcelle>
+              <geometrie>
+                <gml:Polygon>
+                  <gml:outerBoundaryIs>
+                    <gml:LinearRing>
+                      <gml:coordinates>700000,6600000 700100,6600000 700100,6600100 700000,6600100 700000,6600000</gml:coordinates>
+                    </gml:LinearRing>
+                  </gml:outerBoundaryIs>
+                  <gml:innerBoundaryIs>
+                    <gml:LinearRing>
+                      <gml:coordinates>700020,6600020 700080,6600020 700080,6600080 700020,6600080 700020,6600020</gml:coordinates>
+                    </gml:LinearRing>
+                  </gml:innerBoundaryIs>
+                </gml:Polygon>
+              </geometrie>
+            </parcelle>
+            <parcelle>
+              <descriptif-parcelle numero-parcelle="2">
+                <culture-principale production-semences="true" production-fermiers="false" deshydratation="true" culture-secondaire="B00" date-labour="20240112">
+                  <code-culture>CAG</code-culture>
+                  <precision>002</precision>
+                  <reconversion-pp>true</reconversion-pp>
+                  <obligation-reimplantation-pp>false</obligation-reimplantation-pp>
+                </culture-principale>
+              </descriptif-parcelle>
+              <geometrie>
+                <gml:Polygon>
+                  <gml:outerBoundaryIs>
+                    <gml:LinearRing>
+                      <gml:coordinates>701000,6600200 701200,6600200 701200,6600400 701000,6600400 701000,6600200</gml:coordinates>
+                    </gml:LinearRing>
+                  </gml:outerBoundaryIs>
+                </gml:Polygon>
+                <gml:Polygon>
+                  <gml:outerBoundaryIs>
+                    <gml:LinearRing>
+                      <gml:coordinates>701400,6600500 701500,6600500 701500,6600600 701400,6600600 701400,6600500</gml:coordinates>
+                    </gml:LinearRing>
+                  </gml:outerBoundaryIs>
+                </gml:Polygon>
+              </geometrie>
+            </parcelle>
+            <parcelle>
+              <descriptif-parcelle numero-parcelle="3">
+                <culture-principale production-semences="false" production-fermiers="true" deshydratation="false" culture-secondaire="C00">
+                  <code-culture>ORH</code-culture>
+                  <precision>003</precision>
+                  <reconversion-pp>false</reconversion-pp>
+                  <obligation-reimplantation-pp>true</obligation-reimplantation-pp>
+                </culture-principale>
+                <engagements-maec surface-cible="true" elevage-monogastrique="false" />
+              </descriptif-parcelle>
+              <geometrie>
+                <gml:Polygon>
+                  <gml:outerBoundaryIs>
+                    <gml:LinearRing>
+                      <gml:coordinates decimal="," cs=";" ts=" ">700500,12;6600700,34 700600,12;6600700,34 700600,12;6600800,34 700500,12;6600800,34 700500,12;6600700,34</gml:coordinates>
+                    </gml:LinearRing>
+                  </gml:outerBoundaryIs>
+                  <gml:innerBoundaryIs>
+                    <gml:LinearRing srsDimension="2">
+                      <gml:posList>700520 6600720 700580 6600720 700580 6600780 700520 6600780 700520 6600720</gml:posList>
+                    </gml:LinearRing>
+                  </gml:innerBoundaryIs>
+                </gml:Polygon>
+              </geometrie>
+            </parcelle>
+          </parcelles>
+        </ilot>
+      </ilots>
+    </rpg>
+  </producteur>
+</producteurs>`;
+
+describe('readTelepacMesParcellesXml', () => {
+  it('parses parcelles into GeoJSON features', async () => {
+    const collection = await readTelepacMesParcellesXml(SAMPLE_XML);
+
+    expect(collection.type).toBe('FeatureCollection');
+    expect(collection.features).toHaveLength(3);
+
+    const [first, second, third] = collection.features as TelepacFeature[];
+
+    expect(first.geometry.type).toBe('Polygon');
+    if (first.geometry.type === 'Polygon') {
+      expect(first.geometry.coordinates).toHaveLength(2);
+      const hole = first.geometry.coordinates[1];
+      expect(hole.length).toBeGreaterThan(0);
+    }
+
+    expect(second.geometry.type).toBe('MultiPolygon');
+    if (second.geometry.type === 'MultiPolygon') {
+      expect(second.geometry.coordinates).toHaveLength(2);
+    }
+
+    expect(third.geometry.type).toBe('Polygon');
+    if (third.geometry.type === 'Polygon') {
+      expect(third.geometry.coordinates).toHaveLength(2);
+    }
+
+    collection.features.forEach((feature) => {
+      const coordinates = feature.geometry.type === 'Polygon'
+        ? feature.geometry.coordinates
+        : feature.geometry.coordinates.flat();
+
+      coordinates.forEach((ring) => {
+        ring.forEach(([lon, lat]) => {
+          expect(lon).toBeGreaterThan(-5);
+          expect(lon).toBeLessThan(10);
+          expect(lat).toBeGreaterThan(41);
+          expect(lat).toBeLessThan(52);
+        });
+      });
+    });
+
+    expect(first.properties.production_semences).toBe(false);
+    expect(first.properties.conduite_bio).toBe(false);
+    expect(first.properties.date_labour).toBeNull();
+    expect(first.properties.code_culture).toBe('BTH');
+    expect(first.properties.precision).toBe('001');
+    expect(first.properties.culture_secondaire).toBe('A00');
+    expect(first.properties.justification_motif).toBe('ILOT_M2');
+    expect(first.properties.justification_texte).toContain('Photo aérienne');
+
+    expect(second.properties.production_semences).toBe(true);
+    expect(second.properties.deshydratation).toBe(true);
+    expect(second.properties.reconversion_pp).toBe(true);
+    expect(second.properties.date_labour).toBe('20240112');
+    expect(second.properties.precision).toBe('002');
+
+    expect(third.properties.production_fermiers).toBe(true);
+    expect(third.properties.maec_surface_cible).toBe(true);
+    expect(third.properties.obligation_reimplantation_pp).toBe(true);
+    expect(third.properties.culture_secondaire).toBe('C00');
+    expect(third.properties.precision).toBe('003');
+  });
+
+  it('accepts ArrayBuffer input', async () => {
+    const buffer = new TextEncoder().encode(SAMPLE_XML).buffer;
+    const collection = await readTelepacMesParcellesXml(buffer);
+    expect(collection.features).toHaveLength(3);
+  });
+});
