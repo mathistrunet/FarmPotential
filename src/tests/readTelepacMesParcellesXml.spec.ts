@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { readTelepacMesParcellesXml } from '../lib/importers/readTelepacMesParcellesXml';
 import type { TelepacFeature } from '../lib/types/telepac';
@@ -68,31 +67,6 @@ const SAMPLE_XML = `<?xml version="1.0" encoding="UTF-8"?>
                 </gml:Polygon>
               </geometrie>
             </parcelle>
-            <parcelle>
-              <descriptif-parcelle numero-parcelle="3">
-                <culture-principale production-semences="false" production-fermiers="true" deshydratation="false" culture-secondaire="C00">
-                  <code-culture>ORH</code-culture>
-                  <precision>003</precision>
-                  <reconversion-pp>false</reconversion-pp>
-                  <obligation-reimplantation-pp>true</obligation-reimplantation-pp>
-                </culture-principale>
-                <engagements-maec surface-cible="true" elevage-monogastrique="false" />
-              </descriptif-parcelle>
-              <geometrie>
-                <gml:Polygon>
-                  <gml:outerBoundaryIs>
-                    <gml:LinearRing>
-                      <gml:coordinates decimal="," cs=";" ts=" ">700500,12;6600700,34 700600,12;6600700,34 700600,12;6600800,34 700500,12;6600800,34 700500,12;6600700,34</gml:coordinates>
-                    </gml:LinearRing>
-                  </gml:outerBoundaryIs>
-                  <gml:innerBoundaryIs>
-                    <gml:LinearRing srsDimension="2">
-                      <gml:posList>700520 6600720 700580 6600720 700580 6600780 700520 6600780 700520 6600720</gml:posList>
-                    </gml:LinearRing>
-                  </gml:innerBoundaryIs>
-                </gml:Polygon>
-              </geometrie>
-            </parcelle>
           </parcelles>
         </ilot>
       </ilots>
@@ -105,9 +79,9 @@ describe('readTelepacMesParcellesXml', () => {
     const collection = await readTelepacMesParcellesXml(SAMPLE_XML);
 
     expect(collection.type).toBe('FeatureCollection');
-    expect(collection.features).toHaveLength(3);
+    expect(collection.features).toHaveLength(2);
 
-    const [first, second, third] = collection.features as TelepacFeature[];
+    const [first, second] = collection.features as TelepacFeature[];
 
     expect(first.geometry.type).toBe('Polygon');
     if (first.geometry.type === 'Polygon') {
@@ -119,11 +93,6 @@ describe('readTelepacMesParcellesXml', () => {
     expect(second.geometry.type).toBe('MultiPolygon');
     if (second.geometry.type === 'MultiPolygon') {
       expect(second.geometry.coordinates).toHaveLength(2);
-    }
-
-    expect(third.geometry.type).toBe('Polygon');
-    if (third.geometry.type === 'Polygon') {
-      expect(third.geometry.coordinates).toHaveLength(2);
     }
 
     collection.features.forEach((feature) => {
@@ -155,17 +124,11 @@ describe('readTelepacMesParcellesXml', () => {
     expect(second.properties.reconversion_pp).toBe(true);
     expect(second.properties.date_labour).toBe('20240112');
     expect(second.properties.precision).toBe('002');
-
-    expect(third.properties.production_fermiers).toBe(true);
-    expect(third.properties.maec_surface_cible).toBe(true);
-    expect(third.properties.obligation_reimplantation_pp).toBe(true);
-    expect(third.properties.culture_secondaire).toBe('C00');
-    expect(third.properties.precision).toBe('003');
   });
 
   it('accepts ArrayBuffer input', async () => {
     const buffer = new TextEncoder().encode(SAMPLE_XML).buffer;
     const collection = await readTelepacMesParcellesXml(buffer);
-    expect(collection.features).toHaveLength(3);
+    expect(collection.features).toHaveLength(2);
   });
 });

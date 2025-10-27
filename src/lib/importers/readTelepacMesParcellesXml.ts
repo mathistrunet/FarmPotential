@@ -1,3 +1,4 @@
+import { DOMParser } from '@xmldom/xmldom';
 import { polygonFromGml, type GmlPolygon } from '../utils/gml';
 import { isLambert93Collection, toWgs842154 } from '../utils/reproject';
 import type {
@@ -10,15 +11,6 @@ import type {
 
 const TELEPAC_SOURCE: TelepacParcelleProperties['source'] = 'telepac-mesparcelles-xml';
 const ELEMENT_NODE = 1;
-
-function createDomParser(): DOMParser {
-  const ctor = (globalThis as typeof globalThis & { DOMParser?: typeof DOMParser }).DOMParser;
-  if (!ctor) {
-    throw new Error('TELEPAC_XML: DOMParser is not available in this environment');
-  }
-
-  return new ctor();
-}
 
 type Nullable<T> = T | null | undefined;
 
@@ -171,41 +163,6 @@ function collectPoints(polygons: GmlPolygon[]): Array<[number, number]> {
   return points;
 }
 
-function collectIlotElements(producteur: Element): Element[] {
-  const seen = new Set<Element>();
-  const rpg = firstChildByLocalName(producteur, 'rpg');
-  const ilotsContainer = firstChildByLocalName(rpg, 'ilots');
-  childElementsByLocalName(ilotsContainer, 'ilot').forEach((ilot) => {
-    seen.add(ilot);
-  });
-
-  if (seen.size === 0) {
-    descendantsByLocalName(producteur, 'ilot').forEach((ilot) => {
-      seen.add(ilot);
-    });
-  }
-
-  return Array.from(seen);
-}
-
-function collectParcelleElements(ilot: Element): Element[] {
-  const seen = new Set<Element>();
-  const parcellesContainers = childElementsByLocalName(ilot, 'parcelles');
-  parcellesContainers.forEach((container) => {
-    childElementsByLocalName(container, 'parcelle').forEach((parcelle) => {
-      seen.add(parcelle);
-    });
-  });
-
-  if (seen.size === 0) {
-    descendantsByLocalName(ilot, 'parcelle').forEach((parcelle) => {
-      seen.add(parcelle);
-    });
-  }
-
-  return Array.from(seen);
-}
-
 function interpretSrsName(value: Nullable<string>): '2154' | '4326' | undefined {
   if (!value) {
     return undefined;
@@ -254,7 +211,7 @@ function convertPolygonToWgs84(polygon: GmlPolygon, polygonElement: Element): Po
 
 function polygonsToGeometry(polygonElements: Element[], polygons: GmlPolygon[]): TelepacGeometry {
   if (polygons.length === 0) {
-    throw new Error('GML: Polygon manquant');
+    throw new Error('GML: Unsupported geometry');
   }
 
   const rings = polygons.map((polygon, index) => convertPolygonToWgs84(polygon, polygonElements[index]));
@@ -321,7 +278,7 @@ function buildProperties(
 
 export async function readTelepacMesParcellesXml(input: string | ArrayBuffer): Promise<TelepacFeatureCollection> {
   const xml = decodeInput(input);
-  const parser = createDomParser();
+  const parser = new DOMParser();
   const document = parser.parseFromString(xml, 'application/xml');
   const root = document.documentElement;
 
@@ -336,7 +293,9 @@ export async function readTelepacMesParcellesXml(input: string | ArrayBuffer): P
 
   producteurElements.forEach((producteur) => {
     const pacage = producteur.getAttribute('numero-pacage') ?? '';
-    const ilots = collectIlotElements(producteur);
+    const rpg = firstChildByLocalName(producteur, 'rpg');
+    const ilotsContainer = firstChildByLocalName(rpg, 'ilots');
+    const ilots = childElementsByLocalName(ilotsContainer, 'ilot');
     ilotCount += ilots.length;
 
     ilots.forEach((ilot) => {
@@ -350,7 +309,8 @@ export async function readTelepacMesParcellesXml(input: string | ArrayBuffer): P
       const justificationMotif = textContentOfChild(justification, 'motifOperation');
       const justificationTexte = textContentOfChild(justification, 'justification');
       const communeFromIlot = textContentOfChild(ilot, 'commune');
-      const parcelles = collectParcelleElements(ilot);
+      const parcellesContainer = firstChildByLocalName(ilot, 'parcelles');
+      const parcelles = childElementsByLocalName(parcellesContainer, 'parcelle');
 
       parcelles.forEach((parcelle) => {
         const descriptif = firstChildByLocalName(parcelle, 'descriptif-parcelle');
@@ -394,12 +354,12 @@ export async function readTelepacMesParcellesXml(input: string | ArrayBuffer): P
 
         const geometrie = firstChildByLocalName(parcelle, 'geometrie');
         if (!geometrie) {
-          throw new Error('GML: Polygon manquant');
+          throw new Error('GML: Unsupported geometry');
         }
 
         const polygonElements = descendantsByLocalName(geometrie, 'Polygon');
         if (polygonElements.length === 0) {
-          throw new Error('GML: Polygon manquant');
+          throw new Error('GML: Unsupported geometry');
         }
 
         const polygons = polygonElements.map((polygonElement) => polygonFromGml(polygonElement));
@@ -434,8 +394,8 @@ export async function readTelepacMesParcellesXml(input: string | ArrayBuffer): P
     });
   });
 
-  if (ilotCount === 0 || features.length === 0) {
-    throw new Error('TELEPAC_XML: structure invalide (aucun ilot/parcelle)');
+  if (ilotCount === 0) {
+    throw new Error('TELEPAC_XML: No ilots found');
   }
 
   return {
