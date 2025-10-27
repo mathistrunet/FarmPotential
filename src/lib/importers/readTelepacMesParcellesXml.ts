@@ -211,7 +211,7 @@ function convertPolygonToWgs84(polygon: GmlPolygon, polygonElement: Element): Po
 
 function polygonsToGeometry(polygonElements: Element[], polygons: GmlPolygon[]): TelepacGeometry {
   if (polygons.length === 0) {
-    throw new Error('GML: Polygon manquant');
+    throw new Error('GML: Unsupported geometry');
   }
 
   const rings = polygons.map((polygon, index) => convertPolygonToWgs84(polygon, polygonElements[index]));
@@ -354,12 +354,12 @@ export async function readTelepacMesParcellesXml(input: string | ArrayBuffer): P
 
         const geometrie = firstChildByLocalName(parcelle, 'geometrie');
         if (!geometrie) {
-          throw new Error('GML: Polygon manquant');
+          throw new Error('GML: Unsupported geometry');
         }
 
         const polygonElements = descendantsByLocalName(geometrie, 'Polygon');
         if (polygonElements.length === 0) {
-          throw new Error('GML: Polygon manquant');
+          throw new Error('GML: Unsupported geometry');
         }
 
         const polygons = polygonElements.map((polygonElement) => polygonFromGml(polygonElement));
@@ -394,8 +394,8 @@ export async function readTelepacMesParcellesXml(input: string | ArrayBuffer): P
     });
   });
 
-  if (ilotCount === 0 || features.length === 0) {
-    throw new Error('TELEPAC_XML: structure invalide (aucun ilot/parcelle)');
+  if (ilotCount === 0) {
+    throw new Error('TELEPAC_XML: No ilots found');
   }
 
   return {
