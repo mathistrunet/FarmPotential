@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readTelepacMesParcellesXml } from '../lib/importers/readTelepacMesParcellesXml';
+import { telepacMesParcellesImporter } from '../lib/importers';
 import type { TelepacFeature } from '../lib/types/telepac';
 
 const SAMPLE_XML = `<?xml version="1.0" encoding="UTF-8"?>
@@ -76,7 +76,7 @@ const SAMPLE_XML = `<?xml version="1.0" encoding="UTF-8"?>
 
 describe('readTelepacMesParcellesXml', () => {
   it('parses parcelles into GeoJSON features', async () => {
-    const collection = await readTelepacMesParcellesXml(SAMPLE_XML);
+    const collection = await telepacMesParcellesImporter.read(SAMPLE_XML);
 
     expect(collection.type).toBe('FeatureCollection');
     expect(collection.features).toHaveLength(2);
@@ -128,7 +128,7 @@ describe('readTelepacMesParcellesXml', () => {
 
   it('accepts ArrayBuffer input', async () => {
     const buffer = new TextEncoder().encode(SAMPLE_XML).buffer;
-    const collection = await readTelepacMesParcellesXml(buffer);
+    const collection = await telepacMesParcellesImporter.read(buffer);
     expect(collection.features).toHaveLength(2);
   });
 });

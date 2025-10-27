@@ -403,3 +403,9 @@ export async function readTelepacMesParcellesXml(input: string | ArrayBuffer): P
     features,
   };
 }
+
+export const telepacMesParcellesImporter = {
+  read: readTelepacMesParcellesXml,
+};
+
+export default telepacMesParcellesImporter;
