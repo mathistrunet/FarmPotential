@@ -193,7 +193,7 @@ function convertPolygonToWgs84(polygon: GmlPolygon, polygonElement: Element): Po
   const lambert = isLambert93Collection(collectPoints([polygon]));
 
   if (!srs && !lambert) {
-    throw new Error('GML: Coordinates outside Lambert-93 envelope');
+    throw new Error('CRS: srsName absent et coordonnées hors enveloppe EPSG:2154');
   }
 
   if (!srs && lambert) {
