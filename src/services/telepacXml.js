@@ -1,6 +1,7 @@
 // src/services/telepacXml.js
 import { toWgs84 } from "../utils/proj";
 import { ringToGml, ringAreaM2 } from "../utils/geometry";
+import { readTelepacMesParcellesXml } from "../lib/importers/readTelepacMesParcellesXml";
 
 let autoNumero = 1;
 
@@ -77,14 +78,79 @@ export function buildTelepacXML(features) {
   return xml;
 }
 
-export async function parseTelepacXmlToFeatures(file) {
-  const text = await new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onerror = () => reject(r.error);
-    r.onload = () => resolve(r.result);
-    r.readAsText(file, "ISO-8859-1");
-  });
+function normalisePropertiesFromMesParcelles(feature) {
+  const properties = { ...(feature?.properties || {}) };
+  const ilotNumero = properties.ilot ?? properties.ilot_numero ?? null;
+  const parcelleNumero = properties.parcelle ?? properties.numero ?? null;
+  const code = properties.code ?? properties.code_culture ?? null;
 
+  if (properties.source == null) {
+    properties.source = "telepac-mesparcelles-xml";
+  }
+  if (ilotNumero != null && properties.ilot_numero == null) {
+    properties.ilot_numero = ilotNumero;
+  }
+  if (parcelleNumero != null && properties.numero == null) {
+    properties.numero = parcelleNumero;
+  }
+  if (code != null && properties.code == null) {
+    properties.code = code;
+  }
+
+  if (ilotNumero != null || parcelleNumero != null) {
+    const label =
+      ilotNumero != null && parcelleNumero != null
+        ? `${ilotNumero}-${parcelleNumero}`
+        : `${parcelleNumero ?? ilotNumero}`;
+    if (label) {
+      properties.nom_affiche = label;
+    }
+  }
+
+  return properties;
+}
+
+function normaliseMesParcellesFeatures(collection) {
+  const out = [];
+  if (!collection?.features) return out;
+
+  for (const feature of collection.features) {
+    if (!feature || !feature.geometry) continue;
+
+    const baseProps = normalisePropertiesFromMesParcelles(feature);
+    if (feature.geometry.type === "Polygon") {
+      out.push({
+        type: "Feature",
+        geometry: {
+          type: "Polygon",
+          coordinates: feature.geometry.coordinates,
+        },
+        properties: baseProps,
+      });
+      continue;
+    }
+
+    if (feature.geometry.type === "MultiPolygon") {
+      feature.geometry.coordinates.forEach((coords, index) => {
+        out.push({
+          type: "Feature",
+          geometry: { type: "Polygon", coordinates: coords },
+          properties: { ...baseProps, _multipolygon_index: index },
+        });
+      });
+      continue;
+    }
+
+    console.warn(
+      "TELEPAC_XML: Unsupported geometry from Mes Parcelles importer",
+      feature.geometry?.type
+    );
+  }
+
+  return out;
+}
+
+function parseLegacyTelepacXml(text) {
   const parser = new DOMParser();
   const xml = parser.parseFromString(text, "application/xml");
   const isError = xml.getElementsByTagName("parsererror").length > 0;
@@ -100,20 +166,17 @@ export async function parseTelepacXmlToFeatures(file) {
   for (let i = 0; i < parcelles.length; i++) {
     const p = parcelles[i];
 
-    // 🔹 Récupération de l'îlot parent
-    const parcellesNode = p.parentNode; // <parcelles>
-    const ilotNode = parcellesNode && parcellesNode.parentNode; // <ilot>
+    const parcellesNode = p.parentNode;
+    const ilotNode = parcellesNode && parcellesNode.parentNode;
     const ilot_numero =
       (ilotNode &&
         ilotNode.getAttribute &&
         ilotNode.getAttribute("numero-ilot")) ||
       "";
 
-    // Variables
     let numero = "";
     let code = "";
 
-    // Lecture du descriptif de parcelle
     const desc = p.getElementsByTagName("descriptif-parcelle")[0];
     if (desc) {
       const numAttr = desc.getAttribute("numero-parcelle");
@@ -125,7 +188,6 @@ export async function parseTelepacXmlToFeatures(file) {
       }
     }
 
-    // Surface admissible
     let surfaceA;
     const surfNode = p.getElementsByTagName("surface-admissible")[0];
     if (surfNode) {
@@ -133,7 +195,6 @@ export async function parseTelepacXmlToFeatures(file) {
       if (!isNaN(val)) surfaceA = val;
     }
 
-    // Lecture des coordonnées GML -> WGS84
     const ringWgs = [];
     const coordNode = p.getElementsByTagNameNS
       ? p.getElementsByTagNameNS(GML, "coordinates")[0]
@@ -149,11 +210,9 @@ export async function parseTelepacXmlToFeatures(file) {
       }
     }
 
-    // 🔹 Construction du nom à afficher façon Assolia (ilot-parcelle)
     const nom_affiche =
       ilot_numero && numero ? `${ilot_numero}-${numero}` : numero;
 
-    // Ajout de la feature
     features.push({
       type: "Feature",
       properties: {
@@ -166,5 +225,55 @@ export async function parseTelepacXmlToFeatures(file) {
       geometry: { type: "Polygon", coordinates: [ringWgs] },
     });
   }
+
   return features;
+}
+
+export async function parseTelepacXmlToFeatures(file) {
+  let arrayBuffer;
+  if (file?.arrayBuffer) {
+    try {
+      arrayBuffer = await file.arrayBuffer();
+    } catch (err) {
+      console.warn("TELEPAC_XML: Failed to read arrayBuffer, falling back to FileReader", err);
+    }
+  }
+
+  if (!arrayBuffer) {
+    arrayBuffer = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(reader.error);
+      reader.onload = () => resolve(reader.result);
+      reader.readAsArrayBuffer(file);
+    });
+  }
+
+  try {
+    const mesParcelles = await readTelepacMesParcellesXml(arrayBuffer);
+    const mesParcellesFeatures = normaliseMesParcellesFeatures(mesParcelles);
+    if (mesParcellesFeatures.length > 0) {
+      return mesParcellesFeatures;
+    }
+  } catch (err) {
+    console.warn("TELEPAC_XML: Mes Parcelles importer failed, falling back to legacy parser", err);
+  }
+
+  let text;
+  try {
+    text = new TextDecoder("iso-8859-1").decode(arrayBuffer);
+  } catch (err) {
+    console.warn("TELEPAC_XML: ISO-8859-1 TextDecoder unavailable, using FileReader", err);
+    text = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(reader.error);
+      reader.onload = () => resolve(reader.result);
+      reader.readAsText(file, "ISO-8859-1");
+    });
+  }
+
+  const legacyFeatures = parseLegacyTelepacXml(text);
+  if (!legacyFeatures.length) {
+    throw new Error("TELEPAC_XML: structure invalide (aucun ilot/parcelle)");
+  }
+  return legacyFeatures;
 }
