@@ -19,7 +19,8 @@ import RpgFeature from "./Front/useRpgLayer";
 // ✅ composant Dessin autonome (chemin conservé)
 import DrawToolbar from "./Front/DrawToolbar";
 // ✅ Import/Export Télépac (chemin conservé)
-import ImportTelepacButton, { ExportTelepacButton } from "./Front/TelepacButton";
+import ImportTelepacButton from "./Front/TelepacButton";
+import ExportMenuButton from "./Front/ExportMenuButton";
 
 // ✅ NOUVEAU : hook d’affichage RRP local (depuis un fichier MBTiles placé dans /public/data)
 import { useSoilLayerLocal } from "./features/useSoilLayerLocal";
@@ -566,7 +567,7 @@ export default function App() {
             compact={compact}
             buttonStyle={btn}
           />
-          <ExportTelepacButton
+          <ExportMenuButton
             features={features}
             compact={compact}
             buttonStyle={{ ...btn, background: "#111", color: "#fff", border: "none" }}
