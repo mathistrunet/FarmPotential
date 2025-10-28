@@ -458,7 +458,17 @@ export default function WeatherModal({ open, onClose, centroid, parcelLabel }: W
           </button>
         </header>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 0, minHeight: 0 }}>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '320px 1fr',
+            gap: 0,
+            minHeight: 0,
+            flex: 1,
+            maxHeight: '100%',
+            height: '100%',
+          }}
+        >
           <aside
             style={{
               borderRight: '1px solid #e2e8f0',
@@ -466,6 +476,8 @@ export default function WeatherModal({ open, onClose, centroid, parcelLabel }: W
               display: 'flex',
               flexDirection: 'column',
               gap: 20,
+              overflowY: 'auto',
+              maxHeight: '100%',
             }}
           >
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
