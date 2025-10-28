@@ -1,18 +1,31 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { GeoJsonProperties } from "geojson";
 import type maplibregl from "maplibre-gl";
-import polygonClipping, {
-  type MultiPolygon as ClippingMultiPolygon,
-  type Pair as ClippingPair,
-  type Polygon as ClippingPolygon,
+import type {
+  MultiPolygon as ClippingMultiPolygon,
+  Pair as ClippingPair,
+  Polygon as ClippingPolygon,
 } from "polygon-clipping";
+import * as polygonClipping from "polygon-clipping";
 
-const clipIntersection = (polygonClipping as unknown as {
-  intersection: (
-    geom: ClippingPolygon | ClippingMultiPolygon,
-    ...geoms: (ClippingPolygon | ClippingMultiPolygon)[]
-  ) => ClippingMultiPolygon;
-}).intersection;
+type IntersectionFn = (
+  geom: ClippingPolygon | ClippingMultiPolygon,
+  ...geoms: (ClippingPolygon | ClippingMultiPolygon)[]
+) => ClippingMultiPolygon;
+
+const polygonClippingModule = polygonClipping as {
+  intersection?: IntersectionFn;
+  default?: { intersection?: IntersectionFn };
+};
+
+const missingIntersection: IntersectionFn = () => {
+  throw new Error("polygon-clipping intersection export unavailable");
+};
+
+export const clipIntersection: IntersectionFn =
+  polygonClippingModule.intersection ??
+  polygonClippingModule.default?.intersection ??
+  missingIntersection;
 
 import type { LngLatBBox } from "../services/rrpLocal";
 import { loadDepartmentGeoJSON } from "../services/soilmapLocal";
