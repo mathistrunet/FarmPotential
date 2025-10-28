@@ -1,5 +1,5 @@
 // src/App.jsx
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 
 
 import RasterToggles from "./components/RasterToggles";
@@ -15,8 +15,6 @@ import DrawToolbar from "./Front/DrawToolbar";
 import ImportTelepacButton, { ExportTelepacButton } from "./Front/TelepacButton";
 import WeatherSummaryPage from "./pages/WeatherSummaryPage";
 import WeatherModal from "./components/WeatherModal";
-import fetchWeatherSummary from "./services/weather";
-import haversineDistanceKm from "./utils/distance";
 
 const buildParcelTitle = (feature, index) => {
   if (!feature) return "Parcelle";
@@ -44,186 +42,10 @@ function MapExperience({ onOpenSummary = () => {} }) {
   const [activeTab, setActiveTab] = useState("parcelles"); // "parcelles" | "calques"
   const [compact, setCompact] = useState(false);
   const [weatherModalOpen, setWeatherModalOpen] = useState(false);
-  const [stationsState, setStationsState] = useState({ data: null, loading: false, error: null });
-  const [nearestStation, setNearestStation] = useState(null);
-  const [yearOptions, setYearOptions] = useState([]);
-  const [selectedYears, setSelectedYears] = useState([]);
-  const [weatherDatasets, setWeatherDatasets] = useState({});
-  const [loadingYears, setLoadingYears] = useState([]);
-  const [yearErrors, setYearErrors] = useState({});
-
-  const weatherControllersRef = useRef(new Map());
-  const lastStationKeyRef = useRef(null);
 
   const handleRequestWeather = useCallback(() => {
     setWeatherModalOpen(true);
   }, []);
-
-  const abortAllWeatherRequests = useCallback(() => {
-    weatherControllersRef.current.forEach((controller) => {
-      if (controller && typeof controller.abort === "function") {
-        controller.abort();
-      }
-    });
-    weatherControllersRef.current.clear();
-    setLoadingYears([]);
-  }, []);
-
-  const fetchStations = useCallback(async () => {
-    const normaliseStations = (rawStations) =>
-      Array.isArray(rawStations)
-        ? rawStations
-            .map((station) => {
-              const latitude = Number(
-                station?.latitude ?? station?.lat ?? station?.geometry?.coordinates?.[1]
-              );
-              const longitude = Number(
-                station?.longitude ?? station?.lon ?? station?.geometry?.coordinates?.[0]
-              );
-              if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-                return null;
-              }
-              return {
-                id: station?.id || null,
-                name: station?.name || station?.city || null,
-                city: station?.city || null,
-                latitude,
-                longitude,
-                elevation:
-                  typeof station?.elevation === "number"
-                    ? station.elevation
-                    : typeof station?.altitude === "number"
-                    ? station.altitude
-                    : null,
-              };
-            })
-            .filter(Boolean)
-        : [];
-
-    const loadFromApi = async () => {
-      try {
-        const response = await fetch("/api/weather/stations");
-        if (!response.ok) {
-          console.warn(
-            `Impossible de récupérer la liste des stations météo (statut ${response.status}).`
-          );
-          return [];
-        }
-        const contentType = response.headers.get("content-type") || "";
-        if (!contentType.toLowerCase().includes("application/json")) {
-          console.warn(
-            "La réponse /api/weather/stations n'est pas au format JSON, utilisation du jeu de données local."
-          );
-          return [];
-        }
-        const json = await response.json();
-        return normaliseStations(json?.stations);
-      } catch (error) {
-        console.warn("Erreur réseau lors de l'appel /api/weather/stations :", error);
-        return [];
-      }
-    };
-
-    const loadFromFallback = async () => {
-      try {
-        const response = await fetch("/data/weather-stations-fr.json");
-        if (!response.ok) {
-          return [];
-        }
-        const json = await response.json();
-        return normaliseStations(json?.stations);
-      } catch (error) {
-        console.warn("Erreur lors du chargement du jeu de stations local :", error);
-        return [];
-      }
-    };
-
-    setStationsState((prev) => ({ ...prev, loading: true, error: null }));
-    try {
-      let stations = await loadFromApi();
-      if (!stations.length) {
-        stations = await loadFromFallback();
-      }
-
-      if (!stations.length) {
-        throw new Error("Aucune station météo n'a pu être chargée.");
-      }
-
-      setStationsState({ data: stations, loading: false, error: null });
-    } catch (error) {
-      console.error("Erreur lors du chargement des stations météo :", error);
-      setStationsState({
-        data: null,
-        loading: false,
-        error:
-          error?.message || "Impossible de récupérer la liste des stations météo.",
-      });
-    }
-  }, []);
-
-  const loadWeatherForYear = useCallback(
-    async (year) => {
-      if (!nearestStation) return;
-
-      const controller = new AbortController();
-      weatherControllersRef.current.set(year, controller);
-      setLoadingYears((prev) => (prev.includes(year) ? prev : [...prev, year]));
-
-      try {
-        const dataset = await fetchWeatherSummary({
-          latitude: nearestStation.latitude,
-          longitude: nearestStation.longitude,
-          year,
-          signal: controller.signal,
-        });
-
-        setWeatherDatasets((prev) => ({ ...prev, [year]: dataset }));
-        setYearErrors((prev) => {
-          if (!prev[year]) return prev;
-          const { [year]: _removed, ...rest } = prev;
-          return rest;
-        });
-      } catch (error) {
-        if (error?.name === "AbortError") return;
-        console.error("Erreur lors du chargement des données météo :", error);
-        setYearErrors((prev) => ({
-          ...prev,
-          [year]: error?.message || "Impossible de récupérer les données météo.",
-        }));
-      } finally {
-        setLoadingYears((prev) => prev.filter((value) => value !== year));
-        weatherControllersRef.current.delete(year);
-      }
-    },
-    [nearestStation]
-  );
-
-  const handleToggleYear = useCallback((year) => {
-    setSelectedYears((prev) => {
-      const isSelected = prev.includes(year);
-      if (isSelected) {
-        return prev.filter((value) => value !== year);
-      }
-      setYearErrors((prevErrors) => {
-        if (!prevErrors[year]) return prevErrors;
-        const { [year]: _removed, ...rest } = prevErrors;
-        return rest;
-      });
-      return [...prev, year].sort((a, b) => b - a);
-    });
-  }, []);
-
-  const handleRetryYear = useCallback(
-    (year) => {
-      setYearErrors((prev) => {
-        if (!prev[year]) return prev;
-        const { [year]: _removed, ...rest } = prev;
-        return rest;
-      });
-      loadWeatherForYear(year);
-    },
-    [loadWeatherForYear]
-  );
 
   const selectedInfo = useMemo(() => {
     if (selectedId == null) {
@@ -275,125 +97,6 @@ function MapExperience({ onOpenSummary = () => {} }) {
       parcelLabel: selectedInfo.label,
     });
   }, [onOpenSummary, selectedInfo.centroid, selectedInfo.label]);
-
-  useEffect(() => {
-    if (!weatherModalOpen) {
-      abortAllWeatherRequests();
-    }
-  }, [weatherModalOpen, abortAllWeatherRequests]);
-
-  useEffect(
-    () => () => {
-      abortAllWeatherRequests();
-    },
-    [abortAllWeatherRequests]
-  );
-
-  useEffect(() => {
-    if (!weatherModalOpen) return;
-    if (stationsState.data?.length || stationsState.loading || stationsState.error) {
-      return;
-    }
-    fetchStations();
-  }, [weatherModalOpen, stationsState.data, stationsState.loading, stationsState.error, fetchStations]);
-
-  useEffect(() => {
-    if (!weatherModalOpen) return;
-
-    const centroid = selectedInfo.centroid;
-    if (!centroid || !Number.isFinite(centroid.latitude) || !Number.isFinite(centroid.longitude)) {
-      setNearestStation(null);
-      return;
-    }
-
-    if (!stationsState.data?.length) {
-      setNearestStation(null);
-      return;
-    }
-
-    let bestStation = null;
-    let minDistance = Infinity;
-    stationsState.data.forEach((station) => {
-      const distance = haversineDistanceKm(centroid, station);
-      if (distance == null) return;
-      if (distance < minDistance) {
-        minDistance = distance;
-        bestStation = { ...station, distanceKm: distance };
-      }
-    });
-
-    setNearestStation((current) => {
-      if (!bestStation) return null;
-      if (
-        current &&
-        current.latitude === bestStation.latitude &&
-        current.longitude === bestStation.longitude &&
-        current.id === bestStation.id
-      ) {
-        return current.distanceKm === bestStation.distanceKm ? current : { ...bestStation };
-      }
-      return bestStation;
-    });
-  }, [weatherModalOpen, selectedInfo.centroid, stationsState.data]);
-
-  useEffect(() => {
-    if (!weatherModalOpen) return;
-
-    const key = nearestStation
-      ? `${nearestStation.id || "station"}|${nearestStation.latitude?.toFixed(4) || ""}|${nearestStation.longitude?.toFixed(4) || ""}`
-      : "none";
-
-    if (key !== lastStationKeyRef.current) {
-      lastStationKeyRef.current = key;
-      abortAllWeatherRequests();
-      setWeatherDatasets({});
-      setYearErrors({});
-      setSelectedYears([]);
-      setYearOptions([]);
-    }
-  }, [weatherModalOpen, nearestStation, abortAllWeatherRequests]);
-
-  useEffect(() => {
-    if (!weatherModalOpen || !nearestStation) return;
-
-    const currentYear = new Date().getFullYear();
-    const options = Array.from({ length: 6 }, (_, idx) => currentYear - idx);
-
-    setYearOptions((prev) => {
-      const same =
-        prev.length === options.length && prev.every((value, index) => value === options[index]);
-      return same ? prev : options;
-    });
-
-    setSelectedYears((prev) => {
-      const filtered = prev.filter((value) => options.includes(value));
-      if (filtered.length) {
-        if (filtered.length === prev.length && filtered.every((value, index) => value === prev[index])) {
-          return prev;
-        }
-        return filtered;
-      }
-      return [options[0]];
-    });
-  }, [weatherModalOpen, nearestStation]);
-
-  useEffect(() => {
-    if (!weatherModalOpen || !nearestStation) return;
-    selectedYears.forEach((year) => {
-      if (weatherDatasets[year] || loadingYears.includes(year) || yearErrors[year]) {
-        return;
-      }
-      loadWeatherForYear(year);
-    });
-  }, [
-    weatherModalOpen,
-    nearestStation,
-    selectedYears,
-    weatherDatasets,
-    loadingYears,
-    yearErrors,
-    loadWeatherForYear,
-  ]);
 
   const layoutStyle = {
     height: "100%",
@@ -659,17 +362,6 @@ function MapExperience({ onOpenSummary = () => {} }) {
         onClose={() => setWeatherModalOpen(false)}
         parcelLabel={selectedInfo.label}
         centroid={selectedInfo.centroid}
-        station={nearestStation}
-        stationLoading={stationsState.loading}
-        stationError={stationsState.error}
-        onRetryStation={fetchStations}
-        yearOptions={yearOptions}
-        selectedYears={selectedYears}
-        onToggleYear={handleToggleYear}
-        loadingYears={loadingYears}
-        weatherByYear={weatherDatasets}
-        yearErrors={yearErrors}
-        onRetryYear={handleRetryYear}
       />
     </div>
   );

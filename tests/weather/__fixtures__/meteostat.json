@@ -1,0 +1,33 @@
+{
+  "meta": {
+    "station": "07156",
+    "timezone": "Europe/Paris",
+    "name": "Paris-Orly",
+    "latitude": 48.73,
+    "longitude": 2.37
+  },
+  "data": [
+    {
+      "date": "2024-01-01",
+      "tmin": -1.2,
+      "tmax": 5.4,
+      "tavg": 2.6,
+      "prcp": 0.8,
+      "wspd": 3.4,
+      "wdir": 220,
+      "pres": 1014.6,
+      "tsun": 360
+    },
+    {
+      "date": "2024-01-02",
+      "tmin": -0.4,
+      "tmax": 6.2,
+      "tavg": 3.1,
+      "prcp": 0.0,
+      "wspd": 2.8,
+      "wdir": 180,
+      "pres": 1016.2,
+      "tsun": 540
+    }
+  ]
+}
