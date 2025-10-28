@@ -1,0 +1,46 @@
+{
+  "station": {
+    "id": "FR0001",
+    "name": "Paris-Montsouris",
+    "lat": 48.82,
+    "lon": 2.33,
+    "tz": "Europe/Paris"
+  },
+  "hourly": [
+    {
+      "time": "2024-01-01T00:00:00Z",
+      "temperature": 5.1,
+      "precipitation": 0.0,
+      "wind_speed": 2.8,
+      "wind_direction": 190,
+      "humidity": 84,
+      "pressure": 1012.4,
+      "global_radiation": 120.5
+    },
+    {
+      "time": "2024-01-01T01:00:00Z",
+      "temperature": 4.9,
+      "precipitation": 0.2,
+      "wind_speed": 3.1,
+      "wind_direction": 200,
+      "humidity": 86,
+      "pressure": 1011.8,
+      "global_radiation": 98.3
+    }
+  ],
+  "daily": [
+    {
+      "date": "2024-01-01",
+      "tmin": 2.0,
+      "tmax": 7.0,
+      "tavg": 4.6,
+      "precipitation": 1.2,
+      "wind_avg": 3.0,
+      "humidity_avg": 78,
+      "pressure_avg": 1010.2,
+      "sunshine_duration": 18000
+    }
+  ],
+  "license": "© Infoclimat",
+  "attribution": "Données © Infoclimat"
+}

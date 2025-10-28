@@ -6,7 +6,11 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    include: ['src/**/*.{test,spec}.{js,jsx,ts,tsx}', 'server/src/**/*.{test,spec}.ts'],
+    include: [
+      'src/**/*.{test,spec}.{js,jsx,ts,tsx}',
+      'server/src/**/*.{test,spec}.ts',
+      'tests/**/*.{test,spec}.{js,ts,tsx}',
+    ],
     setupFiles: [],
   },
 });
