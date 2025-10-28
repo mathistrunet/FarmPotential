@@ -1,13 +1,10 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import { fileURLToPath } from 'node:url'
-import { dirname, resolve } from 'node:path'
+import { createRequire } from 'node:module'
 
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = dirname(__filename)
-const polygonClippingPath = resolve(
-  __dirname,
-  'node_modules/polygon-clipping/dist/polygon-clipping.esm.js',
+const require = createRequire(import.meta.url)
+const polygonClippingPath = require.resolve(
+  'polygon-clipping/dist/polygon-clipping.esm.js',
 )
 
 // https://vite.dev/config/
@@ -15,10 +12,10 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      'polygon-clipping': polygonClippingPath,
+      'polygon-clipping': 'polygon-clipping/dist/polygon-clipping.esm.js',
     },
   },
   optimizeDeps: {
-    include: ['polygon-clipping'],
+    include: ['polygon-clipping/dist/polygon-clipping.esm.js'],
   },
 })
