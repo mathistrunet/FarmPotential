@@ -1,6 +1,7 @@
 // src/Front/TelepacButton.jsx
 import React, { useRef, useState } from "react";
 import { parseTelepacXmlToFeatures, buildTelepacXML } from "../services/telepacXml";
+import { buildParcellesCsv } from "../services/csvExport";
 
 /** Icônes légères inline (gardées) */
 const iconStyle = { width: 18, height: 18, display: "inline-block", verticalAlign: "-3px" };
@@ -158,6 +159,10 @@ export default function ImportTelepacButton({
  * - filenamePrefix?: string (defaut: "telepac_export_")
  * - onError?: (err) => void
  */
+function randomCode() {
+  return String(Math.floor(Math.random() * 99999) + 1);
+}
+
 export function ExportTelepacButton({
   features = [],
   compact = false,
@@ -168,6 +173,14 @@ export function ExportTelepacButton({
   onError,
 }) {
   const [loading, setLoading] = useState(false);
+  const [showChoice, setShowChoice] = useState(false);
+  const [showCsvModal, setShowCsvModal] = useState(false);
+  const [csvForm, setCsvForm] = useState(() => ({
+    secteur: "TEST",
+    exploitation: "Exploitation 1",
+    codeExploitation: randomCode(),
+  }));
+  const [csvError, setCsvError] = useState("");
 
   const btnDefault = {
     display: "inline-flex",
@@ -184,11 +197,16 @@ export function ExportTelepacButton({
   };
   const btn = { ...btnDefault, ...(buttonStyle || {}) };
 
-  function exportXML() {
+  function ensureFeaturesAvailable() {
     if (!features.length) {
       alert("Dessine ou importe au moins une parcelle.");
-      return;
+      return false;
     }
+    return true;
+  }
+
+  function exportXML() {
+    if (!ensureFeaturesAvailable()) return;
     setLoading(true);
     try {
       const xml = buildTelepacXML(features);
@@ -208,15 +226,243 @@ export function ExportTelepacButton({
     }
   }
 
+  function exportCSV() {
+    if (!ensureFeaturesAvailable()) return;
+
+    const secteur = csvForm.secteur.trim();
+    const exploitation = csvForm.exploitation.trim();
+    const codeExploitation = (csvForm.codeExploitation ?? "").toString().trim();
+
+    if (!secteur || !exploitation || !codeExploitation) {
+      setCsvError("Merci de renseigner tous les champs.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const csv = buildParcellesCsv(features, {
+        secteur,
+        exploitation,
+        codeExploitation,
+      });
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `parcelles_${Date.now()}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setCsvError("");
+      setShowCsvModal(false);
+    } catch (err) {
+      console.error(err);
+      onError?.(err);
+      alert("Échec de l’export CSV.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function handleMainClick() {
+    if (disabled || loading) return;
+    if (!ensureFeaturesAvailable()) return;
+    setShowChoice(true);
+  }
+
+  function handleChooseCsv() {
+    setShowChoice(false);
+    setCsvError("");
+    setCsvForm((prev) => ({
+      secteur: prev.secteur || "TEST",
+      exploitation: prev.exploitation || "Exploitation 1",
+      codeExploitation: prev.codeExploitation || randomCode(),
+    }));
+    setShowCsvModal(true);
+  }
+
+  const choiceMenu = showChoice ? (
+    <>
+      <div
+        onClick={() => setShowChoice(false)}
+        style={{ position: "fixed", inset: 0, background: "transparent", zIndex: 25 }}
+      />
+      <div
+        style={{
+          position: "fixed",
+          right: compact ? 12 : 20,
+          bottom: compact ? 64 : 86,
+          background: "#fff",
+          border: "1px solid #d1d5db",
+          borderRadius: 10,
+          padding: 12,
+          boxShadow: "0 12px 30px rgba(15,23,42,0.18)",
+          zIndex: 30,
+          display: "flex",
+          flexDirection: "column",
+          gap: 8,
+          minWidth: 200,
+        }}
+      >
+        <button
+          onClick={() => {
+            setShowChoice(false);
+            exportXML();
+          }}
+          style={{
+            padding: "8px 10px",
+            borderRadius: 8,
+            border: "1px solid #d1d5db",
+            background: "#f8fafc",
+            cursor: "pointer",
+            textAlign: "left",
+          }}
+        >
+          Export Télépac (XML)
+        </button>
+        <button
+          onClick={handleChooseCsv}
+          style={{
+            padding: "8px 10px",
+            borderRadius: 8,
+            border: "1px solid #d1d5db",
+            background: "#f8fafc",
+            cursor: "pointer",
+            textAlign: "left",
+          }}
+        >
+          Export CSV
+        </button>
+      </div>
+    </>
+  ) : null;
+
+  const csvModal = showCsvModal ? (
+    <>
+      <div
+        onClick={() => {
+          setCsvError("");
+          setShowCsvModal(false);
+        }}
+        style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.35)", zIndex: 35 }}
+      />
+      <div
+        style={{
+          position: "fixed",
+          top: "50%",
+          left: "50%",
+          transform: "translate(-50%, -50%)",
+          zIndex: 40,
+          background: "#fff",
+          borderRadius: 14,
+          padding: 24,
+          width: "min(420px, 92vw)",
+          boxShadow: "0 22px 60px rgba(15,23,42,0.25)",
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 style={{ marginTop: 0, marginBottom: 12 }}>Exporter au format CSV</h3>
+        <p style={{ fontSize: 13, color: "#475569", marginTop: 0, marginBottom: 16 }}>
+          Renseigne les informations générales qui seront reprises pour chaque parcelle.
+        </p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <label style={{ fontSize: 13, display: "flex", flexDirection: "column", gap: 6 }}>
+            Secteur
+            <input
+              value={csvForm.secteur}
+              onChange={(e) => {
+                setCsvError("");
+                setCsvForm((prev) => ({ ...prev, secteur: e.target.value }));
+              }}
+              style={{
+                padding: "8px 10px",
+                borderRadius: 8,
+                border: "1px solid #d1d5db",
+              }}
+            />
+          </label>
+          <label style={{ fontSize: 13, display: "flex", flexDirection: "column", gap: 6 }}>
+            Exploitation
+            <input
+              value={csvForm.exploitation}
+              onChange={(e) => {
+                setCsvError("");
+                setCsvForm((prev) => ({ ...prev, exploitation: e.target.value }));
+              }}
+              style={{
+                padding: "8px 10px",
+                borderRadius: 8,
+                border: "1px solid #d1d5db",
+              }}
+            />
+          </label>
+          <label style={{ fontSize: 13, display: "flex", flexDirection: "column", gap: 6 }}>
+            Code exploitation
+            <input
+              value={csvForm.codeExploitation}
+              onChange={(e) => {
+                setCsvError("");
+                setCsvForm((prev) => ({ ...prev, codeExploitation: e.target.value }));
+              }}
+              style={{
+                padding: "8px 10px",
+                borderRadius: 8,
+                border: "1px solid #d1d5db",
+              }}
+            />
+          </label>
+          {csvError && (
+            <div style={{ color: "#b91c1c", fontSize: 12 }}>{csvError}</div>
+          )}
+        </div>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 20 }}>
+          <button
+            onClick={() => {
+              setCsvError("");
+              setShowCsvModal(false);
+            }}
+            style={{
+              padding: "8px 12px",
+              borderRadius: 8,
+              border: "1px solid #d1d5db",
+              background: "#fff",
+              cursor: "pointer",
+            }}
+          >
+            Annuler
+          </button>
+          <button
+            onClick={exportCSV}
+            style={{
+              padding: "8px 12px",
+              borderRadius: 8,
+              border: "none",
+              background: "#2563eb",
+              color: "#fff",
+              cursor: loading ? "not-allowed" : "pointer",
+              opacity: loading ? 0.7 : 1,
+            }}
+            disabled={loading}
+          >
+            {loading ? "Export..." : "Exporter CSV"}
+          </button>
+        </div>
+      </div>
+    </>
+  ) : null;
+
   return (
-    <button
-      onClick={exportXML}
-      style={btn}
-      title="Exporter en XML Télépac"
-      disabled={disabled || loading}
-    >
-      <IconDownload />{" "}
-      {compact ? null : <span>{labelExport || (loading ? "Export..." : "Exporter XML")}</span>}
-    </button>
+    <>
+      <button
+        onClick={handleMainClick}
+        style={btn}
+        title="Exporter les parcelles"
+        disabled={disabled || loading}
+      >
+        <IconDownload />{" "}
+        {compact ? null : <span>{labelExport || (loading ? "Export..." : "Exporter")}</span>}
+      </button>
+      {choiceMenu}
+      {csvModal}
+    </>
   );
 }
