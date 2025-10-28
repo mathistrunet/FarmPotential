@@ -12,13 +12,7 @@ const sqlJsWasmEntry = require.resolve('sql.js/dist/sql-wasm.js')
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
-  resolve: {
-    alias: {
-      'polygon-clipping': polygonClippingEntry,
-      'sql.js/dist/sql-wasm.js': sqlJsWasmEntry,
-    },
-  },
   optimizeDeps: {
-    include: ['polygon-clipping', 'sql.js/dist/sql-wasm.js'],
+    include: ['polygon-clipping'],
   },
 })
