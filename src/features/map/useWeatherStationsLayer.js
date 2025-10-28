@@ -128,9 +128,25 @@ export function useWeatherStationsLayer() {
             }
           };
 
-          let features = await loadFeatures("/api/weather/stations");
-          if (!features.length) {
-            features = await loadFeatures("/data/weather-stations-fr.json");
+          const featuresFromApi = await loadFeatures("/api/weather/stations");
+          const featuresFromDataset = await loadFeatures(
+            "/data/weather-stations-fr.json",
+          );
+
+          let features = featuresFromApi;
+          if (featuresFromDataset.length) {
+            const byId = new Map();
+            featuresFromApi.forEach((feature) => {
+              if (feature?.id != null) {
+                byId.set(feature.id, feature);
+              }
+            });
+            featuresFromDataset.forEach((feature) => {
+              if (feature?.id != null && !byId.has(feature.id)) {
+                byId.set(feature.id, feature);
+              }
+            });
+            features = Array.from(byId.values());
           }
 
           if (!features.length) {
