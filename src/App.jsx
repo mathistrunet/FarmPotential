@@ -13,7 +13,7 @@ import RpgFeature from "./Front/useRpgLayer";
 import DrawToolbar from "./Front/DrawToolbar";
 // ✅ Import/Export Télépac (chemin conservé)
 import ImportTelepacButton, { ExportTelepacButton } from "./Front/TelepacButton";
-import WeatherSummaryPage from "./pages/WeatherSummaryPage";
+import WeatherSummaryModal from "./components/WeatherSummaryModal";
 import WeatherModal from "./components/WeatherModal";
 
 const buildParcelTitle = (feature, index) => {
@@ -357,19 +357,22 @@ function MapExperience({ onOpenSummary = () => {} }) {
 }
 
 export default function App() {
-  const [view, setView] = useState("map");
   const [analysisContext, setAnalysisContext] = useState(null);
-
-  if (view === "summary") {
-    return <WeatherSummaryPage onReturn={() => setView("map")} context={analysisContext} />;
-  }
+  const [summaryOpen, setSummaryOpen] = useState(false);
 
   return (
-    <MapExperience
-      onOpenSummary={(payload) => {
-        setAnalysisContext(payload || null);
-        setView("summary");
-      }}
-    />
+    <>
+      <MapExperience
+        onOpenSummary={(payload) => {
+          setAnalysisContext(payload || null);
+          setSummaryOpen(true);
+        }}
+      />
+      <WeatherSummaryModal
+        open={summaryOpen}
+        onClose={() => setSummaryOpen(false)}
+        context={analysisContext}
+      />
+    </>
   );
 }
