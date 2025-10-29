@@ -7,6 +7,26 @@ import {
 } from "../utils/cultureLabels";
 import { ringAreaM2 } from "../utils/geometry";
 
+function normalizePart(raw) {
+  if (raw == null) return "";
+  return String(raw).trim();
+}
+
+function buildParcelleValue(ilot, numero) {
+  const ilotPart = normalizePart(ilot);
+  const numeroPart = normalizePart(numero);
+  return `${ilotPart}.${numeroPart}`;
+}
+
+function parseParcelleInput(rawValue) {
+  const str = rawValue == null ? "" : String(rawValue);
+  const [first, ...rest] = str.split(".");
+  return {
+    ilot: first ?? "",
+    numero: rest.length > 0 ? rest.join(".") : "",
+  };
+}
+
 function normalizeDisplayValue(raw) {
   if (raw == null) return "";
   const str = String(raw).trim();
@@ -89,6 +109,53 @@ export default function ParcelleEditor({
 
   const datalistId = "cultures-master-list";
 
+  const updateParcelleParts = (index, rawValue, { enforceNumero = false } = {}) => {
+    const { ilot, numero } = parseParcelleInput(rawValue);
+    const nextIlot = normalizePart(ilot);
+    let nextNumero = normalizePart(numero);
+    if (enforceNumero && !nextNumero) {
+      nextNumero = "1";
+    }
+
+    const nextFeatures = [...features];
+    const feature = nextFeatures[index];
+    if (!feature) return;
+
+    const prevProps = feature.properties || {};
+    const prevIlot = normalizePart(prevProps.ilot_numero);
+    const prevNumero = normalizePart(prevProps.numero);
+
+    if (prevIlot === nextIlot && prevNumero === nextNumero) {
+      return;
+    }
+
+    const nextProps = { ...prevProps };
+    if (nextIlot) nextProps.ilot_numero = nextIlot;
+    else delete nextProps.ilot_numero;
+    if (nextNumero) nextProps.numero = nextNumero;
+    else delete nextProps.numero;
+
+    nextFeatures[index] = { ...feature, properties: nextProps };
+    setFeatures(nextFeatures);
+  };
+
+  const updateNomValue = (index, rawValue, { trim = false } = {}) => {
+    const nextFeatures = [...features];
+    const feature = nextFeatures[index];
+    if (!feature) return;
+
+    const nextProps = { ...(feature.properties || {}) };
+    const nextValue = trim ? rawValue.trim() : rawValue;
+    if (nextValue) nextProps.nom = nextValue;
+    else delete nextProps.nom;
+
+    const prevValue = feature.properties?.nom;
+    if (prevValue === nextProps.nom) return;
+
+    nextFeatures[index] = { ...feature, properties: nextProps };
+    setFeatures(nextFeatures);
+  };
+
   const handleCultureChange = (id, index, field, rawValue) => {
     const trimmed = rawValue.trim();
     let displayValue = rawValue;
@@ -166,10 +233,7 @@ export default function ParcelleEditor({
                   Parcelle
                 </th>
                 <th style={{ textAlign: "left", padding: "10px 12px", fontSize: 12 }}>
-                  Îlot
-                </th>
-                <th style={{ textAlign: "left", padding: "10px 12px", fontSize: 12 }}>
-                  N° parcelle
+                  Nom
                 </th>
                 <th style={{ textAlign: "right", padding: "10px 12px", fontSize: 12 }}>
                   Surface (ha)
@@ -188,7 +252,8 @@ export default function ParcelleEditor({
                 const typedRow = typed[id] || {};
                 const ilot = (f.properties?.ilot_numero ?? "").toString().trim();
                 const num = (f.properties?.numero ?? "").toString().trim();
-                const parcelleLabel = ilot && num ? `${ilot}.${num}` : ilot || num || `Parcelle ${idx + 1}`;
+                const parcelleValue = buildParcelleValue(ilot, num);
+                const parcelleName = (f.properties?.nom ?? "").toString();
                 const ring = f.geometry?.coordinates?.[0];
                 const surfaceHa = ring ? ringAreaM2(ring) / 10000 : null;
                 const selected = selectedId === id;
@@ -206,39 +271,30 @@ export default function ParcelleEditor({
                       cursor: "pointer",
                     }}
                   >
-                    <td style={{ padding: "10px 12px", fontSize: 13, fontWeight: 600 }}>
-                      {parcelleLabel}
-                    </td>
-                    <td style={{ padding: "10px 12px", minWidth: 90 }}>
+                    <td style={{ padding: "10px 12px", minWidth: 140 }}>
                       <input
-                        value={f.properties?.ilot_numero ?? ""}
+                        value={parcelleValue}
                         onChange={(e) => {
-                          const nextFeatures = [...features];
-                          const feature = nextFeatures[idx];
-                          const nextProps = { ...(feature.properties || {}), ilot_numero: e.target.value };
-                          nextFeatures[idx] = { ...feature, properties: nextProps };
-                          setFeatures(nextFeatures);
+                          updateParcelleParts(idx, e.target.value);
                         }}
+                        onBlur={(e) => updateParcelleParts(idx, e.target.value, { enforceNumero: true })}
                         onClick={(e) => e.stopPropagation()}
+                        placeholder="Îlot.Numéro"
                         style={{
                           width: "100%",
                           padding: "6px 8px",
                           borderRadius: 6,
                           border: "1px solid #d1d5db",
                           fontSize: 13,
+                          fontWeight: 600,
                         }}
                       />
                     </td>
-                    <td style={{ padding: "10px 12px", minWidth: 110 }}>
+                    <td style={{ padding: "10px 12px", minWidth: 140 }}>
                       <input
-                        value={f.properties?.numero ?? ""}
-                        onChange={(e) => {
-                          const nextFeatures = [...features];
-                          const feature = nextFeatures[idx];
-                          const nextProps = { ...(feature.properties || {}), numero: e.target.value };
-                          nextFeatures[idx] = { ...feature, properties: nextProps };
-                          setFeatures(nextFeatures);
-                        }}
+                        value={parcelleName}
+                        onChange={(e) => updateNomValue(idx, e.target.value)}
+                        onBlur={(e) => updateNomValue(idx, e.target.value, { trim: true })}
                         onClick={(e) => e.stopPropagation()}
                         style={{
                           width: "100%",
@@ -247,6 +303,7 @@ export default function ParcelleEditor({
                           border: "1px solid #d1d5db",
                           fontSize: 13,
                         }}
+                        placeholder="Nom personnalisé"
                       />
                     </td>
                     <td style={{ padding: "10px 12px", textAlign: "right", fontSize: 13, color: "#374151" }}>
@@ -318,9 +375,13 @@ export default function ParcelleEditor({
         const listId = datalistId;
         const selected = selectedId === id;
 
-        const ilot = (f.properties?.ilot_numero ?? "").toString().trim();
-        const num = (f.properties?.numero ?? "").toString().trim();
-        const titre = ilot && num ? `${ilot}.${num}` : ilot || num || "";
+        const ilot = normalizePart(f.properties?.ilot_numero);
+        const num = normalizePart(f.properties?.numero);
+        const parcelleValue = buildParcelleValue(ilot, num);
+        const parcelleNameRaw = f.properties?.nom;
+        const parcelleName = parcelleNameRaw == null ? "" : String(parcelleNameRaw);
+        const displayTitle = normalizePart(parcelleName)
+          || (ilot || num ? parcelleValue : "");
 
         const ring = f.geometry?.coordinates?.[0];
         const surfaceHa = ring ? ringAreaM2(ring) / 10000 : null;
@@ -345,7 +406,7 @@ export default function ParcelleEditor({
             title="Cliquer pour sélectionner la parcelle sur la carte"
           >
             <div style={{ fontWeight: 600, marginBottom: 6 }}>
-              Parcelle {titre || id}
+              Parcelle {displayTitle || id}
             </div>
             {surfaceHa != null && !Number.isNaN(surfaceHa) && (
               <div style={{ fontSize: 12, color: "#555", marginBottom: 6 }}>
@@ -353,53 +414,38 @@ export default function ParcelleEditor({
               </div>
             )}
 
-            <div style={{ display: "flex", gap: 4, marginBottom: 6 }}>
-              <label style={{ fontSize: 12, flex: "0 0 70px" }}>
-                Îlot
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
+              <label style={{ fontSize: 12, flex: "1 1 140px" }}>
+                Parcelle
                 <input
-                  value={f.properties?.ilot_numero ?? ""}
-                  onChange={(e) => {
-                    const nextFeatures = [...features];
-                    const feature = nextFeatures[idx];
-                    const nextProps = {
-                      ...(feature.properties || {}),
-                      ilot_numero: e.target.value,
-                    };
-                    nextFeatures[idx] = { ...feature, properties: nextProps };
-                    setFeatures(nextFeatures);
-                  }}
+                  value={parcelleValue}
+                  onChange={(e) => updateParcelleParts(idx, e.target.value)}
+                  onBlur={(e) => updateParcelleParts(idx, e.target.value, { enforceNumero: true })}
                   onClick={(e) => e.stopPropagation()}
-                  placeholder="Ex. 9"
+                  placeholder="Îlot.Numéro"
                   style={{
                     width: "100%",
-                    padding: "4px 6px",
+                    padding: "6px 8px",
                     border: "1px solid #ccc",
-                    borderRadius: 4,
+                    borderRadius: 6,
+                    fontWeight: 600,
                   }}
                 />
               </label>
 
-              <label style={{ fontSize: 12, flex: "0 0 110px" }}>
-                N° parcelle
+              <label style={{ fontSize: 12, flex: "1 1 140px" }}>
+                Nom (optionnel)
                 <input
-                  value={f.properties?.numero ?? ""}
-                  onChange={(e) => {
-                    const nextFeatures = [...features];
-                    const feature = nextFeatures[idx];
-                    const nextProps = {
-                      ...(feature.properties || {}),
-                      numero: e.target.value,
-                    };
-                    nextFeatures[idx] = { ...feature, properties: nextProps };
-                    setFeatures(nextFeatures);
-                  }}
+                  value={parcelleName}
+                  onChange={(e) => updateNomValue(idx, e.target.value)}
+                  onBlur={(e) => updateNomValue(idx, e.target.value, { trim: true })}
                   onClick={(e) => e.stopPropagation()}
-                  placeholder="Ex. 1"
+                  placeholder="Nom personnalisé"
                   style={{
                     width: "100%",
-                    padding: "4px 6px",
+                    padding: "6px 8px",
                     border: "1px solid #ccc",
-                    borderRadius: 4,
+                    borderRadius: 6,
                   }}
                 />
               </label>

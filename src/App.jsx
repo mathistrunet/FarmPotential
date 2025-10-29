@@ -301,18 +301,15 @@ export default function App() {
               Calques
             </button>
           </div>
-        </div>
 
-        {/* Contenu onglet “Parcelles” */}
-        {activeTab === "parcelles" && (
-          <>
+          {activeTab === "parcelles" && (
             <div
               style={{
                 display: "flex",
                 flexWrap: "wrap",
                 alignItems: "center",
                 gap: 8,
-                marginBottom: 8,
+                marginBottom: 4,
               }}
             >
               <span style={{ fontSize: 12, color: "#555" }}>Affichage</span>
@@ -375,6 +372,12 @@ export default function App() {
                 {sideExpanded ? "Réduire" : "Agrandir"}
               </button>
             </div>
+          )}
+        </div>
+
+        {/* Contenu onglet “Parcelles” */}
+        {activeTab === "parcelles" && (
+          <>
             <p style={{ color: "#666", marginTop: 0 }}>
               • “Importer XML Télépac” pour charger un export.
               <br />
