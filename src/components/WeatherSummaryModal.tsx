@@ -11,9 +11,10 @@ interface WeatherSummaryModalProps {
   open: boolean;
   onClose: () => void;
   context?: SummaryContext | null;
+  onOpenHistory?: () => void;
 }
 
-export default function WeatherSummaryModal({ open, onClose, context }: WeatherSummaryModalProps) {
+export default function WeatherSummaryModal({ open, onClose, context, onOpenHistory }: WeatherSummaryModalProps) {
   if (!open) {
     return null;
   }
@@ -60,28 +61,79 @@ export default function WeatherSummaryModal({ open, onClose, context }: WeatherS
   };
 
   const headerStyle: CSSProperties = {
-    padding: '24px clamp(28px, 4vw, 56px) 0',
+    padding: '24px clamp(28px, 4vw, 56px) 16px',
+    borderBottom: '1px solid #e2e8f0',
     display: 'flex',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
+    flexDirection: 'column',
     gap: 16,
+  };
+
+  const tabsContainerStyle: CSSProperties = {
+    display: 'flex',
+    gap: 4,
+    background: '#e2e8f0',
+    padding: 4,
+    borderRadius: 999,
+    alignSelf: 'flex-start',
+  };
+
+  const activeTabStyle: CSSProperties = {
+    padding: '10px 18px',
+    borderRadius: 999,
+    border: 'none',
+    background: '#0ea5e9',
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: 'default',
+  };
+
+  const inactiveTabStyle: CSSProperties = {
+    padding: '10px 18px',
+    borderRadius: 999,
+    border: 'none',
+    background: '#fff',
+    color: '#0f172a',
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: 'pointer',
   };
 
   return createPortal(
     <div role="dialog" aria-modal="true" style={overlayStyle}>
       <div style={cardStyle}>
         <header style={headerStyle}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <h2 style={{ margin: 0, fontSize: 22 }}>Synthèse météo</h2>
-            {context?.parcelLabel ? (
-              <p style={{ margin: 0, fontSize: 14, color: '#475569' }}>
-                Parcelle : {context.parcelLabel}
-              </p>
-            ) : null}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <h2 style={{ margin: 0, fontSize: 22 }}>Synthèse météo</h2>
+              {context?.parcelLabel ? (
+                <p style={{ margin: 0, fontSize: 14, color: '#475569' }}>
+                  Parcelle : {context.parcelLabel}
+                </p>
+              ) : null}
+            </div>
+            <button type="button" onClick={onClose} aria-label="Fermer" style={closeButtonStyle}>
+              ×
+            </button>
           </div>
-          <button type="button" onClick={onClose} aria-label="Fermer" style={closeButtonStyle}>
-            ×
-          </button>
+          <nav style={tabsContainerStyle}>
+            <button
+              type="button"
+              onClick={onOpenHistory}
+              style={
+                onOpenHistory
+                  ? inactiveTabStyle
+                  : { ...inactiveTabStyle, cursor: 'not-allowed', opacity: 0.6 }
+              }
+              aria-label="Afficher l'historique météo"
+              disabled={!onOpenHistory}
+            >
+              Historique météo
+            </button>
+            <button type="button" style={activeTabStyle} disabled aria-current="page">
+              Synthèse météo
+            </button>
+          </nav>
         </header>
         <div style={contentStyle}>
           <WeatherAnalysisPanel

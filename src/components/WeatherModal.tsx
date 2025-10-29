@@ -464,7 +464,16 @@ export default function WeatherModal({ open, onClose, centroid, parcelLabel, onO
               ×
             </button>
           </div>
-          <nav style={{ display: 'flex', gap: 4 }}>
+          <nav
+            style={{
+              display: 'flex',
+              gap: 4,
+              background: '#e2e8f0',
+              padding: 4,
+              borderRadius: 999,
+              alignSelf: 'flex-start',
+            }}
+          >
             <button
               type="button"
               disabled
@@ -489,13 +498,14 @@ export default function WeatherModal({ open, onClose, centroid, parcelLabel, onO
               style={{
                 padding: '10px 18px',
                 borderRadius: 999,
-                border: '1px solid #e2e8f0',
+                border: 'none',
                 background: '#fff',
                 color: '#0f172a',
                 fontSize: 13,
                 fontWeight: 600,
                 cursor: 'pointer',
               }}
+              aria-label="Afficher la synthèse météo"
             >
               Synthèse météo
             </button>
