@@ -13,11 +13,12 @@ Telepac Mapper is a small React application for viewing and editing agricultural
    ```bash
    npm install
    ```
-2. Start the development server:
+2. Start the development environment (React app + weather API):
    ```bash
    npm run dev
    ```
-   The app is served at [http://localhost:5173](http://localhost:5173).
+   The React application is served at [http://localhost:5173](http://localhost:5173) and the Express API is started on port 3001.
+   If you only need the frontend you can use `npm run dev:client`.
 
 ## Building
 Create a production build in `dist/`:
