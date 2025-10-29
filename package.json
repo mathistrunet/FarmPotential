@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node scripts/dev-server.mjs",
     "dev:client": "vite",
-    "dev:server": "ts-node --project tsconfig.server.json server/src/index.ts",
+    "dev:server": "node --loader ts-node/esm scripts/run-weather-server.mjs",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
