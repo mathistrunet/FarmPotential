@@ -9,7 +9,7 @@ const require = createRequire(import.meta.url);
 
 const vitePackageJson = require.resolve('vite/package.json');
 const viteBin = path.join(path.dirname(vitePackageJson), 'bin', 'vite.js');
-const tsNodeLoader = pathToFileURL(require.resolve('ts-node/esm')).href;
+const tsNodeLoader = require.resolve('ts-node/esm');
 const weatherServerScript = path.join(process.cwd(), 'scripts', 'run-weather-server.mjs');
 
 const children = new Set();
