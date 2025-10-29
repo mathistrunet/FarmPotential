@@ -4,8 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently -k -n client,server \"npm:dev:client\" \"npm:server:dev\"",
+    "dev": "node scripts/dev-server.mjs",
     "dev:client": "vite",
+    "dev:server": "ts-node --project tsconfig.server.json server/src/index.ts",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
