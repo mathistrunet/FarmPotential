@@ -2,10 +2,12 @@
 import { spawn } from 'node:child_process';
 import process from 'node:process';
 import { createRequire } from 'node:module';
+import path from 'node:path';
 
 const require = createRequire(import.meta.url);
 
-const viteBin = require.resolve('vite/bin/vite.js');
+const vitePackageJson = require.resolve('vite/package.json');
+const viteBin = path.join(path.dirname(vitePackageJson), 'bin', 'vite.js');
 const tsNodeBin = require.resolve('ts-node/dist/bin.js');
 
 const children = new Set();
