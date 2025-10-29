@@ -2,21 +2,10 @@
 import { spawn } from 'node:child_process';
 import process from 'node:process';
 import { createRequire } from 'node:module';
-import { dirname, join } from 'node:path';
 
 const require = createRequire(import.meta.url);
 
-const vitePackageJsonPath = require.resolve('vite/package.json');
-const { bin: viteBinEntry } = require('vite/package.json');
-const viteBin = (() => {
-  if (typeof viteBinEntry === 'string') {
-    return join(dirname(vitePackageJsonPath), viteBinEntry);
-  }
-  if (viteBinEntry && typeof viteBinEntry.vite === 'string') {
-    return join(dirname(vitePackageJsonPath), viteBinEntry.vite);
-  }
-  throw new Error('Unable to resolve Vite binary path from package.json');
-})();
+const viteBin = require.resolve('vite/bin/vite.js');
 const tsNodeBin = require.resolve('ts-node/dist/bin.js');
 
 const children = new Set();
