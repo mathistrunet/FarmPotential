@@ -29,12 +29,10 @@ function escapeCsvCell(value) {
 
 function getParcelleLabel(feature, index) {
   const props = feature?.properties || {};
-  if (props.nom_affiche) return String(props.nom_affiche);
   const ilot = (props.ilot_numero ?? "").toString().trim();
   const numero = (props.numero ?? "").toString().trim();
-  if (ilot && numero) return `${ilot}-${numero}`;
-  if (numero) return numero;
-  if (ilot) return ilot;
+  if (ilot || numero) return `${ilot}.${numero}`;
+  if (props.nom_affiche) return String(props.nom_affiche);
   if (props.nom) return String(props.nom);
   if (props.name) return String(props.name);
   return `Parcelle ${index + 1}`;
@@ -53,12 +51,14 @@ function buildCsvContent(features, secteur, exploitation, codeExploitation) {
     "Exploitation",
     "Code exploitation",
     "Parcelle",
+    "Nom",
     "CultureN",
     "CultureN-1",
   ];
 
   const rows = features.map((feature, idx) => {
     const parcelle = getParcelleLabel(feature, idx);
+    const parcelleName = (feature?.properties?.nom ?? "").toString().trim();
     const culture = displayLabelFromProps(feature?.properties || {});
     const culturePrev = displayCultureValue(
       feature?.properties?.cultureN_1 ??
@@ -70,6 +70,7 @@ function buildCsvContent(features, secteur, exploitation, codeExploitation) {
       exploitation,
       codeExploitation,
       parcelle,
+      parcelleName,
       culture,
       culturePrev,
     ];
