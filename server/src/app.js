@@ -6,7 +6,7 @@ export function createApp() {
   app.use(express.json());
 
   app.get('/health', (_req, res) => {
-    res.json({ status: 'ok' });
+    res.json({ ok: true });
   });
 
   app.use('/api/weather', weatherRouter);
@@ -14,4 +14,6 @@ export function createApp() {
   return app;
 }
 
-export default createApp;
+const app = createApp();
+
+export default app;
