@@ -13,11 +13,11 @@ Telepac Mapper is a small React application for viewing and editing agricultural
    ```bash
    npm install
    ```
-2. Start the development server:
+2. Start the development servers (client + weather API):
    ```bash
    npm run dev
    ```
-   The app is served at [http://localhost:5173](http://localhost:5173).
+   This command now launches both the Vite client and the local weather API concurrently. The app is served at [http://localhost:5173](http://localhost:5173) and the API listens on `http://localhost:3001`.
 
 ## Building
 Create a production build in `dist/`:
