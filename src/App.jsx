@@ -218,6 +218,14 @@ export default function App() {
         : "1fr 420px"
       : "1fr 0px",
   };
+  const sidePanelHeaderStyle = {
+    position: "sticky",
+    top: 0,
+    background: "#fff",
+    paddingBottom: 12,
+    zIndex: 1,
+    borderBottom: "1px solid #eee",
+  };
 
   return (
     <div style={layoutStyle}>
@@ -235,66 +243,65 @@ export default function App() {
           display: sideOpen ? "block" : "none",
         }}
       >
-        {/* En-tête + bouton pour replier */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 8,
-          }}
-        >
-          <h1 style={{ margin: 0, fontSize: 18 }}>Assolia Telepac Mapper</h1>
-          <button
-            onClick={() => {
-              setSideOpen(false);
-              setParcelleViewMode("cards");
-            }}
-            title="Replier le panneau"
+        <div style={sidePanelHeaderStyle}>
+          {/* En-tête + bouton pour replier */}
+          <div
             style={{
-              padding: "6px 8px",
-              borderRadius: 6,
-              border: "1px solid #ddd",
-              background: "#fff",
-              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 8,
             }}
           >
-            ◀
-          </button>
-        </div>
+            <h1 style={{ margin: 0, fontSize: 18 }}>Assolia Telepac Mapper</h1>
+            <button
+              onClick={() => {
+                setSideOpen(false);
+                setParcelleViewMode("cards");
+              }}
+              title="Replier le panneau"
+              style={{
+                padding: "6px 8px",
+                borderRadius: 6,
+                border: "1px solid #ddd",
+                background: "#fff",
+                cursor: "pointer",
+              }}
+            >
+              ◀
+            </button>
+          </div>
 
-        {/* Onglets */}
-        <div
-          style={{ display: "flex", gap: 6, marginTop: 12, marginBottom: 8 }}
-        >
-          <button
-            onClick={() => setActiveTab("parcelles")}
-            style={{
-              padding: "8px 10px",
-              borderRadius: 8,
-              border: "1px solid #ddd",
-              background: activeTab === "parcelles" ? "#eef6ff" : "#fff",
-              cursor: "pointer",
-            }}
+          {/* Onglets */}
+          <div
+            style={{ display: "flex", gap: 6, marginTop: 12, marginBottom: 8 }}
           >
-            Parcelles
-          </button>
-          <button
-            onClick={() => setActiveTab("calques")}
-            style={{
-              padding: "8px 10px",
-              borderRadius: 8,
-              border: "1px solid #ddd",
-              background: activeTab === "calques" ? "#ffeeeeff" : "#fff",
-              cursor: "pointer",
-            }}
-          >
-            Calques
-          </button>
+            <button
+              onClick={() => setActiveTab("parcelles")}
+              style={{
+                padding: "8px 10px",
+                borderRadius: 8,
+                border: "1px solid #ddd",
+                background: activeTab === "parcelles" ? "#eef6ff" : "#fff",
+                cursor: "pointer",
+              }}
+            >
+              Parcelles
+            </button>
+            <button
+              onClick={() => setActiveTab("calques")}
+              style={{
+                padding: "8px 10px",
+                borderRadius: 8,
+                border: "1px solid #ddd",
+                background: activeTab === "calques" ? "#ffeeeeff" : "#fff",
+                cursor: "pointer",
+              }}
+            >
+              Calques
+            </button>
+          </div>
         </div>
-
-        {/* RPG (autonome) */}
-        <RpgFeature mapRef={mapRef} drawRef={drawRef} />
 
         {/* Contenu onglet “Parcelles” */}
         {activeTab === "parcelles" && (
@@ -401,6 +408,8 @@ export default function App() {
             </span>
             <div style={{ marginTop: 8 }}>
               <RasterToggles mapRef={mapRef} />
+              {/* RPG (autonome) */}
+              <RpgFeature mapRef={mapRef} drawRef={drawRef} />
               <div
                 style={{
                   border: "1px solid #eee",
