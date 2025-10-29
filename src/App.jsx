@@ -28,7 +28,12 @@ const buildParcelTitle = (feature, index) => {
   return "Parcelle";
 };
 
-function MapExperience({ onOpenSummary = () => {} }) {
+function MapExperience({
+  onOpenSummary = () => {},
+  weatherModalOpen = false,
+  onOpenWeather = () => {},
+  onCloseWeather = () => {},
+}) {
   const {
     mapRef,
     drawRef,
@@ -41,11 +46,9 @@ function MapExperience({ onOpenSummary = () => {} }) {
   const [sideOpen, setSideOpen] = useState(true); // panneau latéral ouvert/fermé
   const [activeTab, setActiveTab] = useState("parcelles"); // "parcelles" | "calques"
   const [compact, setCompact] = useState(false);
-  const [weatherModalOpen, setWeatherModalOpen] = useState(false);
-
   const handleRequestWeather = useCallback(() => {
-    setWeatherModalOpen(true);
-  }, []);
+    onOpenWeather();
+  }, [onOpenWeather]);
 
   const selectedInfo = useMemo(() => {
     if (selectedId == null) {
@@ -99,9 +102,9 @@ function MapExperience({ onOpenSummary = () => {} }) {
   }, [onOpenSummary, selectedInfo.centroid, selectedInfo.label]);
 
   const handleNavigateToSummaryFromModal = useCallback(() => {
-    setWeatherModalOpen(false);
+    onCloseWeather();
     handleOpenSummaryView();
-  }, [handleOpenSummaryView]);
+  }, [handleOpenSummaryView, onCloseWeather]);
 
   const layoutStyle = {
     height: "100%",
@@ -347,7 +350,7 @@ function MapExperience({ onOpenSummary = () => {} }) {
 
       <WeatherModal
         open={weatherModalOpen}
-        onClose={() => setWeatherModalOpen(false)}
+        onClose={onCloseWeather}
         parcelLabel={selectedInfo.label}
         centroid={selectedInfo.centroid}
         onOpenSummary={handleNavigateToSummaryFromModal}
@@ -357,12 +360,21 @@ function MapExperience({ onOpenSummary = () => {} }) {
 }
 
 export default function App() {
+  const [weatherModalOpen, setWeatherModalOpen] = useState(false);
   const [analysisContext, setAnalysisContext] = useState(null);
   const [summaryOpen, setSummaryOpen] = useState(false);
+
+  const handleOpenHistoryFromSummary = useCallback(() => {
+    setSummaryOpen(false);
+    setWeatherModalOpen(true);
+  }, []);
 
   return (
     <>
       <MapExperience
+        weatherModalOpen={weatherModalOpen}
+        onOpenWeather={() => setWeatherModalOpen(true)}
+        onCloseWeather={() => setWeatherModalOpen(false)}
         onOpenSummary={(payload) => {
           setAnalysisContext(payload || null);
           setSummaryOpen(true);
@@ -372,6 +384,7 @@ export default function App() {
         open={summaryOpen}
         onClose={() => setSummaryOpen(false)}
         context={analysisContext}
+        onOpenHistory={handleOpenHistoryFromSummary}
       />
     </>
   );
