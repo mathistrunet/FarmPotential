@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { indicatorsForSlice, maxRun, computeHeatwaveStats, type YearSlice } from './indicators.js';
+import {
+  aggregateIndicators,
+  indicatorsForSlice,
+  maxRun,
+  computeHeatwaveStats,
+  type YearIndicators,
+  type YearSlice,
+} from './indicators.js';
 import type { Obs } from './infoclimatClient.js';
 
 function createObservation(year: number, dayOfYear: number, values: Partial<Obs>): Obs {
@@ -92,5 +99,69 @@ describe('computeHeatwaveStats', () => {
     expect(stats.events).toBe(2);
     expect(stats.longest).toBe(3);
     expect(stats.totalDays).toBe(6);
+  });
+});
+
+function createYearIndicators(year: number, rainfallTotal: number): YearIndicators {
+  return {
+    year,
+    gdd: { base10: 100 + (year % 5) * 5 },
+    hdd: { base0: 50 + (year % 3) * 2 },
+    freezeDays: { le0: 5, leMinus2: 3, leMinus4: 1 },
+    heatDays: { ge30: 2, ge32: 1, ge35: 0 },
+    heatwaves: {
+      ge32x3: { events: 0, totalDays: 0, longest: 0 },
+    },
+    rainfall: {
+      total: rainfallTotal,
+      dryDays: 20,
+      maxDrySpell: 4,
+      heavyRainDays: { '20': 1 },
+      values: [rainfallTotal],
+    },
+    wind: {
+      meanDays: { '8': 2 },
+      gustDays: { '15': 1 },
+    },
+    freezeEvents: { lastSpringFreezeDoy: null, firstAutumnFreezeDoy: null },
+  };
+}
+
+describe('aggregateIndicators', () => {
+  const dataset = Array.from({ length: 10 }, (_, index) =>
+    createYearIndicators(2010 + index, 100 + index * 10),
+  );
+
+  it('produit une synthèse sur 1 an', () => {
+    const { stats } = aggregateIndicators(dataset.slice(-1));
+    expect(stats.rainfallTotal).toEqual({
+      mean: 190,
+      stdev: 0,
+      p10: 190,
+      p50: 190,
+      p90: 190,
+    });
+  });
+
+  it('produit une synthèse sur 5 ans', () => {
+    const { stats } = aggregateIndicators(dataset.slice(-5));
+    expect(stats.rainfallTotal).toEqual({
+      mean: 170,
+      stdev: 15.81,
+      p10: 154,
+      p50: 170,
+      p90: 186,
+    });
+  });
+
+  it('produit une synthèse sur 10 ans', () => {
+    const { stats } = aggregateIndicators(dataset);
+    expect(stats.rainfallTotal).toEqual({
+      mean: 145,
+      stdev: 30.28,
+      p10: 109,
+      p50: 145,
+      p90: 181,
+    });
   });
 });
