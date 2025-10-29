@@ -78,11 +78,38 @@ router.get('/analyze', async (req, res, next) => {
     const startYear = now.getUTCFullYear() - input.yearsBack + 1;
     const startISO = new Date(Date.UTC(startYear, 0, 1)).toISOString();
 
+    const fetchErrors: Error[] = [];
     const observationsByStation = await Promise.all(
-      stations.map((station: StationWithDistance) => getObservationsForStation(station.id, startISO, endISO))
+      stations.map(async (station: StationWithDistance) => {
+        try {
+          return await getObservationsForStation(station.id, startISO, endISO);
+        } catch (error) {
+          const normalizedError = error instanceof Error ? error : new Error(String(error));
+          fetchErrors.push(normalizedError);
+          console.warn(
+            `Unable to load Infoclimat observations for station ${station.id}:`,
+            normalizedError
+          );
+          return [];
+        }
+      })
     );
 
     const mergedObservations = mergeStationsObservations(stations, observationsByStation, input.lat, input.lon);
+    if (!mergedObservations.length) {
+      if (fetchErrors.length) {
+        const missingKey = fetchErrors.some((error) =>
+          /INFOCLIMAT_API_KEY/i.test(error.message ?? '')
+        );
+        const message = missingKey
+          ? "Impossible de contacter l'API Infoclimat : configurez la variable d'environnement INFOCLIMAT_API_KEY."
+          : "Impossible de récupérer les observations Infoclimat pour la période demandée.";
+        res.status(502).json({ error: message });
+      } else {
+        res.status(404).json({ error: 'Aucune observation disponible pour la période demandée.' });
+      }
+      return;
+    }
     const slices: YearSlice[] = sliceByPhase(
       mergedObservations,
       input.phase.startDayOfYear,
