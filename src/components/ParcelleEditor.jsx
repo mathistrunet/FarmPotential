@@ -66,7 +66,9 @@ export default function ParcelleEditor({
 }) {
   const options = entriesCodebook();
   const rowsRef = useRef(new Map());
+  const parcelleInputRefs = useRef(new Map());
   const [typed, setTyped] = useState({});
+  const [editingParcelleId, setEditingParcelleId] = useState(null);
 
   useEffect(() => {
     if (!selectedId) return;
@@ -77,6 +79,21 @@ export default function ParcelleEditor({
       setTimeout(() => el.classList.remove("row-selected"), 700);
     }
   }, [selectedId]);
+
+  useEffect(() => {
+    if (editingParcelleId == null) return;
+    const input = parcelleInputRefs.current.get(editingParcelleId);
+    if (input?.focus) {
+      input.focus();
+      if (input.select) input.select();
+    }
+  }, [editingParcelleId]);
+
+  useEffect(() => {
+    if (viewMode !== "cards") {
+      setEditingParcelleId(null);
+    }
+  }, [viewMode]);
 
   useEffect(() => {
     setTyped((prev) => {
@@ -460,11 +477,14 @@ export default function ParcelleEditor({
 
         const ilot = normalizePart(f.properties?.ilot_numero);
         const num = normalizePart(f.properties?.numero);
-        const parcelleValue = buildParcelleValue(ilot, num);
+        const rawParcelleValue = buildParcelleValue(ilot, num);
+        const hasParcelleParts = Boolean(ilot || num);
+        const parcelleValue = hasParcelleParts ? rawParcelleValue : "";
         const parcelleNameRaw = f.properties?.nom;
         const parcelleName = parcelleNameRaw == null ? "" : String(parcelleNameRaw);
         const displayTitle = normalizePart(parcelleName)
-          || (ilot || num ? parcelleValue : "");
+          || (hasParcelleParts ? rawParcelleValue : "");
+        const isEditingParcelle = editingParcelleId === id;
 
         const ring = f.geometry?.coordinates?.[0];
         const surfaceHa = ring ? ringAreaM2(ring) / 10000 : null;
@@ -488,8 +508,71 @@ export default function ParcelleEditor({
             }}
             title="Cliquer pour sélectionner la parcelle sur la carte"
           >
-            <div style={{ fontWeight: 600, marginBottom: 6 }}>
-              Parcelle {displayTitle || id}
+            <div
+              style={{
+                fontWeight: 600,
+                marginBottom: 6,
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 6,
+                alignItems: "baseline",
+              }}
+            >
+              <span>Parcelle</span>
+              {isEditingParcelle ? (
+                <input
+                  ref={(el) => {
+                    if (el) parcelleInputRefs.current.set(id, el);
+                    else parcelleInputRefs.current.delete(id);
+                  }}
+                  value={parcelleValue}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => updateParcelleParts(idx, e.target.value)}
+                  onBlur={(e) => {
+                    updateParcelleParts(idx, e.target.value, { enforceNumero: true });
+                    setEditingParcelleId(null);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      updateParcelleParts(idx, e.currentTarget.value, { enforceNumero: true });
+                      setEditingParcelleId(null);
+                    } else if (e.key === "Escape") {
+                      e.currentTarget.value = parcelleValue;
+                      setEditingParcelleId(null);
+                    }
+                  }}
+                  style={{
+                    minWidth: 80,
+                    padding: "2px 6px",
+                    borderRadius: 6,
+                    border: "1px solid #ccc",
+                    fontWeight: 600,
+                  }}
+                />
+              ) : (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEditingParcelleId(id);
+                  }}
+                  style={{
+                    border: "none",
+                    background: "transparent",
+                    padding: "2px 6px",
+                    borderRadius: 6,
+                    cursor: "text",
+                    fontWeight: 600,
+                  }}
+                >
+                  {parcelleValue || id}
+                </button>
+              )}
+              {displayTitle && displayTitle !== parcelleValue && (
+                <span style={{ color: "#4b5563", fontWeight: 500 }}>
+                  {displayTitle}
+                </span>
+              )}
             </div>
             {surfaceHa != null && !Number.isNaN(surfaceHa) && (
               <div style={{ fontSize: 12, color: "#555", marginBottom: 6 }}>
@@ -498,24 +581,6 @@ export default function ParcelleEditor({
             )}
 
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
-              <label style={{ fontSize: 12, flex: "1 1 140px" }}>
-                Parcelle
-                <input
-                  value={parcelleValue}
-                  onChange={(e) => updateParcelleParts(idx, e.target.value)}
-                  onBlur={(e) => updateParcelleParts(idx, e.target.value, { enforceNumero: true })}
-                  onClick={(e) => e.stopPropagation()}
-                  placeholder="Îlot.Numéro"
-                  style={{
-                    width: "100%",
-                    padding: "6px 8px",
-                    border: "1px solid #ccc",
-                    borderRadius: 6,
-                    fontWeight: 600,
-                  }}
-                />
-              </label>
-
               <label style={{ fontSize: 12, flex: "1 1 140px" }}>
                 Nom (optionnel)
                 <input
