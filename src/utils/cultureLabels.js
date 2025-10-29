@@ -47,7 +47,7 @@ export function detectCultureCode(props = {}) {
   const codeLike = [
     "CODE_CULTURE","CODE_CULTU","CULT_CODE","CODE","CODE_CULT",
     "CODE_CULTUR","CULTURE_CODE","CD_CULT","CULT","code_culture","code_cult",
-    "CULTURE","culture"
+    "CULTURE","culture","cultureN","cultureN_1","culture_prec"
   ];
   const looksLikeCode = (value) => {
     if (value == null) return false;
@@ -78,7 +78,8 @@ export function displayLabelFromProps(props = {}) {
 
   const DIRECT_KEYS = [
     "LIB_CULTURE","LIB_CULTU","LIBELLE_CULTURE","NOM_CULTURE","LIB_LONG","LIBELLE",
-    "CULTURE","culture","CULT_NOM","CULT_LIB","INTITULE","INTITULE_CULTURE"
+    "CULTURE","culture","CULT_NOM","CULT_LIB","INTITULE","INTITULE_CULTURE",
+    "cultureN","cultureN_1"
   ];
   for (const k of DIRECT_KEYS) {
     const v = props[k];

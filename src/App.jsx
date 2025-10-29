@@ -37,7 +37,9 @@ export default function App() {
 
   // Onglets + panneau latéral repliable
   const [sideOpen, setSideOpen] = useState(true);          // panneau latéral ouvert/fermé
+  const [sideExpanded, setSideExpanded] = useState(false); // largeur étendue pour le tableau
   const [activeTab, setActiveTab] = useState("parcelles"); // "parcelles" | "calques"
+  const [parcelleViewMode, setParcelleViewMode] = useState("cards"); // "cards" | "table"
   const [compact, setCompact] = useState(false);
   const [rrpVisible, setRrpVisible] = useState(false);
   const [rrpOpacity, setRrpOpacity] = useState(DEFAULT_FILL_OPACITY);
@@ -46,6 +48,20 @@ export default function App() {
   );
   const [freezeTiles, setFreezeTiles] = useState(false);
   const [soilClickInfo, setSoilClickInfo] = useState(null);
+
+  useEffect(() => {
+    if (!sideOpen) {
+      setSideExpanded(false);
+    }
+  }, [sideOpen]);
+
+  useEffect(() => {
+    if (parcelleViewMode === "table" && sideOpen) {
+      setSideExpanded(true);
+    } else if (parcelleViewMode !== "table") {
+      setSideExpanded(false);
+    }
+  }, [parcelleViewMode, sideOpen]);
 
   // ✅ expose maplibregl pour les popups utilisés par le hook local
   useEffect(() => {
@@ -196,7 +212,11 @@ export default function App() {
     height: "100%",
     position: "relative",
     display: "grid",
-    gridTemplateColumns: sideOpen ? "1fr 420px" : "1fr 0px",
+    gridTemplateColumns: sideOpen
+      ? sideExpanded
+        ? "minmax(320px, 45%) minmax(420px, 55%)"
+        : "1fr 420px"
+      : "1fr 0px",
   };
 
   return (
@@ -226,7 +246,10 @@ export default function App() {
         >
           <h1 style={{ margin: 0, fontSize: 18 }}>Assolia Telepac Mapper</h1>
           <button
-            onClick={() => setSideOpen(false)}
+            onClick={() => {
+              setSideOpen(false);
+              setParcelleViewMode("cards");
+            }}
             title="Replier le panneau"
             style={{
               padding: "6px 8px",
@@ -276,6 +299,75 @@ export default function App() {
         {/* Contenu onglet “Parcelles” */}
         {activeTab === "parcelles" && (
           <>
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                alignItems: "center",
+                gap: 8,
+                marginBottom: 8,
+              }}
+            >
+              <span style={{ fontSize: 12, color: "#555" }}>Affichage</span>
+              <div
+                style={{
+                  display: "inline-flex",
+                  border: "1px solid #d1d5db",
+                  borderRadius: 999,
+                  padding: 2,
+                  background: "#f9fafb",
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setParcelleViewMode("cards")}
+                  style={{
+                    padding: "6px 12px",
+                    borderRadius: 999,
+                    border: "none",
+                    cursor: "pointer",
+                    background:
+                      parcelleViewMode === "cards" ? "#2563eb" : "transparent",
+                    color: parcelleViewMode === "cards" ? "#fff" : "#111",
+                    fontSize: 12,
+                  }}
+                >
+                  Fiches
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setParcelleViewMode("table")}
+                  style={{
+                    padding: "6px 12px",
+                    borderRadius: 999,
+                    border: "none",
+                    cursor: "pointer",
+                    background:
+                      parcelleViewMode === "table" ? "#2563eb" : "transparent",
+                    color: parcelleViewMode === "table" ? "#fff" : "#111",
+                    fontSize: 12,
+                  }}
+                >
+                  Tableau
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSideExpanded((v) => !v)}
+                style={{
+                  marginLeft: "auto",
+                  padding: "6px 10px",
+                  borderRadius: 8,
+                  border: "1px solid #d1d5db",
+                  background: sideExpanded ? "#eef2ff" : "#fff",
+                  cursor: "pointer",
+                  fontSize: 12,
+                  display: parcelleViewMode === "table" ? "inline-flex" : "none",
+                }}
+              >
+                {sideExpanded ? "Réduire" : "Agrandir"}
+              </button>
+            </div>
             <p style={{ color: "#666", marginTop: 0 }}>
               • “Importer XML Télépac” pour charger un export.
               <br />
@@ -289,6 +381,7 @@ export default function App() {
               setFeatures={setFeatures}
               selectedId={selectedId}
               onSelect={(id) => selectFeatureOnMap(id, true)}
+              viewMode={parcelleViewMode}
             />
 
             <p style={{ fontSize: 12, color: "#777", marginTop: 10 }}>

@@ -1,7 +1,7 @@
 // src/Front/ExportMenuButton.jsx
 import React, { useMemo, useState } from "react";
 import { buildTelepacXML } from "../services/telepacXml";
-import { displayLabelFromProps } from "../utils/cultureLabels";
+import { displayLabelFromProps, labelFromCode } from "../utils/cultureLabels";
 
 const iconStyle = { width: 18, height: 18, display: "inline-block", verticalAlign: "-3px" };
 const IconDownload = () => (
@@ -40,6 +40,13 @@ function getParcelleLabel(feature, index) {
   return `Parcelle ${index + 1}`;
 }
 
+function displayCultureValue(raw) {
+  if (raw == null) return "";
+  const value = String(raw).trim();
+  if (!value) return "";
+  return labelFromCode(value) || value;
+}
+
 function buildCsvContent(features, secteur, exploitation, codeExploitation) {
   const header = [
     "Secteur",
@@ -47,12 +54,25 @@ function buildCsvContent(features, secteur, exploitation, codeExploitation) {
     "Code exploitation",
     "Parcelle",
     "CultureN",
+    "CultureN-1",
   ];
 
   const rows = features.map((feature, idx) => {
     const parcelle = getParcelleLabel(feature, idx);
     const culture = displayLabelFromProps(feature?.properties || {});
-    return [secteur, exploitation, codeExploitation, parcelle, culture];
+    const culturePrev = displayCultureValue(
+      feature?.properties?.cultureN_1 ??
+        feature?.properties?.cultureN1 ??
+        feature?.properties?.culture_prec
+    );
+    return [
+      secteur,
+      exploitation,
+      codeExploitation,
+      parcelle,
+      culture,
+      culturePrev,
+    ];
   });
 
   return [header, ...rows]
