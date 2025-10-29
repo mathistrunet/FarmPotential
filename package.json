@@ -4,7 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "node scripts/dev-server.mjs",
+    "dev:client": "vite",
+    "dev:server": "ts-node --project tsconfig.server.json server/src/index.ts",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
