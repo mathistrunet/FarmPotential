@@ -14,7 +14,6 @@
   },
   "dependencies": {
     "@mapbox/mapbox-gl-draw": "^1.5.0",
-    "@types/localforage": "^0.0.33",
     "better-sqlite3": "^12.4.1",
     "csv-parse": "^6.1.0",
     "express": "^5.1.0",
@@ -32,6 +31,7 @@
     "@eslint/js": "^9.33.0",
     "@types/better-sqlite3": "^7.6.13",
     "@types/express": "^5.0.3",
+    "@types/localforage": "^0.0.33",
     "@types/node": "^24.6.2",
     "@types/react": "^19.1.10",
     "@types/react-dom": "^19.1.7",
