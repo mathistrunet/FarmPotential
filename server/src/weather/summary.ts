@@ -113,12 +113,19 @@ export function buildWeatherSummary(
   const precipitationDays = new Set<string>();
 
   observations.forEach((obs) => {
+    if (!obs || typeof obs.ts !== 'string') {
+      return;
+    }
+
     const date = ensureInRange(obs, startMs, endMs);
     if (!date) return;
     const month = date.getUTCMonth();
     const hour = date.getUTCHours();
     const dayKey = `${date.getUTCFullYear()}-${date.getUTCMonth()}-${date.getUTCDate()}`;
     const bucket = monthly[month];
+    if (!bucket) {
+      return;
+    }
 
     if (typeof obs.t === 'number' && Number.isFinite(obs.t)) {
       if (hour >= DAY_START_HOUR && hour < DAY_END_HOUR) {
