@@ -220,28 +220,68 @@ export default function ParcelleEditor({
           <table
             style={{
               width: "100%",
-              minWidth: 720,
+              minWidth: 620,
               borderCollapse: "collapse",
               border: "1px solid #e5e7eb",
               borderRadius: 12,
               overflow: "hidden",
+              tableLayout: "fixed",
             }}
           >
             <thead style={{ background: "#f3f4f6" }}>
               <tr>
-                <th style={{ textAlign: "left", padding: "10px 12px", fontSize: 12 }}>
+                <th
+                  style={{
+                    textAlign: "left",
+                    padding: "8px 10px",
+                    fontSize: 12,
+                    width: 110,
+                    whiteSpace: "nowrap",
+                  }}
+                >
                   Parcelle
                 </th>
-                <th style={{ textAlign: "left", padding: "10px 12px", fontSize: 12 }}>
+                <th
+                  style={{
+                    textAlign: "left",
+                    padding: "8px 10px",
+                    fontSize: 12,
+                    width: 220,
+                  }}
+                >
                   Nom
                 </th>
-                <th style={{ textAlign: "right", padding: "10px 12px", fontSize: 12 }}>
+                <th
+                  style={{
+                    textAlign: "right",
+                    padding: "8px 10px",
+                    fontSize: 12,
+                    width: 110,
+                    whiteSpace: "nowrap",
+                  }}
+                >
                   Surface (ha)
                 </th>
-                <th style={{ textAlign: "left", padding: "10px 12px", fontSize: 12 }}>
+                <th
+                  style={{
+                    textAlign: "left",
+                    padding: "8px 10px",
+                    fontSize: 12,
+                    width: 200,
+                    whiteSpace: "nowrap",
+                  }}
+                >
                   Culture N
                 </th>
-                <th style={{ textAlign: "left", padding: "10px 12px", fontSize: 12 }}>
+                <th
+                  style={{
+                    textAlign: "left",
+                    padding: "8px 10px",
+                    fontSize: 12,
+                    width: 200,
+                    whiteSpace: "nowrap",
+                  }}
+                >
                   Culture N-1
                 </th>
               </tr>
@@ -271,7 +311,14 @@ export default function ParcelleEditor({
                       cursor: "pointer",
                     }}
                   >
-                    <td style={{ padding: "10px 12px", minWidth: 140 }}>
+                    <td
+                      style={{
+                        padding: "8px 10px",
+                        minWidth: 96,
+                        width: 110,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
                       <input
                         value={parcelleValue}
                         onChange={(e) => {
@@ -282,36 +329,65 @@ export default function ParcelleEditor({
                         placeholder="Îlot.Numéro"
                         style={{
                           width: "100%",
-                          padding: "6px 8px",
+                          padding: "4px 6px",
                           borderRadius: 6,
                           border: "1px solid #d1d5db",
                           fontSize: 13,
                           fontWeight: 600,
+                          textAlign: "center",
                         }}
                       />
                     </td>
-                    <td style={{ padding: "10px 12px", minWidth: 140 }}>
-                      <input
+                    <td
+                      style={{
+                        padding: "8px 10px",
+                        minWidth: 160,
+                        width: 220,
+                        whiteSpace: "normal",
+                        verticalAlign: "top",
+                      }}
+                    >
+                      <textarea
                         value={parcelleName}
                         onChange={(e) => updateNomValue(idx, e.target.value)}
                         onBlur={(e) => updateNomValue(idx, e.target.value, { trim: true })}
                         onClick={(e) => e.stopPropagation()}
+                        rows={1}
+                        placeholder="Nom personnalisé"
                         style={{
                           width: "100%",
+                          minHeight: 36,
                           padding: "6px 8px",
                           borderRadius: 6,
                           border: "1px solid #d1d5db",
                           fontSize: 13,
+                          lineHeight: "18px",
+                          resize: "vertical",
+                          overflow: "hidden",
                         }}
-                        placeholder="Nom personnalisé"
                       />
                     </td>
-                    <td style={{ padding: "10px 12px", textAlign: "right", fontSize: 13, color: "#374151" }}>
+                    <td
+                      style={{
+                        padding: "8px 10px",
+                        textAlign: "right",
+                        fontSize: 13,
+                        color: "#374151",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
                       {surfaceHa != null && !Number.isNaN(surfaceHa)
                         ? surfaceHa.toFixed(2)
                         : "–"}
                     </td>
-                    <td style={{ padding: "10px 12px", minWidth: 220 }}>
+                    <td
+                      style={{
+                        padding: "8px 10px",
+                        minWidth: 180,
+                        width: 200,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
                       <div style={{ display: "flex", flexDirection: "column" }}>
                         <input
                           list={datalistId}
@@ -330,7 +406,14 @@ export default function ParcelleEditor({
                         {renderWarning(typedRow.cultureN)}
                       </div>
                     </td>
-                    <td style={{ padding: "10px 12px", minWidth: 220 }}>
+                    <td
+                      style={{
+                        padding: "8px 10px",
+                        minWidth: 180,
+                        width: 200,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
                       <div style={{ display: "flex", flexDirection: "column" }}>
                         <input
                           list={datalistId}
