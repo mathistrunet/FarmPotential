@@ -41,6 +41,8 @@ describe('GET /api/weather/analyze', () => {
         vi.mocked(mergeStationsObservations).mockReset();
         vi.mocked(mergeStationsObservations).mockReturnValue([]);
         vi.mocked(getObservationsForStation).mockReset();
+        vi.mocked(fetchOpenMeteoObservations).mockReset();
+        vi.mocked(fetchOpenMeteoObservations).mockResolvedValue([]);
         warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => { });
     });
     afterEach(() => {
@@ -81,6 +83,45 @@ describe('GET /api/weather/analyze', () => {
         expect(response.body).toEqual({
             error: 'Aucune observation disponible pour la période demandée.',
         });
+    });
+    it('falls back to Open-Meteo when Infoclimat data is missing', async () => {
+        vi.mocked(getObservationsForStation).mockResolvedValue([]);
+        vi.mocked(fetchOpenMeteoObservations).mockResolvedValue([
+            {
+                ts: '2024-04-01T00:00:00.000Z',
+                t: 12,
+                tmin: 8,
+                tmax: 15,
+                rr: 0,
+                rr24: 0,
+                ff: 3,
+                fx: 5,
+                rh: 60,
+                p: 1010,
+            },
+            {
+                ts: '2024-04-02T00:00:00.000Z',
+                t: 11,
+                tmin: 7,
+                tmax: 14,
+                rr: 2,
+                rr24: 2,
+                ff: 4,
+                fx: 6,
+                rh: 70,
+                p: 1008,
+            },
+        ]);
+        vi.mocked(mergeStationsObservations).mockReturnValue([]);
+        const response = await request(app)
+            .get('/api/weather/analyze')
+            .query({ lat: 1, lon: 2, phaseStart: 10, phaseEnd: 200, yearsBack: 2, crop: 'blé' });
+        expect(response.status).toBe(200);
+        expect(response.body.source).toBe('Open-Meteo (Archive API – fallback)');
+        expect(response.body.stationsUsed).toEqual([
+            expect.objectContaining({ id: 'open-meteo-grid', name: 'Open-Meteo (grille)' }),
+        ]);
+        expect(fetchOpenMeteoObservations).toHaveBeenCalled();
     });
 });
 describe('GET /api/weather/summary', () => {
