@@ -63,7 +63,30 @@ router.get('/analyze', async (req, res, next) => {
                 return [];
             }
         }));
-        const mergedObservations = mergeStationsObservations(stations, observationsByStation, input.lat, input.lon);
+        let mergedObservations = mergeStationsObservations(stations, observationsByStation, input.lat, input.lon);
+        let analysisStations = stations;
+        let perStationObservations = observationsByStation;
+        let source = 'Infoclimat (Open Data)';
+        if (!mergedObservations.length) {
+            const fallback = await fetchOpenMeteoObservations(input.lat, input.lon, startISO, endISO);
+            if (fallback.length) {
+                mergedObservations = fallback;
+                analysisStations = [
+                    {
+                        id: 'open-meteo-grid',
+                        name: 'Open-Meteo (grille)',
+                        city: null,
+                        lat: input.lat,
+                        lon: input.lon,
+                        altitude: null,
+                        type: 'grid',
+                        distanceKm: 0,
+                    },
+                ];
+                perStationObservations = [fallback];
+                source = 'Open-Meteo (Archive API – fallback)';
+            }
+        }
         if (!mergedObservations.length) {
             if (fetchErrors.length) {
                 const missingKey = fetchErrors.some((error) => /INFOCLIMAT_API_KEY/i.test(error.message ?? ''));
@@ -101,7 +124,7 @@ router.get('/analyze', async (req, res, next) => {
         };
         const expectedYears = input.yearsBack;
         const completeness = computeCompleteness(yearIndicators, expectedYears);
-        const perStationTotals = observationsByStation.map((obs) => {
+        const perStationTotals = perStationObservations.map((obs) => {
             const stationSlices = sliceByPhase(obs, input.phase.startDayOfYear, input.phase.endDayOfYear);
             const totals = stationSlices.map((slice) => slice.obs.reduce((acc, entry) => acc + (typeof entry.rr === 'number' && Number.isFinite(entry.rr) ? entry.rr : 0), 0));
             if (!totals.length)
@@ -119,7 +142,7 @@ router.get('/analyze', async (req, res, next) => {
             crop: input.crop,
             phase: input.phase,
             yearsAnalyzed: yearIndicators.length,
-            stationsUsed: stations,
+            stationsUsed: analysisStations,
             indicators: aggregated,
             risks: {
                 heatwave: riskHeatwave,
@@ -141,7 +164,7 @@ router.get('/analyze', async (req, res, next) => {
                 },
             },
             confidence,
-            source: 'Infoclimat (Open Data)',
+            source,
         });
         res.json(response);
     }
