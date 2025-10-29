@@ -3,12 +3,14 @@ import { spawn } from 'node:child_process';
 import process from 'node:process';
 import { createRequire } from 'node:module';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const require = createRequire(import.meta.url);
 
 const vitePackageJson = require.resolve('vite/package.json');
 const viteBin = path.join(path.dirname(vitePackageJson), 'bin', 'vite.js');
-const tsNodeBin = require.resolve('ts-node/dist/bin.js');
+const tsNodeLoader = pathToFileURL(require.resolve('ts-node/esm')).href;
+const weatherServerScript = path.join(process.cwd(), 'scripts', 'run-weather-server.mjs');
 
 const children = new Set();
 let shuttingDown = false;
@@ -70,5 +72,5 @@ process.on('SIGTERM', () => shutdown('SIGTERM'));
 
 console.log('Starting Vite dev server and weather API...');
 
-run([tsNodeBin, '--project', 'tsconfig.server.json', 'server/src/index.ts'], 'weather-api');
+run(['--loader', tsNodeLoader, weatherServerScript], 'weather-api');
 run([viteBin, 'dev'], 'vite');
