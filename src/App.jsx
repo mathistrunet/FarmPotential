@@ -98,6 +98,11 @@ function MapExperience({ onOpenSummary = () => {} }) {
     });
   }, [onOpenSummary, selectedInfo.centroid, selectedInfo.label]);
 
+  const handleNavigateToSummaryFromModal = useCallback(() => {
+    setWeatherModalOpen(false);
+    handleOpenSummaryView();
+  }, [handleOpenSummaryView]);
+
   const layoutStyle = {
     height: "100%",
     position: "relative",
@@ -192,23 +197,6 @@ function MapExperience({ onOpenSummary = () => {} }) {
               }}
             >
               Ouvrir la fenêtre météo
-            </button>
-            <button
-              type="button"
-              onClick={handleOpenSummaryView}
-              style={{
-                padding: "6px 12px",
-                borderRadius: 8,
-                border: "1px solid #34d399",
-                background: "#22c55e",
-                color: "#fff",
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: "pointer",
-                boxShadow: "0 10px 30px rgba(34,197,94,0.25)",
-              }}
-            >
-              Voir la synthèse météo
             </button>
           </div>
 
@@ -362,6 +350,7 @@ function MapExperience({ onOpenSummary = () => {} }) {
         onClose={() => setWeatherModalOpen(false)}
         parcelLabel={selectedInfo.label}
         centroid={selectedInfo.centroid}
+        onOpenSummary={handleNavigateToSummaryFromModal}
       />
     </div>
   );

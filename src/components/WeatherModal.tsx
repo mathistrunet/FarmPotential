@@ -26,6 +26,7 @@ interface WeatherModalProps {
   onClose: () => void;
   centroid?: { latitude: number; longitude: number } | null;
   parcelLabel?: string;
+  onOpenSummary?: () => void;
 }
 
 interface FormState {
@@ -249,7 +250,7 @@ function EmptyChart({ title, message }: { title: string; message: string }) {
   );
 }
 
-export default function WeatherModal({ open, onClose, centroid, parcelLabel }: WeatherModalProps) {
+export default function WeatherModal({ open, onClose, centroid, parcelLabel, onOpenSummary }: WeatherModalProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const [linkToParcel, setLinkToParcel] = useState<boolean>(Boolean(centroid));
@@ -393,6 +394,12 @@ export default function WeatherModal({ open, onClose, centroid, parcelLabel }: W
     }
   }, [form.end, form.granularity, form.lat, form.lon, form.provider, form.start, form.stationId]);
 
+  const handleSummaryNavigation = useCallback(() => {
+    if (onOpenSummary) {
+      onOpenSummary();
+    }
+  }, [onOpenSummary]);
+
   if (!open) {
     return null;
   }
@@ -426,36 +433,73 @@ export default function WeatherModal({ open, onClose, centroid, parcelLabel }: W
       >
         <header
           style={{
-            padding: '20px 28px',
+            padding: '20px 28px 16px',
             borderBottom: '1px solid #e2e8f0',
             display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
+            flexDirection: 'column',
             gap: 16,
           }}
         >
-          <div>
-            <h2 style={{ margin: 0, fontSize: 20 }}>Météo historique</h2>
-            {parcelLabel ? (
-              <p style={{ margin: '4px 0 0', color: '#475569', fontSize: 14 }}>Parcelle : {parcelLabel}</p>
-            ) : null}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+            <div>
+              <h2 style={{ margin: 0, fontSize: 20 }}>Météo historique</h2>
+              {parcelLabel ? (
+                <p style={{ margin: '4px 0 0', color: '#475569', fontSize: 14 }}>Parcelle : {parcelLabel}</p>
+              ) : null}
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              style={{
+                border: 'none',
+                background: '#e2e8f0',
+                borderRadius: 999,
+                width: 36,
+                height: 36,
+                fontSize: 16,
+                cursor: 'pointer',
+              }}
+              aria-label="Fermer"
+            >
+              ×
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            style={{
-              border: 'none',
-              background: '#e2e8f0',
-              borderRadius: 999,
-              width: 36,
-              height: 36,
-              fontSize: 16,
-              cursor: 'pointer',
-            }}
-            aria-label="Fermer"
-          >
-            ×
-          </button>
+          <nav style={{ display: 'flex', gap: 4 }}>
+            <button
+              type="button"
+              disabled
+              style={{
+                padding: '10px 18px',
+                borderRadius: 999,
+                border: 'none',
+                background: '#0ea5e9',
+                color: '#fff',
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: 'default',
+                opacity: 1,
+              }}
+              aria-current="page"
+            >
+              Historique météo
+            </button>
+            <button
+              type="button"
+              onClick={handleSummaryNavigation}
+              style={{
+                padding: '10px 18px',
+                borderRadius: 999,
+                border: '1px solid #e2e8f0',
+                background: '#fff',
+                color: '#0f172a',
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              Synthèse météo
+            </button>
+          </nav>
         </header>
 
         <div
