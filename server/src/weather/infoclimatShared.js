@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import fetch from 'node-fetch';
 export const INFOCLIMAT_API_KEY = process.env.INFOCLIMAT_API_KEY ?? '';
 export const INFOCLIMAT_OBSERVATIONS_URL = process.env.INFOCLIMAT_API_BASE ?? 'https://www.infoclimat.fr/opendata/?version=2&method=get&format=json';
