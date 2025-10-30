@@ -136,7 +136,7 @@ function TemperatureChart({ data, granularity }: { data: WeatherSeries | null; g
             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
             <XAxis dataKey="label" tick={{ fontSize: 12 }} interval={Math.max(Math.floor(chartData.length / 12), 0)} />
             <YAxis tick={{ fontSize: 12 }} unit="°C" domain={['auto', 'auto']} />
-            <Tooltip formatter={(value) => `${formatNumber(Number(value), 1)} °C`} />
+            <Tooltip formatter={(value: number | string) => `${formatNumber(Number(value), 1)} °C`} />
             <Legend />
             <Line type="monotone" dataKey="temperature" stroke="#0ea5e9" strokeWidth={2} dot={false} name="Température" />
             {granularity === 'daily' ? (
@@ -181,7 +181,7 @@ function PrecipitationChart({ data, granularity }: { data: WeatherSeries | null;
             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
             <XAxis dataKey="label" tick={{ fontSize: 12 }} interval={Math.max(Math.floor(chartData.length / 12), 0)} />
             <YAxis tick={{ fontSize: 12 }} unit="mm" domain={[0, 'auto']} />
-            <Tooltip formatter={(value) => `${formatNumber(Number(value), 1)} mm`} />
+            <Tooltip formatter={(value: number | string) => `${formatNumber(Number(value), 1)} mm`} />
             <Bar dataKey="precipitation" fill="#6366f1" radius={[4, 4, 0, 0]} name="Précipitation" />
           </BarChart>
         </ResponsiveContainer>
@@ -219,7 +219,7 @@ function WindChart({ data, granularity }: { data: WeatherSeries | null; granular
             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
             <XAxis dataKey="label" tick={{ fontSize: 12 }} interval={Math.max(Math.floor(chartData.length / 12), 0)} />
             <YAxis tick={{ fontSize: 12 }} unit="m/s" domain={[0, 'auto']} />
-            <Tooltip formatter={(value) => `${formatNumber(Number(value), 1)} m/s`} />
+            <Tooltip formatter={(value: number | string) => `${formatNumber(Number(value), 1)} m/s`} />
             <Line type="monotone" dataKey="wind" stroke="#10b981" strokeWidth={2} dot={false} name="Vent" />
           </LineChart>
         </ResponsiveContainer>

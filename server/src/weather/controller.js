@@ -1,44 +1,13 @@
 import express from 'express';
+import { ZodError } from 'zod';
 import { findNearestStations, getAllStations, refreshStations, } from './stations.js';
 import { getObservationsForStation } from './infoclimatClient.js';
-import { sliceByPhase, indicatorsForSlice, aggregateIndicators, } from './indicators.js';
-import { empiricalProbability, linearTrend, mannKendall, trendDirection, computeConfidenceScore, quantile, } from './riskModels.js';
-import { WeatherAnalysisInputSchema, WeatherAnalysisResponseSchema, } from './schemas.js';
 import { mergeStationsObservations } from './observations.js';
 import { fetchOpenMeteoObservations } from './openMeteoFallback.js';
 import { buildWeatherSummary } from './summary.js';
+import { AnalyzeWeatherSchema } from './schemas.js';
+import { fetchInfoclimatRange } from './infoclimat.js';
 export const router = express.Router();
-function buildInputFromQuery(query) {
-    const lat = Number(query.lat);
-    const lon = Number(query.lon);
-    const crop = typeof query.crop === 'string' && query.crop.trim() ? query.crop.trim() : 'culture';
-    const phaseStart = Number(query.phaseStart ?? query.phase_start ?? query.phaseStartDay);
-    const phaseEnd = Number(query.phaseEnd ?? query.phase_end ?? query.phaseEndDay);
-    const yearsBack = query.yearsBack != null ? Number(query.yearsBack) : undefined;
-    return WeatherAnalysisInputSchema.parse({
-        lat,
-        lon,
-        crop,
-        phase: {
-            startDayOfYear: phaseStart,
-            endDayOfYear: phaseEnd,
-        },
-        yearsBack,
-    });
-}
-function computeCompleteness(yearIndicators, expectedYears) {
-    if (!expectedYears)
-        return 0;
-    return Math.min(1, yearIndicators.length / expectedYears);
-}
-function computeInterStationSpread(totals) {
-    const filtered = totals.filter((value) => Number.isFinite(value));
-    if (filtered.length < 2)
-        return null;
-    const mean = filtered.reduce((acc, value) => acc + value, 0) / filtered.length;
-    const variance = filtered.reduce((acc, value) => acc + (value - mean) ** 2, 0) / (filtered.length - 1);
-    return Number(Math.sqrt(variance).toFixed(2));
-}
 function parseMaxYears(query) {
     if (query.maxYears == null)
         return 10;
@@ -101,137 +70,29 @@ router.get('/availability', async (req, res, next) => {
         next(error);
     }
 });
-router.get('/analyze', async (req, res, next) => {
+router.get('/analyze', async (req, res) => {
     try {
-        const input = buildInputFromQuery(req.query);
-        const stations = await findNearestStations(input.lat, input.lon, 3);
-        if (!stations.length) {
-            res.status(404).json({ error: 'Aucune station météo disponible pour cette localisation.' });
-            return;
-        }
-        const now = new Date();
-        const endISO = now.toISOString();
-        const startYear = now.getUTCFullYear() - input.yearsBack + 1;
-        const startISO = new Date(Date.UTC(startYear, 0, 1)).toISOString();
-        const fetchErrors = [];
-        const observationsByStation = await Promise.all(stations.map(async (station) => {
-            try {
-                return await getObservationsForStation(station.id, startISO, endISO);
-            }
-            catch (error) {
-                const normalizedError = error instanceof Error ? error : new Error(String(error));
-                fetchErrors.push(normalizedError);
-                console.warn(`Unable to load Infoclimat observations for station ${station.id}:`, normalizedError);
-                return [];
-            }
-        }));
-        let mergedObservations = mergeStationsObservations(stations, observationsByStation, input.lat, input.lon);
-        let analysisStations = stations;
-        let perStationObservations = observationsByStation;
-        let source = 'Infoclimat (Open Data)';
-        if (!mergedObservations.length) {
-            const fallback = await fetchOpenMeteoObservations(input.lat, input.lon, startISO, endISO);
-            if (fallback.length) {
-                mergedObservations = fallback;
-                analysisStations = [
-                    {
-                        id: 'open-meteo-grid',
-                        name: 'Open-Meteo (grille)',
-                        city: null,
-                        lat: input.lat,
-                        lon: input.lon,
-                        altitude: null,
-                        type: 'grid',
-                        distanceKm: 0,
-                    },
-                ];
-                perStationObservations = [fallback];
-                source = 'Open-Meteo (Archive API – fallback)';
-            }
-        }
-        if (!mergedObservations.length) {
-            if (fetchErrors.length) {
-                const missingKey = fetchErrors.some((error) => /INFOCLIMAT_API_KEY/i.test(error.message ?? ''));
-                const message = missingKey
-                    ? "Impossible de contacter l'API Infoclimat : configurez la variable d'environnement INFOCLIMAT_API_KEY."
-                    : "Impossible de récupérer les observations Infoclimat pour la période demandée.";
-                res.status(502).json({ error: message });
-            }
-            else {
-                res.status(404).json({ error: 'Aucune observation disponible pour la période demandée.' });
-            }
-            return;
-        }
-        const slices = sliceByPhase(mergedObservations, input.phase.startDayOfYear, input.phase.endDayOfYear);
-        const yearIndicators = slices.map((slice) => indicatorsForSlice(slice));
-        const aggregated = aggregateIndicators(yearIndicators);
-        const years = yearIndicators.map((entry) => entry.year);
-        const rainfallSeries = yearIndicators.map((entry) => entry.rainfall.total);
-        const rainfallTrend = linearTrend(years, rainfallSeries);
-        const rainfallMk = mannKendall(rainfallSeries);
-        const rainfallDirection = trendDirection(rainfallTrend?.slope ?? rainfallMk?.tau ?? null);
-        const gddKey = Object.keys(aggregated.stats.gdd)[0];
-        const gddSeries = gddKey ? yearIndicators.map((entry) => entry.gdd[gddKey] ?? null) : [];
-        const gddTrend = gddKey ? linearTrend(years, gddSeries) : null;
-        const gddMk = gddKey ? mannKendall(gddSeries) : null;
-        const gddDirection = trendDirection(gddTrend?.slope ?? gddMk?.tau ?? null);
-        const riskHeatwave = empiricalProbability(yearIndicators.map((entry) => entry.heatwaves.ge35?.events ?? 0), (value) => value > 0);
-        const riskDrySpell = empiricalProbability(yearIndicators.map((entry) => entry.rainfall.maxDrySpell), (value) => value >= 10);
-        const riskExtremeHeat = empiricalProbability(yearIndicators.map((entry) => entry.heatDays.ge35), (value) => value >= 3);
-        const riskLateFrost = empiricalProbability(yearIndicators.map((entry) => entry.freezeEvents.lastSpringFreezeDoy ?? null), (value) => value > input.phase.startDayOfYear);
-        const rainfallQuantiles = {
-            p10: quantile(rainfallSeries, 0.1),
-            p50: quantile(rainfallSeries, 0.5),
-            p90: quantile(rainfallSeries, 0.9),
-        };
-        const expectedYears = input.yearsBack;
-        const completeness = computeCompleteness(yearIndicators, expectedYears);
-        const perStationTotals = perStationObservations.map((obs) => {
-            const stationSlices = sliceByPhase(obs, input.phase.startDayOfYear, input.phase.endDayOfYear);
-            const totals = stationSlices.map((slice) => slice.obs.reduce((acc, entry) => acc + (typeof entry.rr === 'number' && Number.isFinite(entry.rr) ? entry.rr : 0), 0));
-            if (!totals.length)
-                return NaN;
-            const avg = totals.reduce((acc, value) => acc + value, 0) / totals.length;
-            return Number(avg.toFixed(2));
-        });
-        const interStationStd = computeInterStationSpread(perStationTotals);
-        const confidence = computeConfidenceScore({
-            nYears: yearIndicators.length,
-            completeness,
-            interStationStd,
-        });
-        const response = WeatherAnalysisResponseSchema.parse({
-            crop: input.crop,
-            phase: input.phase,
-            yearsAnalyzed: yearIndicators.length,
-            stationsUsed: analysisStations,
-            indicators: aggregated,
-            risks: {
-                heatwave: riskHeatwave,
-                drySpell: riskDrySpell,
-                extremeHeat: riskExtremeHeat,
-                lateFrost: riskLateFrost,
-            },
-            rainfallQuantiles,
-            trends: {
-                rainfall: {
-                    direction: rainfallDirection,
-                    ols: rainfallTrend,
-                    mannKendall: rainfallMk,
-                },
-                gdd: {
-                    direction: gddDirection,
-                    ols: gddTrend,
-                    mannKendall: gddMk,
-                },
-            },
-            confidence,
+        const { station: requestedStation, dateStart, dateEnd, source } = AnalyzeWeatherSchema.parse(req.query);
+        const station = requestedStation ?? '07015';
+        const data = await fetchInfoclimatRange(station, dateStart, dateEnd);
+        const hourly = data?.hourly?.[station] ?? [];
+        res.json({
             source,
+            station,
+            dateStart,
+            dateEnd,
+            stations: data?.stations ?? [],
+            metadata: data?.metadata ?? null,
+            hourly,
         });
-        res.json(response);
     }
     catch (error) {
-        next(error);
+        if (error instanceof ZodError) {
+            res.status(400).json({ error: 'Invalid request', details: error.errors });
+            return;
+        }
+        console.error(error);
+        res.status(500).json({ error: 'Weather analyze failed' });
     }
 });
 router.get('/summary', async (req, res, next) => {

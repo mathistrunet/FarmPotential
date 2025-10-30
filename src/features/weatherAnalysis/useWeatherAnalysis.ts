@@ -2,12 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { WeatherAnalysisResponse } from './types';
 
 export interface WeatherAnalysisParams {
-  lat: number;
-  lon: number;
-  crop: string;
-  phaseStart: number;
-  phaseEnd: number;
-  yearsBack?: number;
+  station?: string;
+  lat?: number;
+  lon?: number;
+  dateStart: string;
+  dateEnd: string;
+  source?: string;
 }
 
 interface State {
@@ -23,13 +23,19 @@ export function useWeatherAnalysis(params: WeatherAnalysisParams | null) {
   const queryString = useMemo(() => {
     if (!params) return null;
     const search = new URLSearchParams();
-    search.set('lat', params.lat.toString());
-    search.set('lon', params.lon.toString());
-    search.set('crop', params.crop);
-    search.set('phaseStart', params.phaseStart.toString());
-    search.set('phaseEnd', params.phaseEnd.toString());
-    if (params.yearsBack) {
-      search.set('yearsBack', params.yearsBack.toString());
+    if (params.station) {
+      search.set('station', params.station);
+    }
+    if (params.lat != null) {
+      search.set('lat', params.lat.toString());
+    }
+    if (params.lon != null) {
+      search.set('lon', params.lon.toString());
+    }
+    search.set('dateStart', params.dateStart);
+    search.set('dateEnd', params.dateEnd);
+    if (params.source) {
+      search.set('source', params.source);
     }
     return search.toString();
   }, [params]);
