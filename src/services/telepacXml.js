@@ -2,7 +2,30 @@
 import { toWgs84 } from "../utils/proj";
 import { ringToGml, ringAreaM2 } from "../utils/geometry";
 
-let autoNumero = 1;
+function normalizeNumero(value) {
+  return value == null ? "" : String(value).trim();
+}
+
+function getFirstOuterRing(feature) {
+  if (!feature || !feature.geometry) return null;
+  const { type, coordinates } = feature.geometry;
+  if (!coordinates) return null;
+  if (type === "Polygon") return coordinates[0] || null;
+  if (type === "MultiPolygon") return coordinates[0]?.[0] || null;
+  return null;
+}
+
+function getAllOuterRings(feature) {
+  if (!feature || !feature.geometry) return [];
+  const { type, coordinates } = feature.geometry;
+  if (!coordinates) return [];
+  if (type === "Polygon") return coordinates[0] ? [coordinates[0]] : [];
+  if (type === "MultiPolygon")
+    return coordinates
+      .map((poly) => poly?.[0])
+      .filter((ring) => Array.isArray(ring) && ring.length > 0);
+  return [];
+}
 
 export function buildTelepacXML(features) {
   const NS = "urn:x-telepac:fr.gouv.agriculture.telepac:echange-producteur";
@@ -13,69 +36,130 @@ export function buildTelepacXML(features) {
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;");
 
-  // Ilot englobant (approx en WGS84 pour simplicité)
-  const first = features[0];
-  const ring0 = first.geometry.coordinates[0];
-  let minX = Infinity,
-    minY = Infinity,
-    maxX = -Infinity,
-    maxY = -Infinity;
-  ring0.forEach(([lon, lat]) => {
-    minX = Math.min(minX, lon);
-    minY = Math.min(minY, lat);
-    maxX = Math.max(maxX, lon);
-    maxY = Math.max(maxY, lat);
+  if (!Array.isArray(features) || features.length === 0) {
+    return `<?xml version="1.0" encoding="ISO-8859-1"?>\n<producteurs xmlns="${NS}" xmlns:gml="${GML}"><producteur><demandeur certificat-environnemental="false" dossier-sans-demande-aides="false"></demandeur><rpg></rpg></producteur></producteurs>`;
+  }
+
+  const usedIlotNumbers = new Set();
+  features.forEach((feature) => {
+    const ilotNumero = normalizeNumero(feature?.properties?.ilot_numero);
+    if (ilotNumero) usedIlotNumbers.add(ilotNumero);
   });
-  const pad = 0.002; // ~200 m
-  const ilotCoords = [
-    [minX - pad, minY - pad],
-    [maxX + pad, minY - pad],
-    [maxX + pad, maxY + pad],
-    [minX - pad, maxY + pad],
-    [minX - pad, minY - pad],
-  ]
-    .map(([lon, lat]) => `${lon.toFixed(6)},${lat.toFixed(6)}`)
-    .join(" ");
-  const numeroIlot =
-    (features[0]?.properties?.ilot_numero ?? "1").toString().trim() || "1";
+
+  let nextAutoIlot = 1;
+  const allocateIlotNumero = () => {
+    while (usedIlotNumbers.has(String(nextAutoIlot))) nextAutoIlot += 1;
+    const numero = String(nextAutoIlot);
+    usedIlotNumbers.add(numero);
+    nextAutoIlot += 1;
+    return numero;
+  };
+
+  const ilotMap = new Map();
+  const orderedIlots = [];
+
+  features.forEach((feature, index) => {
+    if (!feature || !feature.geometry) return;
+    const props = feature.properties || {};
+    let ilotNumero = normalizeNumero(props.ilot_numero);
+    if (!ilotNumero) ilotNumero = allocateIlotNumero();
+
+    let ilot = ilotMap.get(ilotNumero);
+    if (!ilot) {
+      ilot = { numero: ilotNumero, parcelles: [], nextAutoNumero: 1 };
+      ilotMap.set(ilotNumero, ilot);
+      orderedIlots.push(ilot);
+    }
+
+    let numeroParcelle = normalizeNumero(props.numero);
+    if (!numeroParcelle) {
+      numeroParcelle = String(ilot.nextAutoNumero);
+      ilot.nextAutoNumero += 1;
+    } else {
+      const parsed = parseInt(numeroParcelle, 10);
+      if (!Number.isNaN(parsed)) {
+        ilot.nextAutoNumero = Math.max(ilot.nextAutoNumero, parsed + 1);
+      }
+    }
+
+    ilot.parcelles.push({ feature, numero: numeroParcelle, index });
+  });
 
   let xml = `<?xml version="1.0" encoding="ISO-8859-1"?>\n`;
   xml += `<producteurs xmlns="${NS}" xmlns:gml="${GML}">`;
   xml += `<producteur>`;
   xml += `<demandeur certificat-environnemental="false" dossier-sans-demande-aides="false"></demandeur>`;
   xml += `<rpg>`;
-  xml += `<ilot numero-ilot="${numeroIlot}">`;
-  xml += `<geometrie><gml:Polygon><gml:outerBoundaryIs><gml:LinearRing><gml:coordinates>${ilotCoords}</gml:coordinates></gml:LinearRing></gml:outerBoundaryIs></gml:Polygon></geometrie>`;
-  xml += `<parcelles>`;
 
-  for (let i = 0; i < features.length; i++) {
-    const f = features[i];
-    const props = f.properties || {};
-    let numero = 0
-    for (let i = 0; i < features.length; i++) {
-      const f = features[i];
-      const props = f.properties || {}; 
-      const rawNumero = (props.numero ?? "").toString().trim();
-      numero = rawNumero !== "" ? rawNumero : String(autoNumero++);
+  const pad = 0.002; // ~200 m
+
+  orderedIlots.forEach((ilot) => {
+    if (!ilot.parcelles.length) return;
+
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    let hasCoords = false;
+
+    ilot.parcelles.forEach(({ feature }) => {
+      const rings = getAllOuterRings(feature);
+      rings.forEach((ring) => {
+        ring.forEach(([lon, lat]) => {
+          if (typeof lon !== "number" || typeof lat !== "number") return;
+          hasCoords = true;
+          minX = Math.min(minX, lon);
+          minY = Math.min(minY, lat);
+          maxX = Math.max(maxX, lon);
+          maxY = Math.max(maxY, lat);
+        });
+      });
+    });
+
+    let ilotCoords = "";
+    if (hasCoords) {
+      ilotCoords = [
+        [minX - pad, minY - pad],
+        [maxX + pad, minY - pad],
+        [maxX + pad, maxY + pad],
+        [minX - pad, maxY + pad],
+        [minX - pad, minY - pad],
+      ]
+        .map(([lon, lat]) => `${lon.toFixed(6)},${lat.toFixed(6)}`)
+        .join(" ");
     }
-    const code = (props.code || "").trim() || "JAC"; // Mets automatiquement le code culture JAC quand on exporte une parcelle sans code culture
-    const gmlCoords = ringToGml(f.geometry.coordinates[0]);
-    const ares = Math.round(ringAreaM2(f.geometry.coordinates[0]) / 100); //surface arrondie et transformée en ares
 
-    xml += `<parcelle>`;
-    xml += `<descriptif-parcelle numero-parcelle="${esc(numero)}">`;
-    xml += `<culture-principale>`;
-    xml += `<code-culture>${esc(code)}</code-culture>`;
-    xml += `</culture-principale>`;
-    xml += `</descriptif-parcelle>`;
-    xml += `<geometrie><gml:Polygon><gml:outerBoundaryIs><gml:LinearRing><gml:coordinates>${gmlCoords}</gml:coordinates></gml:LinearRing></gml:outerBoundaryIs></gml:Polygon></geometrie>`;
-    xml += `<surface-admissible>${ares}</surface-admissible>`;
-    xml += `</parcelle>`;
-  }
+    xml += `<ilot numero-ilot="${esc(ilot.numero)}">`;
+    xml += `<geometrie><gml:Polygon><gml:outerBoundaryIs><gml:LinearRing><gml:coordinates>${ilotCoords}</gml:coordinates></gml:LinearRing></gml:outerBoundaryIs></gml:Polygon></geometrie>`;
+    xml += `<parcelles>`;
 
-  xml += `</parcelles></ilot></rpg></producteur></producteurs>`;
+    ilot.parcelles
+      .sort((a, b) => a.index - b.index)
+      .forEach(({ feature, numero }) => {
+        const props = feature.properties || {};
+        const code = normalizeNumero(props.code) || "JAC"; // Mets automatiquement le code culture JAC quand on exporte une parcelle sans code culture
+        const ring = getFirstOuterRing(feature);
+        const gmlCoords = ring ? ringToGml(ring) : "";
+        const ares = ring ? Math.round(ringAreaM2(ring) / 100) : 0; //surface arrondie et transformée en ares
+
+        xml += `<parcelle>`;
+        xml += `<descriptif-parcelle numero-parcelle="${esc(numero)}">`;
+        xml += `<culture-principale>`;
+        xml += `<code-culture>${esc(code)}</code-culture>`;
+        xml += `</culture-principale>`;
+        xml += `</descriptif-parcelle>`;
+        xml += `<geometrie><gml:Polygon><gml:outerBoundaryIs><gml:LinearRing><gml:coordinates>${gmlCoords}</gml:coordinates></gml:LinearRing></gml:outerBoundaryIs></gml:Polygon></geometrie>`;
+        xml += `<surface-admissible>${ares}</surface-admissible>`;
+        xml += `</parcelle>`;
+      });
+
+    xml += `</parcelles></ilot>`;
+  });
+
+  xml += `</rpg></producteur></producteurs>`;
   return xml;
 }
+
 
 export async function parseTelepacXmlToFeatures(file) {
   const text = await new Promise((resolve, reject) => {
