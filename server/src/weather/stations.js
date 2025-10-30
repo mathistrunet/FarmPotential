@@ -1,14 +1,16 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { listStations as listStationsFromDb, upsertStations } from './db.js';
 import { fetchStationsCatalog } from './infoclimatStations.js';
 import { haversineDistanceKm } from './spatial.js';
+const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
+const SNAPSHOT_PATH = path.resolve(MODULE_DIR, 'data/stations.json');
 let stationsCache = null;
 let loadingPromise = null;
 function loadSnapshot() {
     try {
-        const filePath = path.resolve(path.dirname(new URL(import.meta.url).pathname), 'data/stations.json');
-        const content = fs.readFileSync(filePath, 'utf-8');
+        const content = fs.readFileSync(SNAPSHOT_PATH, 'utf-8');
         const raw = JSON.parse(content);
         return raw
             .map((entry) => {
