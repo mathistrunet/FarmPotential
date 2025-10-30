@@ -1,3 +1,5 @@
+import type { WeatherGranularity, WeatherProvider, WeatherSeries } from '../../weather';
+
 export interface WeatherStationInfo {
   id: string;
   name?: string;
@@ -44,4 +46,17 @@ export interface StationAvailabilityResponse {
   stations: StationAvailability[];
   startYear: number;
   endYear: number;
+}
+
+export interface WeatherHistorySelection {
+  lat: number | null;
+  lon: number | null;
+  start: string;
+  end: string;
+  granularity: WeatherGranularity;
+  provider: WeatherProvider | 'auto';
+  stationId?: string | null;
+  stationLabel?: string | null;
+  sources?: WeatherProvider[];
+  series: WeatherSeries;
 }

@@ -20,13 +20,15 @@ import {
   type WeatherProvider,
   type WeatherGranularity,
 } from '../weather';
+import type { WeatherHistorySelection } from '../features/weatherAnalysis/types';
 
 interface WeatherModalProps {
   open: boolean;
   onClose: () => void;
   centroid?: { latitude: number; longitude: number } | null;
   parcelLabel?: string;
-  onOpenSummary?: () => void;
+  onOpenSummary?: (selection: WeatherHistorySelection | null) => void;
+  onSelectionChange?: (selection: WeatherHistorySelection | null) => void;
 }
 
 interface FormState {
@@ -43,6 +45,13 @@ interface FetchState {
   loading: boolean;
   error: string | null;
   data: WeatherSeries | null;
+}
+
+interface WeatherInsight {
+  key: string;
+  label: string;
+  value: string;
+  detail?: string;
 }
 
 const PROVIDER_LABELS: Record<WeatherProvider | 'auto', string> = {
@@ -98,6 +107,175 @@ function buildDailyRows(data: WeatherSeries | null) {
     pressure: point.p_avg ?? null,
     sunshine: point.sun ?? null,
   }));
+}
+
+function sum(values: Array<number | null | undefined>): number | null {
+  const valid = values.filter((value): value is number => value != null && Number.isFinite(value));
+  if (!valid.length) return null;
+  return valid.reduce((acc, value) => acc + value, 0);
+}
+
+function average(values: Array<number | null | undefined>): number | null {
+  const valid = values.filter((value): value is number => value != null && Number.isFinite(value));
+  if (!valid.length) return null;
+  return valid.reduce((acc, value) => acc + value, 0) / valid.length;
+}
+
+function computeInsights(data: WeatherSeries | null, granularity: WeatherGranularity): WeatherInsight[] {
+  if (!data) return [];
+  if (granularity === 'daily') {
+    const daily = data.daily ?? [];
+    if (!daily.length) return [];
+    const inferredAvgTemps = daily.map((point) => {
+      if (point.tavg != null && Number.isFinite(point.tavg)) return point.tavg;
+      if (point.tmin != null && point.tmax != null && Number.isFinite(point.tmin) && Number.isFinite(point.tmax)) {
+        return (point.tmin + point.tmax) / 2;
+      }
+      return null;
+    });
+    const avgTemp = average(inferredAvgTemps);
+    const minTemp = daily.reduce<number | null>((acc, point) => {
+      if (point.tmin == null || Number.isNaN(point.tmin)) return acc;
+      if (acc == null || point.tmin < acc) return point.tmin;
+      return acc;
+    }, null);
+    const maxTemp = daily.reduce<number | null>((acc, point) => {
+      if (point.tmax == null || Number.isNaN(point.tmax)) return acc;
+      if (acc == null || point.tmax > acc) return point.tmax;
+      return acc;
+    }, null);
+    const totalPrecip = sum(daily.map((point) => point.prcp ?? null));
+    const avgWind = average(daily.map((point) => point.ws_avg ?? null));
+    const avgHumidity = average(daily.map((point) => point.rh_avg ?? null));
+    const sunshineTotal = sum(daily.map((point) => point.sun ?? null));
+    const rainyDays = daily.filter((point) => (point.prcp ?? 0) >= 1).length;
+
+    const insights: WeatherInsight[] = [];
+
+    if (avgTemp != null) {
+      insights.push({
+        key: 'avgTemp',
+        label: 'Température moyenne',
+        value: `${formatNumber(avgTemp, 1)} °C`,
+        detail:
+          minTemp != null && maxTemp != null
+            ? `Extrema observés ${formatNumber(minTemp, 1)}°C → ${formatNumber(maxTemp, 1)}°C`
+            : undefined,
+      });
+    }
+
+    if (totalPrecip != null) {
+      insights.push({
+        key: 'precip',
+        label: 'Précipitations totales',
+        value: `${formatNumber(totalPrecip, 1)} mm`,
+        detail: rainyDays ? `${rainyDays} jour${rainyDays > 1 ? 's' : ''} avec pluie` : 'Aucune journée pluvieuse',
+      });
+    }
+
+    if (avgWind != null) {
+      insights.push({
+        key: 'wind',
+        label: 'Vent moyen',
+        value: `${formatNumber(avgWind, 1)} m/s`,
+      });
+    }
+
+    if (avgHumidity != null) {
+      insights.push({
+        key: 'humidity',
+        label: 'Humidité moyenne',
+        value: `${formatNumber(avgHumidity, 0)} %`,
+      });
+    }
+
+    if (sunshineTotal != null) {
+      insights.push({
+        key: 'sunshine',
+        label: 'Ensoleillement cumulé',
+        value: `${formatNumber(sunshineTotal, 1)} h`,
+      });
+    }
+
+    return insights;
+  }
+
+  const hourly = data.hourly ?? [];
+  if (!hourly.length) return [];
+  const avgTemp = average(hourly.map((point) => point.t2m ?? null));
+  const maxTemp = hourly.reduce<number | null>((acc, point) => {
+    if (point.t2m == null || Number.isNaN(point.t2m)) return acc;
+    if (acc == null || point.t2m > acc) return point.t2m;
+    return acc;
+  }, null);
+  const minTemp = hourly.reduce<number | null>((acc, point) => {
+    if (point.t2m == null || Number.isNaN(point.t2m)) return acc;
+    if (acc == null || point.t2m < acc) return point.t2m;
+    return acc;
+  }, null);
+  const totalPrecip = sum(hourly.map((point) => point.tp ?? null));
+  const maxWind = hourly.reduce<number | null>((acc, point) => {
+    if (point.ws == null || Number.isNaN(point.ws)) return acc;
+    if (acc == null || point.ws > acc) return point.ws;
+    return acc;
+  }, null);
+  const avgHumidity = average(hourly.map((point) => point.rh ?? null));
+  const avgPressure = average(hourly.map((point) => point.p ?? null));
+
+  const insights: WeatherInsight[] = [];
+
+  if (avgTemp != null) {
+    insights.push({
+      key: 'avgTemp',
+      label: 'Température moyenne',
+      value: `${formatNumber(avgTemp, 1)} °C`,
+      detail:
+        minTemp != null && maxTemp != null
+          ? `${formatNumber(minTemp, 1)}°C → ${formatNumber(maxTemp, 1)}°C`
+          : undefined,
+    });
+  }
+
+  if (totalPrecip != null) {
+    insights.push({
+      key: 'precip',
+      label: 'Précipitations cumulées',
+      value: `${formatNumber(totalPrecip, 1)} mm`,
+    });
+  }
+
+  if (maxWind != null) {
+    insights.push({
+      key: 'wind',
+      label: 'Vent maximal',
+      value: `${formatNumber(maxWind, 1)} m/s`,
+    });
+  }
+
+  if (avgHumidity != null) {
+    insights.push({
+      key: 'humidity',
+      label: 'Humidité moyenne',
+      value: `${formatNumber(avgHumidity, 0)} %`,
+    });
+  }
+
+  if (avgPressure != null) {
+    insights.push({
+      key: 'pressure',
+      label: 'Pression moyenne',
+      value: `${formatNumber(avgPressure, 1)} hPa`,
+    });
+  }
+
+  return insights;
+}
+
+function formatSources(sources: WeatherHistorySelection['sources']): string | null {
+  if (!sources?.length) return null;
+  const unique = Array.from(new Set(sources));
+  const labels = unique.map((provider) => PROVIDER_LABELS[provider] ?? provider);
+  return labels.join(' • ');
 }
 
 function TemperatureChart({ data, granularity }: { data: WeatherSeries | null; granularity: WeatherGranularity }) {
@@ -250,7 +428,14 @@ function EmptyChart({ title, message }: { title: string; message: string }) {
   );
 }
 
-export default function WeatherModal({ open, onClose, centroid, parcelLabel, onOpenSummary }: WeatherModalProps) {
+export default function WeatherModal({
+  open,
+  onClose,
+  centroid,
+  parcelLabel,
+  onOpenSummary,
+  onSelectionChange,
+}: WeatherModalProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const [linkToParcel, setLinkToParcel] = useState<boolean>(Boolean(centroid));
@@ -276,6 +461,59 @@ export default function WeatherModal({ open, onClose, centroid, parcelLabel, onO
   }>({ loading: false, error: null, label: null });
   const hourlyRows = useMemo(() => buildHourlyRows(fetchState.data), [fetchState.data]);
   const dailyRows = useMemo(() => buildDailyRows(fetchState.data), [fetchState.data]);
+  const insights = useMemo(() => computeInsights(fetchState.data, form.granularity), [fetchState.data, form.granularity]);
+  const selection = useMemo<WeatherHistorySelection | null>(() => {
+    if (!fetchState.data) return null;
+    const lat = Number(form.lat);
+    const lon = Number(form.lon);
+    const normalizedLat = Number.isFinite(lat) ? lat : fetchState.data.meta.lat;
+    const normalizedLon = Number.isFinite(lon) ? lon : fetchState.data.meta.lon;
+    const stationId = form.stationId.trim() || fetchState.data.meta.stationId || null;
+    const stationLabel = fetchState.data.meta.stationName || (stationId ? `Station ${stationId}` : null);
+    return {
+      lat: normalizedLat,
+      lon: normalizedLon,
+      start: form.start,
+      end: form.end,
+      granularity: form.granularity,
+      provider: form.provider,
+      stationId,
+      stationLabel,
+      sources: fetchState.data.meta.sources,
+      series: fetchState.data,
+    };
+  }, [fetchState.data, form.end, form.granularity, form.lat, form.lon, form.provider, form.start, form.stationId]);
+  const summaryDisabled = !selection;
+  const providerLabel = PROVIDER_LABELS[form.provider];
+  const summaryButtonStyle: CSSProperties = summaryDisabled
+    ? {
+        padding: '10px 18px',
+        borderRadius: 999,
+        border: 'none',
+        background: '#f1f5f9',
+        color: '#94a3b8',
+        fontSize: 13,
+        fontWeight: 600,
+        cursor: 'not-allowed',
+        opacity: 0.85,
+      }
+    : {
+        padding: '10px 18px',
+        borderRadius: 999,
+        border: 'none',
+        background: '#fff',
+        color: '#0f172a',
+        fontSize: 13,
+        fontWeight: 600,
+        cursor: 'pointer',
+      };
+  const sourcesLabel = useMemo(() => (selection ? formatSources(selection.sources) : null), [selection]);
+
+  useEffect(() => {
+    if (onSelectionChange) {
+      onSelectionChange(selection);
+    }
+  }, [onSelectionChange, selection]);
 
   useEffect(() => {
     if (!open) return;
@@ -395,10 +633,9 @@ export default function WeatherModal({ open, onClose, centroid, parcelLabel, onO
   }, [form.end, form.granularity, form.lat, form.lon, form.provider, form.start, form.stationId]);
 
   const handleSummaryNavigation = useCallback(() => {
-    if (onOpenSummary) {
-      onOpenSummary();
-    }
-  }, [onOpenSummary]);
+    if (!selection) return;
+    onOpenSummary?.(selection);
+  }, [onOpenSummary, selection]);
 
   if (!open) {
     return null;
@@ -495,17 +732,9 @@ export default function WeatherModal({ open, onClose, centroid, parcelLabel, onO
             <button
               type="button"
               onClick={handleSummaryNavigation}
-              style={{
-                padding: '10px 18px',
-                borderRadius: 999,
-                border: 'none',
-                background: '#fff',
-                color: '#0f172a',
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
+              style={summaryButtonStyle}
               aria-label="Afficher la synthèse météo"
+              disabled={summaryDisabled}
             >
               Synthèse météo
             </button>
@@ -717,38 +946,53 @@ export default function WeatherModal({ open, onClose, centroid, parcelLabel, onO
             ) : null}
 
             {fetchState.data ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}>
-                  <span
-                    style={{
-                      background: '#f1f5f9',
-                      padding: '6px 10px',
-                      borderRadius: 999,
-                      fontSize: 12,
-                      color: '#0f172a',
-                    }}
-                  >
-                    Fournisseur actif : {fetchState.data.meta.provider}
-                  </span>
-                  {fetchState.data.meta.stationName || fetchState.data.meta.stationId ? (
-                    <span style={{ fontSize: 12, color: '#334155' }}>
-                      Station : {fetchState.data.meta.stationName || 'N/A'}{' '}
-                      {fetchState.data.meta.stationId ? `(${fetchState.data.meta.stationId})` : ''}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                <section style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <h3 style={{ margin: 0, fontSize: 18, color: '#0f172a' }}>Contexte des données</h3>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, color: '#475569', fontSize: 13 }}>
+                    <span>
+                      Station :{' '}
+                      <strong style={{ color: '#0f172a' }}>
+                        {selection?.stationLabel ?? selection?.stationId ?? '—'}
+                      </strong>
                     </span>
+                    <span>
+                      Période :{' '}
+                      <strong style={{ color: '#0f172a' }}>
+                        {form.start} → {form.end}
+                      </strong>
+                    </span>
+                    <span>
+                      Fournisseurs :{' '}
+                      <strong style={{ color: '#0f172a' }}>{sourcesLabel ?? providerLabel}</strong>
+                    </span>
+                    <span>
+                      Attribution :{' '}
+                      <strong style={{ color: '#0f172a' }}>
+                        {fetchState.data.meta.attribution ?? providerLabel}
+                      </strong>
+                    </span>
+                  </div>
+                  {insights.length ? (
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                        gap: 12,
+                      }}
+                    >
+                      {insights.map((insight) => (
+                        <div key={insight.key} style={insightCardStyle}>
+                          <span style={{ fontSize: 12, color: '#64748b' }}>{insight.label}</span>
+                          <strong style={{ fontSize: 18, color: '#0f172a' }}>{insight.value}</strong>
+                          {insight.detail ? (
+                            <span style={{ fontSize: 12, color: '#475569' }}>{insight.detail}</span>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
                   ) : null}
-                  <span
-                    style={{
-                      background: '#0ea5e9',
-                      color: '#fff',
-                      padding: '6px 10px',
-                      borderRadius: 999,
-                      fontSize: 12,
-                    }}
-                  >
-                    Données © {fetchState.data.meta.attribution ?? fetchState.data.meta.provider}
-                  </span>
-                </div>
-
+                </section>
                 <TemperatureChart data={fetchState.data} granularity={form.granularity} />
                 <PrecipitationChart data={fetchState.data} granularity={form.granularity} />
                 <WindChart data={fetchState.data} granularity={form.granularity} />
@@ -872,4 +1116,14 @@ const tdStyle: CSSProperties = {
   padding: '8px 12px',
   color: '#1f2937',
   fontSize: 12,
+};
+
+const insightCardStyle: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 4,
+  padding: '12px 16px',
+  borderRadius: 12,
+  border: '1px solid #e2e8f0',
+  background: '#f8fafc',
 };
