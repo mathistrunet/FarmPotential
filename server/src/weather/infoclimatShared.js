@@ -1,6 +1,6 @@
 import fetch from 'node-fetch';
 export const INFOCLIMAT_API_KEY = process.env.INFOCLIMAT_API_KEY ?? '';
-export const INFOCLIMAT_OBSERVATIONS_URL = process.env.INFOCLIMAT_API_BASE ?? 'https://www.infoclimat.fr/opendata/produits-stations.csv';
+export const INFOCLIMAT_OBSERVATIONS_URL = process.env.INFOCLIMAT_API_BASE ?? 'https://www.infoclimat.fr/opendata/?version=2&method=get&format=json';
 export const INFOCLIMAT_STATIONS_URL = process.env.INFOCLIMAT_STATIONS_URL ?? 'https://www.infoclimat.fr/opendata/stations.csv';
 const MIN_REQUEST_INTERVAL_MS = Number(process.env.WEATHER_API_MIN_INTERVAL_MS ?? '900');
 const MAX_RETRIES = 3;
@@ -35,7 +35,7 @@ export function toNumber(value) {
     }
     return null;
 }
-export async function fetchCsv(url, options = {}) {
+async function fetchText(url, options = {}) {
     const maxRetries = options.maxRetries ?? MAX_RETRIES;
     const baseDelay = options.retryBaseDelayMs ?? RETRY_BASE_DELAY_MS;
     let attempt = 0;
@@ -58,5 +58,19 @@ export async function fetchCsv(url, options = {}) {
             const delay = baseDelay * 2 ** (attempt - 1);
             await new Promise((resolve) => setTimeout(resolve, delay));
         }
+    }
+}
+
+export async function fetchCsv(url, options = {}) {
+    return fetchText(url, options);
+}
+
+export async function fetchJson(url, options = {}) {
+    const text = await fetchText(url, options);
+    try {
+        return JSON.parse(text);
+    }
+    catch (error) {
+        throw new Error('Infoclimat API returned invalid JSON payload');
     }
 }
