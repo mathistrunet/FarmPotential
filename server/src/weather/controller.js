@@ -39,6 +39,68 @@ function computeInterStationSpread(totals) {
     const variance = filtered.reduce((acc, value) => acc + (value - mean) ** 2, 0) / (filtered.length - 1);
     return Number(Math.sqrt(variance).toFixed(2));
 }
+function parseMaxYears(query) {
+    if (query.maxYears == null)
+        return 10;
+    const parsed = Number(query.maxYears);
+    if (!Number.isFinite(parsed))
+        return 10;
+    const clamped = Math.min(Math.max(Math.round(parsed), 1), 50);
+    return clamped;
+}
+router.get('/availability', async (req, res, next) => {
+    try {
+        const lat = Number(req.query.lat);
+        const lon = Number(req.query.lon);
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+            res.status(400).json({ error: 'Paramètres lat/lon invalides.' });
+            return;
+        }
+        const maxYears = parseMaxYears(req.query);
+        const stations = await findNearestStations(lat, lon, 1);
+        if (!stations.length) {
+            res.status(404).json({ error: 'Aucune station météo disponible pour cette localisation.' });
+            return;
+        }
+        const now = new Date();
+        const endYear = now.getUTCFullYear();
+        const startYear = Math.max(1900, endYear - maxYears + 1);
+        const startISO = new Date(Date.UTC(startYear, 0, 1)).toISOString();
+        const endISO = new Date(Date.UTC(endYear, 11, 31, 23, 59, 59)).toISOString();
+        let availability;
+        try {
+            availability = await Promise.all(stations.map(async (station) => {
+                const observations = await getObservationsForStation(station.id, startISO, endISO);
+                const yearsSet = new Set();
+                for (const obs of observations) {
+                    const year = new Date(obs.ts).getUTCFullYear();
+                    if (Number.isFinite(year)) {
+                        yearsSet.add(year);
+                    }
+                }
+                const availableYears = Array.from(yearsSet).sort((a, b) => a - b);
+                return { ...station, availableYears };
+            }));
+        }
+        catch (error) {
+            const message = error instanceof Error ? error.message : String(error ?? '');
+            if (/INFOCLIMAT_API_KEY/i.test(message ?? '')) {
+                res.status(502).json({ error: "Impossible de contacter l'API Infoclimat : configurez la variable d'environnement INFOCLIMAT_API_KEY." });
+                return;
+            }
+            res.status(502).json({ error: 'Impossible de récupérer les observations Infoclimat pour estimer la disponibilité.' });
+            return;
+        }
+        res.json({
+            stations: availability,
+            startYear,
+            endYear,
+        });
+    }
+    catch (error) {
+        next(error);
+    }
+});
 router.get('/analyze', async (req, res, next) => {
     try {
         const input = buildInputFromQuery(req.query);

@@ -97,6 +97,16 @@ export interface StationSummary {
   distanceKm?: number;
 }
 
+export interface StationAvailability extends StationSummary {
+  availableYears: number[];
+}
+
+export interface StationAvailabilityResponse {
+  stations: StationAvailability[];
+  startYear: number;
+  endYear: number;
+}
+
 export interface WeatherAnalysisResponse {
   crop: string;
   phase: {

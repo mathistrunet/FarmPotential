@@ -7,7 +7,7 @@ export const WeatherAnalysisInputSchema = z.object({
         startDayOfYear: z.number().int().min(1).max(366),
         endDayOfYear: z.number().int().min(1).max(366),
     }),
-    yearsBack: z.number().int().min(1).max(50).default(20),
+    yearsBack: z.number().int().min(1).max(50).default(5),
 });
 const HeatwaveStatsSchema = z.object({
     events: z.number(),
