@@ -3,32 +3,7 @@ import useWeatherAnalysis, { type WeatherAnalysisParams } from './useWeatherAnal
 import useStationAvailability from './useStationAvailability';
 import type { Probability, WeatherAnalysisResponse, YearIndicators } from './types';
 
-const PRESETS = [
-  {
-    id: 'wheat_establishment',
-    label: 'Blé tendre — Semis à levée',
-    crop: 'blé_tendre',
-    phaseStart: 288, // 15 octobre
-    phaseEnd: 320, // 15 novembre
-    drySpellThreshold: 10,
-  },
-  {
-    id: 'corn_flowering',
-    label: 'Maïs — Floraison',
-    crop: 'maïs',
-    phaseStart: 180, // fin juin
-    phaseEnd: 220, // début août
-    drySpellThreshold: 10,
-  },
-  {
-    id: 'sunflower_bud',
-    label: 'Tournesol — Bouton floral',
-    crop: 'tournesol',
-    phaseStart: 150,
-    phaseEnd: 200,
-    drySpellThreshold: 10,
-  },
-] as const;
+const DEFAULT_DRY_SPELL_THRESHOLD = 10;
 
 const YEARS_OPTIONS = [1, 5, 10] as const;
 
@@ -46,6 +21,24 @@ function formatDayOfYear(day: number): string {
   const date = new Date(Date.UTC(2024, 0, 1));
   date.setUTCDate(day);
   return date.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
+}
+
+function formatDateInput(date: Date): string {
+  const utcDate = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  const year = utcDate.getUTCFullYear();
+  const month = `${utcDate.getUTCMonth() + 1}`.padStart(2, '0');
+  const day = `${utcDate.getUTCDate()}`.padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function dayOfYearFromInput(value: string): number | null {
+  if (!value) return null;
+  const date = new Date(`${value}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return null;
+  const start = Date.UTC(date.getUTCFullYear(), 0, 0);
+  const diff = date.getTime() - start;
+  const doy = Math.floor(diff / (24 * 60 * 60 * 1000));
+  return Number.isFinite(doy) ? doy : null;
 }
 
 function consecutiveYearsAvailable(years: number[]): number {
@@ -115,11 +108,20 @@ export interface WeatherAnalysisPanelProps {
 }
 
 export default function WeatherAnalysisPanel({ lat, lon, parcelLabel }: WeatherAnalysisPanelProps) {
-  const [presetId, setPresetId] = useState<typeof PRESETS[number]['id']>(PRESETS[0].id);
   const [yearsBack, setYearsBack] = useState<number>(5);
   const [shouldAnalyze, setShouldAnalyze] = useState(false);
-
-  const preset = PRESETS.find((item) => item.id === presetId) ?? PRESETS[0];
+  const [startDate, setStartDate] = useState<string>(() => {
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    const start = new Date(today);
+    start.setUTCDate(start.getUTCDate() - 30);
+    return formatDateInput(start);
+  });
+  const [endDate, setEndDate] = useState<string>(() => {
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    return formatDateInput(today);
+  });
 
   const maxLookback = YEARS_OPTIONS[YEARS_OPTIONS.length - 1] ?? 1;
   const availability = useStationAvailability(lat, lon, maxLookback);
@@ -129,7 +131,7 @@ export default function WeatherAnalysisPanel({ lat, lon, parcelLabel }: WeatherA
 
   useEffect(() => {
     setShouldAnalyze(false);
-  }, [lat, lon]);
+  }, [lat, lon, startDate, endDate]);
 
   useEffect(() => {
     if (!continuousYears) {
@@ -149,15 +151,20 @@ export default function WeatherAnalysisPanel({ lat, lon, parcelLabel }: WeatherA
     if (lat == null || lon == null || Number.isNaN(lat) || Number.isNaN(lon)) {
       return null;
     }
+    const phaseStart = dayOfYearFromInput(startDate);
+    const phaseEnd = dayOfYearFromInput(endDate);
+    if (phaseStart == null || phaseEnd == null) {
+      return null;
+    }
     return {
       lat,
       lon,
-      crop: preset.crop,
-      phaseStart: preset.phaseStart,
-      phaseEnd: preset.phaseEnd,
+      crop: 'custom_period',
+      phaseStart,
+      phaseEnd,
       yearsBack,
     };
-  }, [lat, lon, preset, yearsBack]);
+  }, [lat, lon, yearsBack, startDate, endDate]);
 
   const requestParams = shouldAnalyze ? baseParams : null;
 
@@ -203,10 +210,11 @@ export default function WeatherAnalysisPanel({ lat, lon, parcelLabel }: WeatherA
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}>
           <label style={{ display: 'flex', flexDirection: 'column', fontSize: 13, color: '#1e293b' }}>
-            Période agronomique
-            <select
-              value={presetId}
-              onChange={(event) => setPresetId(event.target.value as typeof PRESETS[number]['id'])}
+            Date de début
+            <input
+              type="date"
+              value={startDate}
+              onChange={(event) => setStartDate(event.target.value)}
               style={{
                 marginTop: 4,
                 borderRadius: 8,
@@ -214,13 +222,22 @@ export default function WeatherAnalysisPanel({ lat, lon, parcelLabel }: WeatherA
                 padding: '8px 12px',
                 fontSize: 14,
               }}
-            >
-              {PRESETS.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+            />
+          </label>
+          <label style={{ display: 'flex', flexDirection: 'column', fontSize: 13, color: '#1e293b' }}>
+            Date de fin
+            <input
+              type="date"
+              value={endDate}
+              onChange={(event) => setEndDate(event.target.value)}
+              style={{
+                marginTop: 4,
+                borderRadius: 8,
+                border: '1px solid #cbd5f5',
+                padding: '8px 12px',
+                fontSize: 14,
+              }}
+            />
           </label>
           <label style={{ display: 'flex', flexDirection: 'column', fontSize: 13, color: '#1e293b' }}>
             Fenêtre historique
@@ -362,7 +379,7 @@ export default function WeatherAnalysisPanel({ lat, lon, parcelLabel }: WeatherA
               {[
                 { label: 'Vague de chaleur (≥1 épisode ≥35°C)', value: data.risks.heatwave },
                 { label: 'Jours très chauds (≥3 jours ≥35°C)', value: data.risks.extremeHeat },
-                { label: `Séquence sèche ≥ ${preset.drySpellThreshold} jours`, value: data.risks.drySpell },
+                { label: `Séquence sèche ≥ ${DEFAULT_DRY_SPELL_THRESHOLD} jours`, value: data.risks.drySpell },
                 { label: 'Gel tardif (Tmin ≤0°C après début de phase)', value: data.risks.lateFrost },
               ].map((item) => (
                 <div key={item.label} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
