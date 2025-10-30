@@ -1,5 +1,5 @@
 // src/App.jsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 
 import RasterToggles from "./components/RasterToggles";
@@ -7,11 +7,12 @@ import ParcelleEditor from "./components/ParcelleEditor";
 import { useMapInitialization } from "./features/map/useMapInitialization";
 import { DEFAULT_FILL_OPACITY } from "./config/soilsLocalConfig";
 import { GEO_PORTAIL_SOIL_DEFAULT_OPACITY } from "./config/soilGeoportal";
+import { RASTER_LAYERS, DEFAULT_FEATURE_INFO_PARSER } from "./config/rasterLayers";
 
 // ⛔️ retirés car liés aux calques/queries en ligne (Géoportail)
 // import SoilsControl from "./features/soils/components/SoilsControl";
 // import { useSoilsLayer } from "./features/soils/hooks/useSoilsLayer";
-import SoilInfoPanel from "./components/SoilInfoPanel";
+import MapInfoPanel from "./components/MapInfoPanel";
 // import { getRrpAtPoint } from "./utils/rrpGetFeatureInfo";
 
 // ✅ composant RPG autonome (chemin conservé)
@@ -24,6 +25,84 @@ import ExportMenuButton from "./Front/ExportMenuButton";
 
 // ✅ NOUVEAU : hook d’affichage RRP local (depuis un fichier MBTiles placé dans /public/data)
 import { useSoilLayerLocal } from "./features/useSoilLayerLocal";
+
+const EARTH_RADIUS = 6378137;
+
+function projectLngLatTo3857(lng, lat) {
+  const rad = Math.PI / 180;
+  const clampedLat = Math.max(Math.min(lat, 89.999999), -89.999999);
+  const x = EARTH_RADIUS * lng * rad;
+  const y = EARTH_RADIUS * Math.log(Math.tan(Math.PI / 4 + (clampedLat * rad) / 2));
+  return [x, y];
+}
+
+function buildFeatureInfoUrl(def, map, point) {
+  const info = def?.featureInfo;
+  if (!info || !info.url || !info.layerName || !map || !point) {
+    return null;
+  }
+
+  const version = info.version || "1.3.0";
+  const isVersion130 = version === "1.3.0";
+
+  const canvas = typeof map.getCanvas === "function" ? map.getCanvas() : null;
+  const bounds = typeof map.getBounds === "function" ? map.getBounds() : null;
+  if (!canvas || !bounds) {
+    return null;
+  }
+
+  const sw = typeof bounds.getSouthWest === "function" ? bounds.getSouthWest() : bounds._sw;
+  const ne = typeof bounds.getNorthEast === "function" ? bounds.getNorthEast() : bounds._ne;
+  if (!sw || !ne) {
+    return null;
+  }
+
+  const [minX, minY] = projectLngLatTo3857(sw.lng, sw.lat);
+  const [maxX, maxY] = projectLngLatTo3857(ne.lng, ne.lat);
+  const bbox = `${minX},${minY},${maxX},${maxY}`;
+
+  const width = Math.round(canvas.width || canvas.clientWidth || 256);
+  const height = Math.round(canvas.height || canvas.clientHeight || 256);
+  const i = Math.round(point.x);
+  const j = Math.round(point.y);
+
+  let url;
+  try {
+    url = new URL(info.url);
+  } catch (error) {
+    return null;
+  }
+
+  const params = url.searchParams;
+  params.set("SERVICE", "WMS");
+  params.set("REQUEST", "GetFeatureInfo");
+  params.set("VERSION", version);
+  params.set("LAYERS", info.layerName);
+  params.set(
+    "QUERY_LAYERS",
+    Array.isArray(info.queryLayers) && info.queryLayers.length > 0
+      ? info.queryLayers.join(",")
+      : info.layerName,
+  );
+  params.set("STYLES", info.styles || "");
+  params.set(isVersion130 ? "CRS" : "SRS", info.crs || "EPSG:3857");
+  params.set("INFO_FORMAT", info.infoFormat || "application/json");
+  params.set("I", String(i));
+  params.set("J", String(j));
+  params.set("WIDTH", String(width));
+  params.set("HEIGHT", String(height));
+  params.set("BBOX", bbox);
+
+  if (info.extraParams && typeof info.extraParams === "object") {
+    Object.entries(info.extraParams).forEach(([key, value]) => {
+      if (value != null) {
+        params.set(key, String(value));
+      }
+    });
+  }
+
+  return url.toString();
+}
 
 export default function App() {
   const {
@@ -47,7 +126,17 @@ export default function App() {
     GEO_PORTAIL_SOIL_DEFAULT_OPACITY
   );
   const [freezeTiles, setFreezeTiles] = useState(false);
-  const [soilClickInfo, setSoilClickInfo] = useState(null);
+  const [layerState, setLayerState] = useState(() => {
+    const initial = {};
+    RASTER_LAYERS.forEach((def) => {
+      initial[def.id] = {
+        visible: def.defaultVisible ?? false,
+        opacity: def.defaultOpacity ?? 1,
+      };
+    });
+    return initial;
+  });
+  const [mapClickInfo, setMapClickInfo] = useState(null);
 
   useEffect(() => {
     if (!sideOpen) {
@@ -93,32 +182,160 @@ export default function App() {
   });
 
   const mapInstance = mapRef.current;
+  const infoAbortControllers = useRef([]);
+  const lastInfoRequestRef = useRef(0);
+  const infoEnabledDefs = useMemo(
+    () => RASTER_LAYERS.filter((def) => def.featureInfo),
+    [],
+  );
+
+  useEffect(() => () => {
+    infoAbortControllers.current.forEach((controller) => controller.abort());
+    infoAbortControllers.current = [];
+  }, []);
 
   useEffect(() => {
     if (!mapInstance) return;
 
     const handleClick = (event) => {
-      if (!rrpVisible) {
-        setSoilClickInfo(null);
+      const visibleInfoDefs = infoEnabledDefs.filter(
+        (def) => layerState[def.id]?.visible,
+      );
+      const querySoils = rrpVisible;
+
+      if (!querySoils && visibleInfoDefs.length === 0) {
+        setMapClickInfo(null);
         return;
       }
-      const features = mapInstance.queryRenderedFeatures(event.point, {
-        layers: ["soils-rrp-fill"],
+
+      infoAbortControllers.current.forEach((controller) => controller.abort());
+      infoAbortControllers.current = [];
+
+      const requestId = lastInfoRequestRef.current + 1;
+      lastInfoRequestRef.current = requestId;
+
+      const lngLat =
+        event.lngLat && typeof event.lngLat.wrap === "function"
+          ? event.lngLat.wrap()
+          : event.lngLat;
+
+      setMapClickInfo({
+        requestId,
+        lngLat,
+        soils: querySoils ? { loading: true, features: [] } : null,
+        layers: visibleInfoDefs.map((def) => ({
+          id: def.id,
+          label: def.label,
+          loading: true,
+          error: null,
+          data: null,
+        })),
       });
-      const items = features.map((feature, idx) => ({
-        id:
-          feature.id ??
-          feature.properties?.id ??
-          feature.properties?.ID ??
-          `${feature.source}-${feature.sourceLayer ?? ""}-${idx}`,
-        properties: { ...(feature.properties ?? {}) },
-      }));
-      setSoilClickInfo({
-        lngLat:
-          event.lngLat && typeof event.lngLat.wrap === "function"
-            ? event.lngLat.wrap()
-            : event.lngLat,
-        features: items,
+
+      if (querySoils) {
+        const soilFeatures = mapInstance.queryRenderedFeatures(event.point, {
+          layers: ["soils-rrp-fill"],
+        });
+        const items = soilFeatures.map((feature, idx) => ({
+          id:
+            feature.id ??
+            feature.properties?.id ??
+            feature.properties?.ID ??
+            `${feature.source}-${feature.sourceLayer ?? ""}-${idx}`,
+          properties: { ...(feature.properties ?? {}) },
+        }));
+
+        setMapClickInfo((prev) => {
+          if (!prev || prev.requestId !== requestId) return prev;
+          return {
+            ...prev,
+            soils: { loading: false, features: items },
+          };
+        });
+      }
+
+      visibleInfoDefs.forEach((def) => {
+        const requestUrl = buildFeatureInfoUrl(def, mapInstance, event.point);
+        if (!requestUrl) {
+          setMapClickInfo((prev) => {
+            if (!prev || prev.requestId !== requestId) return prev;
+            return {
+              ...prev,
+              layers: (prev.layers || []).map((layer) =>
+                layer.id === def.id
+                  ? {
+                      ...layer,
+                      loading: false,
+                      error: "URL non valide",
+                    }
+                  : layer,
+              ),
+            };
+          });
+          return;
+        }
+
+        const controller = new AbortController();
+        infoAbortControllers.current.push(controller);
+
+        fetch(requestUrl, { signal: controller.signal })
+          .then((response) => {
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status}`);
+            }
+            const contentType = response.headers.get("content-type") || "";
+            if (contentType.includes("application/json")) {
+              return response.json();
+            }
+            return response.text().then((text) => ({ text }));
+          })
+          .then((payload) => {
+            const parser = def.featureInfo?.parser || DEFAULT_FEATURE_INFO_PARSER;
+            const parsed =
+              typeof parser === "function" ? parser(payload, { layer: def }) : payload;
+
+            setMapClickInfo((prev) => {
+              if (!prev || prev.requestId !== requestId) return prev;
+              return {
+                ...prev,
+                layers: (prev.layers || []).map((layer) =>
+                  layer.id === def.id
+                    ? {
+                        ...layer,
+                        loading: false,
+                        error: null,
+                        data: parsed,
+                      }
+                    : layer,
+                ),
+              };
+            });
+          })
+          .catch((error) => {
+            if (controller.signal.aborted) {
+              return;
+            }
+            setMapClickInfo((prev) => {
+              if (!prev || prev.requestId !== requestId) return prev;
+              return {
+                ...prev,
+                layers: (prev.layers || []).map((layer) =>
+                  layer.id === def.id
+                    ? {
+                        ...layer,
+                        loading: false,
+                        error: error.message || "Erreur inconnue",
+                      }
+                    : layer,
+                ),
+              };
+            });
+          })
+          .finally(() => {
+            infoAbortControllers.current = infoAbortControllers.current.filter(
+              (ctrl) => ctrl !== controller,
+            );
+          });
       });
     };
 
@@ -127,13 +344,33 @@ export default function App() {
     return () => {
       mapInstance.off("click", handleClick);
     };
-  }, [mapInstance, rrpVisible]);
+  }, [mapInstance, infoEnabledDefs, layerState, rrpVisible]);
 
   useEffect(() => {
-    if (!rrpVisible) {
-      setSoilClickInfo(null);
-    }
-  }, [rrpVisible]);
+    setMapClickInfo((prev) => {
+      if (!prev) return prev;
+
+      const visibleInfoIds = new Set(
+        infoEnabledDefs
+          .filter((def) => layerState[def.id]?.visible)
+          .map((def) => def.id),
+      );
+      const layers = (prev.layers || []).filter((layer) =>
+        visibleInfoIds.has(layer.id),
+      );
+      const soils = rrpVisible ? prev.soils : null;
+
+      if (layers.length === (prev.layers || []).length && soils === prev.soils) {
+        return prev;
+      }
+
+      if (!soils && layers.length === 0) {
+        return null;
+      }
+
+      return { ...prev, layers, soils };
+    });
+  }, [layerState, rrpVisible, infoEnabledDefs]);
 
   const totalFrozenFeatures = useMemo(
     () => frozenTiles.reduce((acc, tile) => acc + tile.features.length, 0),
@@ -157,6 +394,32 @@ export default function App() {
   })();
 
   const canFreezeCurrentTile = Boolean(currentTileSummary?.featureCount);
+
+  const handleCloseInfoPanel = () => {
+    infoAbortControllers.current.forEach((controller) => controller.abort());
+    infoAbortControllers.current = [];
+    setMapClickInfo(null);
+  };
+
+  const handleLayerToggle = (id, visible) => {
+    setLayerState((prev) => ({
+      ...prev,
+      [id]: {
+        ...(prev?.[id] || {}),
+        visible,
+      },
+    }));
+  };
+
+  const handleLayerOpacityChange = (id, value) => {
+    setLayerState((prev) => ({
+      ...prev,
+      [id]: {
+        ...(prev?.[id] || {}),
+        opacity: value,
+      },
+    }));
+  };
 
   // ---- Styles de la barre d’outils bas
   const barBase = {
@@ -232,7 +495,7 @@ export default function App() {
       {/* Carte */}
       <div id="map" style={{ height: "100dvh", width: "100%" }} />
 
-      <SoilInfoPanel info={soilClickInfo} onClose={() => setSoilClickInfo(null)} />
+      <MapInfoPanel info={mapClickInfo} onClose={handleCloseInfoPanel} />
 
       {/* Panneau latéral (onglets + repliable) */}
       <div
@@ -410,7 +673,12 @@ export default function App() {
               Calques
             </span>
             <div style={{ marginTop: 8 }}>
-              <RasterToggles mapRef={mapRef} />
+              <RasterToggles
+                mapRef={mapRef}
+                layerState={layerState}
+                onLayerToggle={handleLayerToggle}
+                onLayerOpacityChange={handleLayerOpacityChange}
+              />
               {/* RPG (autonome) */}
               <RpgFeature mapRef={mapRef} drawRef={drawRef} />
               <div
