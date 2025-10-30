@@ -1,6 +1,7 @@
 import express from 'express';
 import { ZodError } from 'zod';
 import { findNearestStations, getAllStations, refreshStations, } from './stations.js';
+import { fetchStationsCatalog } from './infoclimatStations.js';
 import { getObservationsForStation } from './infoclimatClient.js';
 import { mergeStationsObservations } from './observations.js';
 import { fetchOpenMeteoObservations } from './openMeteoFallback.js';
@@ -187,6 +188,27 @@ router.get('/stations', async (req, res, next) => {
             }
         }
         const stations = await getAllStations();
+        res.json({
+            stations: stations.map((station) => ({
+                id: station.id,
+                name: station.name,
+                city: station.city,
+                latitude: station.lat,
+                longitude: station.lon,
+                elevation: station.altitude,
+                type: station.type,
+            })),
+            source: 'Infoclimat (Open Data)',
+        });
+    }
+    catch (error) {
+        next(error);
+    }
+});
+
+router.get('/stations/catalog', async (_req, res, next) => {
+    try {
+        const stations = await fetchStationsCatalog();
         res.json({
             stations: stations.map((station) => ({
                 id: station.id,
