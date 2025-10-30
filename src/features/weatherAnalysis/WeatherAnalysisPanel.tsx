@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import useWeatherAnalysis, { type WeatherAnalysisParams } from './useWeatherAnalysis';
+import useStationAvailability from './useStationAvailability';
 import type { Probability, WeatherAnalysisResponse, YearIndicators } from './types';
 
 const PRESETS = [
@@ -29,7 +30,7 @@ const PRESETS = [
   },
 ] as const;
 
-const YEARS_OPTIONS = [10, 20, 30] as const;
+const YEARS_OPTIONS = [1, 5, 10] as const;
 
 function formatProbability(probability?: Probability): string {
   if (!probability || probability.probability == null) return '—';
@@ -45,6 +46,28 @@ function formatDayOfYear(day: number): string {
   const date = new Date(Date.UTC(2024, 0, 1));
   date.setUTCDate(day);
   return date.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
+}
+
+function consecutiveYearsAvailable(years: number[]): number {
+  if (!years.length) return 0;
+  const uniqueYears = new Set(years);
+  const latest = Math.max(...uniqueYears);
+  let count = 0;
+  for (let year = latest; uniqueYears.has(year); year -= 1) {
+    count += 1;
+  }
+  return count;
+}
+
+function formatAvailableYears(years: number[]): string {
+  if (!years.length) {
+    return 'Aucune donnée disponible sur la période demandée.';
+  }
+  if (years.length === 1) {
+    return `${years[0]}`;
+  }
+  const sorted = [...years].sort((a, b) => a - b);
+  return `${sorted[0]} – ${sorted[sorted.length - 1]} (${sorted.length} ans)`;
 }
 
 function confidenceLabel(value: number): { label: string; color: string } {
@@ -93,11 +116,36 @@ export interface WeatherAnalysisPanelProps {
 
 export default function WeatherAnalysisPanel({ lat, lon, parcelLabel }: WeatherAnalysisPanelProps) {
   const [presetId, setPresetId] = useState<typeof PRESETS[number]['id']>(PRESETS[0].id);
-  const [yearsBack, setYearsBack] = useState<number>(20);
+  const [yearsBack, setYearsBack] = useState<number>(5);
+  const [shouldAnalyze, setShouldAnalyze] = useState(false);
 
   const preset = PRESETS.find((item) => item.id === presetId) ?? PRESETS[0];
 
-  const requestParams: WeatherAnalysisParams | null = useMemo(() => {
+  const maxLookback = YEARS_OPTIONS[YEARS_OPTIONS.length - 1] ?? 1;
+  const availability = useStationAvailability(lat, lon, maxLookback);
+  const primaryStation = availability.data?.stations?.[0] ?? null;
+  const availableYears = primaryStation?.availableYears ?? [];
+  const continuousYears = useMemo(() => consecutiveYearsAvailable(availableYears), [availableYears]);
+
+  useEffect(() => {
+    setShouldAnalyze(false);
+  }, [lat, lon]);
+
+  useEffect(() => {
+    if (!continuousYears) {
+      setYearsBack(YEARS_OPTIONS[0]);
+      return;
+    }
+    setYearsBack((current) => {
+      if (current <= continuousYears) {
+        return current;
+      }
+      const fallback = [...YEARS_OPTIONS].reverse().find((option) => option <= continuousYears) ?? YEARS_OPTIONS[0];
+      return fallback;
+    });
+  }, [continuousYears]);
+
+  const baseParams: WeatherAnalysisParams | null = useMemo(() => {
     if (lat == null || lon == null || Number.isNaN(lat) || Number.isNaN(lon)) {
       return null;
     }
@@ -111,9 +159,21 @@ export default function WeatherAnalysisPanel({ lat, lon, parcelLabel }: WeatherA
     };
   }, [lat, lon, preset, yearsBack]);
 
+  const requestParams = shouldAnalyze ? baseParams : null;
+
   const { data, loading, error, refetch } = useWeatherAnalysis(requestParams);
 
   const confidence = data ? confidenceLabel(data.confidence) : null;
+
+  const handleAnalyzeClick = () => {
+    if (shouldAnalyze) {
+      refetch();
+    } else {
+      setShouldAnalyze(true);
+    }
+  };
+
+  const analyzeDisabled = availability.loading || !baseParams;
 
   return (
     <section style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -184,7 +244,7 @@ export default function WeatherAnalysisPanel({ lat, lon, parcelLabel }: WeatherA
           </label>
           <button
             type="button"
-            onClick={refetch}
+            onClick={handleAnalyzeClick}
             style={{
               marginTop: 20,
               padding: '8px 14px',
@@ -194,15 +254,53 @@ export default function WeatherAnalysisPanel({ lat, lon, parcelLabel }: WeatherA
               color: '#fff',
               fontSize: 13,
               fontWeight: 600,
-              cursor: 'pointer',
+              cursor: analyzeDisabled ? 'not-allowed' : 'pointer',
+              opacity: analyzeDisabled ? 0.6 : 1,
             }}
+            disabled={analyzeDisabled}
           >
-            Rafraîchir
+            {shouldAnalyze ? 'Rafraîchir' : "Lancer l'analyse"}
           </button>
         </div>
       </header>
 
-      {!requestParams ? (
+      {availability.loading ? (
+        <div style={{ padding: 16, borderRadius: 12, background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+          <p style={{ margin: 0, color: '#475569' }}>Chargement des années disponibles…</p>
+        </div>
+      ) : null}
+
+      {availability.error ? (
+        <div style={{ padding: 16, borderRadius: 12, background: '#fef2f2', border: '1px solid #fecaca' }}>
+          <p style={{ margin: 0, color: '#b91c1c' }}>{availability.error}</p>
+        </div>
+      ) : null}
+
+      {primaryStation ? (
+        <div style={{ padding: 16, borderRadius: 12, background: '#ffffff', border: '1px solid #e2e8f0' }}>
+          <h3 style={{ margin: '0 0 8px', fontSize: 16, color: '#0f172a' }}>Disponibilité des données</h3>
+          <p style={{ margin: 0, fontSize: 14, color: '#1f2937' }}>
+            Station analysée : <strong>{primaryStation.name}</strong>
+            {primaryStation.distanceKm != null ? ` — ${primaryStation.distanceKm.toFixed(1)} km` : ''}
+          </p>
+          <p style={{ margin: '6px 0 0', fontSize: 13, color: '#475569' }}>{formatAvailableYears(availableYears)}</p>
+          {continuousYears > 0 && continuousYears < yearsBack ? (
+            <p style={{ margin: '6px 0 0', fontSize: 13, color: '#b45309' }}>
+              Données continues disponibles sur {continuousYears} ans. Ajustez la fenêtre historique si nécessaire.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {baseParams && !shouldAnalyze ? (
+        <div style={{ padding: 16, borderRadius: 12, background: '#f8fafc', border: '1px dashed #cbd5f5' }}>
+          <p style={{ margin: 0, color: '#475569' }}>
+            Vérifiez les années disponibles puis lancez l'analyse météo.
+          </p>
+        </div>
+      ) : null}
+
+      {!baseParams ? (
         <div style={{ padding: 24, borderRadius: 12, background: '#f8fafc', border: '1px dashed #cbd5f5' }}>
           <p style={{ margin: 0, color: '#475569' }}>
             Sélectionnez une parcelle sur la carte pour lancer l'analyse météo.

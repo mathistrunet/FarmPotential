@@ -124,6 +124,58 @@ describe('GET /api/weather/analyze', () => {
         expect(fetchOpenMeteoObservations).toHaveBeenCalled();
     });
 });
+describe('GET /api/weather/availability', () => {
+    const station = {
+        id: 'station-availability',
+        name: 'Station disponibilité',
+        city: null,
+        lat: 0,
+        lon: 0,
+        altitude: null,
+        type: 'auto',
+        distanceKm: 0,
+    };
+    beforeEach(() => {
+        vi.mocked(findNearestStations).mockReset();
+        vi.mocked(findNearestStations).mockResolvedValue([station]);
+        vi.mocked(getObservationsForStation).mockReset();
+    });
+    const app = createApp();
+    it('returns available years for the nearest station', async () => {
+        vi.mocked(getObservationsForStation).mockResolvedValue([
+            { ts: '2023-01-01T00:00:00.000Z', t: 10, tmin: null, tmax: null, rr: null, rr24: null, ff: null, fx: null, rh: null, p: null },
+            { ts: '2024-02-01T00:00:00.000Z', t: 11, tmin: null, tmax: null, rr: null, rr24: null, ff: null, fx: null, rh: null, p: null },
+        ]);
+        const response = await request(app)
+            .get('/api/weather/availability')
+            .query({ lat: 1, lon: 2, maxYears: 5 });
+        expect(response.status).toBe(200);
+        expect(response.body.stations).toEqual([
+            expect.objectContaining({
+                id: 'station-availability',
+                availableYears: [2023, 2024],
+            }),
+        ]);
+        expect(response.body.startYear).toBeLessThanOrEqual(response.body.endYear);
+    });
+    it('returns 400 when lat/lon are invalid', async () => {
+        const response = await request(app).get('/api/weather/availability').query({ lat: 'abc', lon: 2 });
+        expect(response.status).toBe(400);
+        expect(response.body).toEqual({ error: 'Paramètres lat/lon invalides.' });
+    });
+    it('returns 502 when the API key is missing', async () => {
+        vi
+            .mocked(getObservationsForStation)
+            .mockRejectedValue(new Error('Missing INFOCLIMAT_API_KEY environment variable'));
+        const response = await request(app)
+            .get('/api/weather/availability')
+            .query({ lat: 1, lon: 2 });
+        expect(response.status).toBe(502);
+        expect(response.body).toEqual({
+            error: "Impossible de contacter l'API Infoclimat : configurez la variable d'environnement INFOCLIMAT_API_KEY.",
+        });
+    });
+});
 describe('GET /api/weather/summary', () => {
     const station = {
         id: 'station-1',
