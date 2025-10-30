@@ -1,4 +1,20 @@
 import { z } from 'zod';
+
+export const AnalyzeWeatherSchema = z.object({
+    lat: z.coerce.number().optional(),
+    lon: z.coerce.number().optional(),
+    station: z.string().optional(),
+    dateStart: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/),
+    dateEnd: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/),
+    source: z
+        .enum(['Infoclimat (Open Data)', 'MeteoFrance', 'OpenWeather'])
+        .default('Infoclimat (Open Data)'),
+});
+
 export const WeatherAnalysisInputSchema = z.object({
     lat: z.number().min(-90).max(90),
     lon: z.number().min(-180).max(180),

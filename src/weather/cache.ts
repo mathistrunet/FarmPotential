@@ -108,7 +108,7 @@ export async function purgeExpiredEntries(): Promise<void> {
 
   if (!storage) return;
   try {
-    await storage.iterate((entry: CachedWeatherEntry, key) => {
+    await storage.iterate((entry: CachedWeatherEntry, key: string) => {
       if (entry?.expiresAt && entry.expiresAt <= expiration) {
         void storage.removeItem(key);
       }
