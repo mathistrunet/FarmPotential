@@ -1,10 +1,12 @@
 import type { CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import WeatherAnalysisPanel from '../features/weatherAnalysis/WeatherAnalysisPanel';
+import type { WeatherHistorySelection } from '../features/weatherAnalysis/types';
 
 interface SummaryContext {
   centroid?: { latitude: number; longitude: number } | null;
   parcelLabel?: string;
+  historySelection?: WeatherHistorySelection | null;
 }
 
 interface WeatherSummaryModalProps {
@@ -140,6 +142,7 @@ export default function WeatherSummaryModal({ open, onClose, context, onOpenHist
             lat={context?.centroid?.latitude ?? null}
             lon={context?.centroid?.longitude ?? null}
             parcelLabel={context?.parcelLabel}
+            historySelection={context?.historySelection ?? null}
           />
         </div>
       </div>

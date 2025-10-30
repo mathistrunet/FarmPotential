@@ -33,6 +33,8 @@ function MapExperience({
   weatherModalOpen = false,
   onOpenWeather = () => {},
   onCloseWeather = () => {},
+  historySelection = null,
+  onHistorySelectionChange = () => {},
 }) {
   const {
     mapRef,
@@ -94,17 +96,24 @@ function MapExperience({
     return { feature: null, label: "", centroid: null };
   }, [features, selectedId]);
 
-  const handleOpenSummaryView = useCallback(() => {
-    onOpenSummary({
-      centroid: selectedInfo.centroid,
-      parcelLabel: selectedInfo.label,
-    });
-  }, [onOpenSummary, selectedInfo.centroid, selectedInfo.label]);
+  const handleOpenSummaryView = useCallback(
+    (selectionOverride = null) => {
+      onOpenSummary({
+        centroid: selectedInfo.centroid,
+        parcelLabel: selectedInfo.label,
+        historySelection: selectionOverride ?? historySelection ?? null,
+      });
+    },
+    [historySelection, onOpenSummary, selectedInfo.centroid, selectedInfo.label],
+  );
 
-  const handleNavigateToSummaryFromModal = useCallback(() => {
-    onCloseWeather();
-    handleOpenSummaryView();
-  }, [handleOpenSummaryView, onCloseWeather]);
+  const handleNavigateToSummaryFromModal = useCallback(
+    (selection) => {
+      onCloseWeather();
+      handleOpenSummaryView(selection ?? null);
+    },
+    [handleOpenSummaryView, onCloseWeather],
+  );
 
   const layoutStyle = {
     height: "100%",
@@ -354,6 +363,7 @@ function MapExperience({
         parcelLabel={selectedInfo.label}
         centroid={selectedInfo.centroid}
         onOpenSummary={handleNavigateToSummaryFromModal}
+        onSelectionChange={onHistorySelectionChange}
       />
     </div>
   );
@@ -363,6 +373,7 @@ export default function App() {
   const [weatherModalOpen, setWeatherModalOpen] = useState(false);
   const [analysisContext, setAnalysisContext] = useState(null);
   const [summaryOpen, setSummaryOpen] = useState(false);
+  const [historySelection, setHistorySelection] = useState(null);
 
   const handleOpenHistoryFromSummary = useCallback(() => {
     setSummaryOpen(false);
@@ -375,6 +386,8 @@ export default function App() {
         weatherModalOpen={weatherModalOpen}
         onOpenWeather={() => setWeatherModalOpen(true)}
         onCloseWeather={() => setWeatherModalOpen(false)}
+        historySelection={historySelection}
+        onHistorySelectionChange={setHistorySelection}
         onOpenSummary={(payload) => {
           setAnalysisContext(payload || null);
           setSummaryOpen(true);

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import useWeatherAnalysis, { type WeatherAnalysisParams } from './useWeatherAnalysis';
 import useStationAvailability from './useStationAvailability';
-import type { StationAvailability } from './types';
+import type { StationAvailability, WeatherHistorySelection } from './types';
 
 const HOURLY_COLUMNS = [
   { key: 'dh_utc', label: 'Heure (UTC)' },
@@ -24,11 +24,13 @@ export interface WeatherAnalysisPanelProps {
   lat: number | null | undefined;
   lon: number | null | undefined;
   parcelLabel?: string;
+  historySelection?: WeatherHistorySelection | null;
 }
 
-export default function WeatherAnalysisPanel({ lat, lon, parcelLabel }: WeatherAnalysisPanelProps) {
+export default function WeatherAnalysisPanel({ lat, lon, parcelLabel, historySelection }: WeatherAnalysisPanelProps) {
   const [shouldAnalyze, setShouldAnalyze] = useState(false);
   const [startDate, setStartDate] = useState<string>(() => {
+    if (historySelection?.start) return historySelection.start;
     const today = new Date();
     today.setUTCHours(0, 0, 0, 0);
     const start = new Date(today);
@@ -36,26 +38,48 @@ export default function WeatherAnalysisPanel({ lat, lon, parcelLabel }: WeatherA
     return formatDateInput(start);
   });
   const [endDate, setEndDate] = useState<string>(() => {
+    if (historySelection?.end) return historySelection.end;
     const today = new Date();
     today.setUTCHours(0, 0, 0, 0);
     return formatDateInput(today);
   });
-  const [selectedStation, setSelectedStation] = useState<string | null>(null);
+  const [selectedStation, setSelectedStation] = useState<string | null>(historySelection?.stationId ?? null);
 
   const availability = useStationAvailability(lat, lon, 1);
   const stations: StationAvailability[] = availability.data?.stations ?? [];
 
   useEffect(() => {
+    if (historySelection?.stationId) {
+      setSelectedStation(historySelection.stationId);
+      return;
+    }
     if (stations.length) {
       setSelectedStation(stations[0].id);
     } else {
       setSelectedStation(null);
     }
-  }, [stations]);
+  }, [historySelection, stations]);
 
   useEffect(() => {
+    if (historySelection?.start) {
+      setStartDate(historySelection.start);
+    }
+    if (historySelection?.end) {
+      setEndDate(historySelection.end);
+    }
+  }, [historySelection]);
+
+  useEffect(() => {
+    if (historySelection) return;
     setShouldAnalyze(false);
-  }, [lat, lon, startDate, endDate, selectedStation]);
+  }, [historySelection, lat, lon, startDate, endDate, selectedStation]);
+
+  useEffect(() => {
+    if (!historySelection) return;
+    if (historySelection.stationId && selectedStation !== historySelection.stationId) return;
+    if (!historySelection.start || !historySelection.end) return;
+    setShouldAnalyze(true);
+  }, [historySelection, selectedStation]);
 
   const params: WeatherAnalysisParams | null = useMemo(() => {
     if (!shouldAnalyze) return null;
@@ -66,8 +90,9 @@ export default function WeatherAnalysisPanel({ lat, lon, parcelLabel }: WeatherA
       lon: lon ?? undefined,
       dateStart: startDate,
       dateEnd: endDate,
+      source: historySelection?.series.meta.provider,
     };
-  }, [shouldAnalyze, selectedStation, startDate, endDate, lat, lon]);
+  }, [shouldAnalyze, selectedStation, startDate, endDate, lat, lon, historySelection]);
 
   const { data, loading, error, refetch } = useWeatherAnalysis(params);
 
@@ -79,7 +104,9 @@ export default function WeatherAnalysisPanel({ lat, lon, parcelLabel }: WeatherA
     }
   };
 
-  const analyzeDisabled = !startDate || !endDate || availability.loading;
+  const analyzeDisabled = !startDate || !endDate || (availability.loading && !historySelection);
+  const stationLocked = Boolean(historySelection?.stationId);
+  const historySources = historySelection?.sources?.length ? historySelection.sources.join(' • ') : null;
 
   return (
     <section style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -92,6 +119,29 @@ export default function WeatherAnalysisPanel({ lat, lon, parcelLabel }: WeatherA
             ) : null}
           </div>
         </div>
+        {historySelection ? (
+          <div
+            style={{
+              padding: '12px 16px',
+              background: '#ecfeff',
+              borderRadius: 12,
+              color: '#0f172a',
+              fontSize: 13,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 4,
+            }}
+          >
+            <strong style={{ fontSize: 14 }}>
+              Analyse basée sur la station {historySelection.stationLabel ?? historySelection.stationId ?? 'inconnue'}
+            </strong>
+            <span>
+              Période {historySelection.start} → {historySelection.end}
+            </span>
+            {historySources ? <span>Sources : {historySources}</span> : null}
+          </div>
+        ) : null}
+
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
           <label style={{ display: 'flex', flexDirection: 'column', fontSize: 14, color: '#1f2937' }}>
             Station
@@ -99,9 +149,14 @@ export default function WeatherAnalysisPanel({ lat, lon, parcelLabel }: WeatherA
               value={selectedStation ?? ''}
               onChange={(event) => setSelectedStation(event.target.value || null)}
               style={{ marginTop: 4, padding: '6px 8px', borderRadius: 6, border: '1px solid #cbd5f5', minWidth: 220 }}
-              disabled={!stations.length}
+              disabled={stationLocked || !stations.length}
             >
               {stations.length ? null : <option value="">Aucune station disponible</option>}
+              {stationLocked && historySelection?.stationId ? (
+                <option value={historySelection.stationId}>
+                  {historySelection.stationLabel ?? historySelection.stationId} (historique)
+                </option>
+              ) : null}
               {stations.map((station) => (
                 <option key={station.id} value={station.id}>
                   {station.name ?? station.id}
