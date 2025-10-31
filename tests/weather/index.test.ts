@@ -1,4 +1,24 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+vi.mock('localforage', () => {
+  const store = new Map<string, unknown>();
+  return {
+    createInstance: vi.fn(() => ({
+      getItem: vi.fn(async (key: string) => store.get(key) ?? null),
+      setItem: vi.fn(async (key: string, value: unknown) => {
+        store.set(key, value);
+      }),
+      removeItem: vi.fn(async (key: string) => {
+        store.delete(key);
+      }),
+      iterate: vi.fn(async (callback: (value: unknown, key: string) => void | Promise<void>) => {
+        for (const [key, value] of store.entries()) {
+          await callback(value, key);
+        }
+      }),
+    })),
+  };
+});
+
 import { getWeather, type WeatherSeries } from '../../src/weather';
 import { WeatherProviderError } from '../../src/weather/types';
 import { fetchInfoclimat } from '../../src/weather/providers/infoclimat';
@@ -24,8 +44,6 @@ beforeEach(() => {
 
 describe('getWeather', () => {
   it('falls back when the primary provider fails', async () => {
-    vi.stubEnv('VITE_INFOCLIMAT_TOKEN', 'token');
-
     (fetchInfoclimat as unknown as ReturnType<typeof vi.fn>).mockRejectedValue(
       new WeatherProviderError('infoclimat', 'unauthorized', { status: 401 }),
     );
@@ -70,8 +88,6 @@ describe('getWeather', () => {
   });
 
   it('merges supplemental fields from fallback providers', async () => {
-    vi.stubEnv('VITE_INFOCLIMAT_TOKEN', 'token');
-
     (fetchInfoclimat as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
       meta: {
         provider: 'infoclimat',
