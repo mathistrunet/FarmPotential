@@ -3,11 +3,13 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 
 import RasterToggles from "./components/RasterToggles";
+import BdtTopoToggles from "./components/BdtTopoToggles";
 import ParcelleEditor from "./components/ParcelleEditor";
 import { useMapInitialization } from "./features/map/useMapInitialization";
 import { DEFAULT_FILL_OPACITY } from "./config/soilsLocalConfig";
 import { GEO_PORTAIL_SOIL_DEFAULT_OPACITY } from "./config/soilGeoportal";
 import { RASTER_LAYERS, DEFAULT_FEATURE_INFO_PARSER } from "./config/rasterLayers";
+import { useBdtTopoLayers } from "./features/map/useBdtTopoLayers";
 
 // ⛔️ retirés car liés aux calques/queries en ligne (Géoportail)
 // import SoilsControl from "./features/soils/components/SoilsControl";
@@ -69,7 +71,7 @@ function buildFeatureInfoUrl(def, map, point) {
   let url;
   try {
     url = new URL(info.url);
-  } catch (error) {
+  } catch {
     return null;
   }
 
@@ -137,6 +139,13 @@ export default function App() {
     return initial;
   });
   const [mapClickInfo, setMapClickInfo] = useState(null);
+
+  const {
+    state: bdtopoState,
+    toggleLayer: toggleBdtopoLayer,
+    setOpacity: setBdtopoOpacity,
+    reloadLayer: reloadBdtopoLayer,
+  } = useBdtTopoLayers(mapRef);
 
   useEffect(() => {
     if (!sideOpen) {
@@ -679,6 +688,30 @@ export default function App() {
                 onLayerToggle={handleLayerToggle}
                 onLayerOpacityChange={handleLayerOpacityChange}
               />
+              <div
+                style={{
+                  marginTop: 12,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                }}
+              >
+                <span
+                  style={{
+                    cursor: "default",
+                    fontWeight: 600,
+                    fontSize: 13,
+                  }}
+                >
+                  BD TOPO (local)
+                </span>
+                <BdtTopoToggles
+                  state={bdtopoState}
+                  onToggle={(id, visible) => toggleBdtopoLayer(id, visible)}
+                  onOpacityChange={(id, value) => setBdtopoOpacity(id, value)}
+                  onRetry={(id) => reloadBdtopoLayer(id)}
+                />
+              </div>
               {/* RPG (autonome) */}
               <RpgFeature mapRef={mapRef} drawRef={drawRef} />
               <div
