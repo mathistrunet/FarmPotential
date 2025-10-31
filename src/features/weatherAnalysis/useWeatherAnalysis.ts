@@ -1,13 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { WeatherAnalysisResponse } from './types';
 
+export type WeatherAnalysisSource =
+  | 'Infoclimat (Open Data)'
+  | 'MeteoFrance'
+  | 'OpenWeather';
+
 export interface WeatherAnalysisParams {
   station?: string;
   lat?: number;
   lon?: number;
   dateStart: string;
   dateEnd: string;
-  source?: string;
+  source?: WeatherAnalysisSource;
 }
 
 interface State {
