@@ -1,9 +1,9 @@
 const BASE = process.env.INFOCLIMAT_API_BASE ?? 'https://www.infoclimat.fr/opendata/';
-const TOKEN = process.env.INFOCLIMAT_API_TOKEN;
+const TOKEN = process.env.INFOCLIMAT_API_TOKEN ?? process.env.INFOCLIMAT_API_KEY;
 
 export async function fetchInfoclimat({ station, start, end }) {
   if (!TOKEN) {
-    throw new Error('INFOCLIMAT_API_TOKEN is not defined');
+    throw new Error('Infoclimat API token is not defined (set INFOCLIMAT_API_TOKEN or INFOCLIMAT_API_KEY)');
   }
 
   if (!station) {

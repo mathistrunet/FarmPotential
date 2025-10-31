@@ -206,13 +206,13 @@ describe('GET /api/weather/availability', () => {
     it('returns 502 when the API key is missing', async () => {
         vi
             .mocked(getObservationsForStation)
-            .mockRejectedValue(new Error('Missing INFOCLIMAT_API_KEY environment variable'));
+            .mockRejectedValue(new Error('Missing Infoclimat API token (set INFOCLIMAT_API_KEY or INFOCLIMAT_API_TOKEN)'));
         const response = await request(app)
             .get('/api/weather/availability')
             .query({ lat: 1, lon: 2 });
         expect(response.status).toBe(502);
         expect(response.body).toEqual({
-            error: "Impossible de contacter l'API Infoclimat : configurez la variable d'environnement INFOCLIMAT_API_KEY.",
+            error: "Impossible de contacter l'API Infoclimat : configurez la variable d'environnement INFOCLIMAT_API_KEY ou INFOCLIMAT_API_TOKEN.",
         });
     });
 });

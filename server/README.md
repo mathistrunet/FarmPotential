@@ -12,7 +12,7 @@ npm install
 
 | Variable | Description |
 | --- | --- |
-| `INFOCLIMAT_API_KEY` | Clé API Infoclimat (obligatoire pour interroger l'API Open Data). |
+| `INFOCLIMAT_API_KEY` / `INFOCLIMAT_API_TOKEN` | Clé API Infoclimat (obligatoire pour interroger l'API Open Data). |
 | `INFOCLIMAT_API_BASE` | (optionnel) URL de base de l'endpoint CSV Infoclimat. Valeur par défaut : `https://www.infoclimat.fr/opendata/produits-stations.csv`. |
 | `INFOCLIMAT_STATIONS_URL` | (optionnel) URL CSV listant les métadonnées stations. Valeur par défaut : `https://www.infoclimat.fr/opendata/stations.csv`. |
 | `WEATHER_CACHE_TTL_HOURS` | (optionnel) Durée de vie du cache des réponses API (heures). Par défaut : `24`. |
@@ -62,7 +62,7 @@ L'API écoute par défaut sur le port `3001` et expose les endpoints suivants :
 
 ## Limites connues
 
-- La synchronisation automatique des stations dépend de l'accès à l'Open Data Infoclimat (`INFOCLIMAT_API_KEY`). Un snapshot (`data/stations.json`) est utilisé en secours.
+- La synchronisation automatique des stations dépend de l'accès à l'Open Data Infoclimat (`INFOCLIMAT_API_KEY` ou `INFOCLIMAT_API_TOKEN`). Un snapshot (`data/stations.json`) est utilisé en secours.
 - L'endpoint Infoclimat exact dépend de l'offre Open Data disponible (adapter `INFOCLIMAT_API_BASE` si nécessaire).
 - Le lissage IDW est volontairement simple et ne prend pas en compte l'altitude.
 - Les données sont agrégées en heure locale supposée ~UTC ; adapter si un fuseau spécifique est requis.

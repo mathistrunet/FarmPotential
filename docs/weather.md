@@ -23,6 +23,8 @@ Les champs normalisés sont strictement documentés pour faciliter la consommati
 
 ```dotenv
 INFOCLIMAT_API_TOKEN=
+# ou :
+# INFOCLIMAT_API_KEY=
 # Optionnel :
 # INFOCLIMAT_API_BASE=https://www.infoclimat.fr/opendata/
 VITE_WEATHER_TTL_HOURS=24
@@ -30,7 +32,7 @@ VITE_WEATHER_TTL_HOURS=24
 # VITE_METEOSTAT_TOKEN=
 ```
 
-- `INFOCLIMAT_API_TOKEN` est consommée côté serveur (`/api/weather/infoclimat`) afin de ne plus exposer la clé dans le bundle Vite.
+- `INFOCLIMAT_API_TOKEN` (ou `INFOCLIMAT_API_KEY`) est consommée côté serveur (`/api/weather/infoclimat`) afin de ne plus exposer la clé dans le bundle Vite.
 - `INFOCLIMAT_API_BASE` permet de surcharger l'URL de base (utile pour les environnements de test).
 - `VITE_WEATHER_TTL_HOURS` pilote la durée de vie du cache (24h par défaut).
 - `VITE_METEOSTAT_TOKEN` permet d'ajouter un header `x-api-key` pour Meteostat si vous disposez d'une clé.
@@ -48,7 +50,7 @@ VITE_WEATHER_TTL_HOURS=24
 
 1. Créer un compte sur [https://www.infoclimat.fr](https://www.infoclimat.fr).
 2. Demander un accès API (formulaire dédié aux développeurs).
-3. Une fois la clé reçue, l'ajouter à votre `.env` serveur : `INFOCLIMAT_API_TOKEN=...`.
+3. Une fois la clé reçue, l'ajouter à votre `.env` serveur : `INFOCLIMAT_API_TOKEN=...` (ou `INFOCLIMAT_API_KEY=...`).
 4. Vérifier les CGU : certaines clauses imposent d'appeler l'API côté serveur (ce flux les respecte désormais).
 
 ## Meteostat

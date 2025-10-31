@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import fetch from 'node-fetch';
-export const INFOCLIMAT_API_KEY = process.env.INFOCLIMAT_API_KEY ?? '';
+const INFOCLIMAT_ENV_FALLBACK = process.env.INFOCLIMAT_API_TOKEN ?? '';
+export const INFOCLIMAT_API_KEY = process.env.INFOCLIMAT_API_KEY ?? INFOCLIMAT_ENV_FALLBACK;
 export const INFOCLIMAT_OBSERVATIONS_URL = process.env.INFOCLIMAT_API_BASE ?? 'https://www.infoclimat.fr/opendata/?version=2&method=get&format=json';
 export const INFOCLIMAT_STATIONS_URL = process.env.INFOCLIMAT_STATIONS_URL ?? 'https://www.infoclimat.fr/opendata/stations.csv';
 const MIN_REQUEST_INTERVAL_MS = Number(process.env.WEATHER_API_MIN_INTERVAL_MS ?? '900');
@@ -9,7 +10,7 @@ const RETRY_BASE_DELAY_MS = 500;
 let lastRequestTimestamp = 0;
 export function assertApiKey() {
     if (!INFOCLIMAT_API_KEY) {
-        throw new Error('Missing INFOCLIMAT_API_KEY environment variable');
+        throw new Error('Missing Infoclimat API token (set INFOCLIMAT_API_KEY or INFOCLIMAT_API_TOKEN)');
     }
 }
 export async function rateLimit() {
