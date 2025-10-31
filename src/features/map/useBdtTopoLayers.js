@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import shp from "shpjs";
 
+import { loadGeoPackageFeatureCollection } from "../../utils/geopackage.ts";
+
 import {
   BDTOPO_DEFAULT_STATE,
   BDTOPO_LAYERS,
@@ -59,7 +61,14 @@ export function useBdtTopoLayers(mapRef) {
       }));
 
       try {
-        const geojson = await shp(def.shapefile);
+        let geojson;
+        if (def.geopackage) {
+          geojson = await loadGeoPackageFeatureCollection(def.geopackage);
+        } else if (def.shapefile) {
+          geojson = await shp(def.shapefile);
+        } else {
+          throw new Error("Aucun fichier de données configuré pour cette couche BDTOPO.");
+        }
 
         if (!map.getSource(sourceId)) {
           map.addSource(sourceId, {
@@ -135,7 +144,7 @@ export function useBdtTopoLayers(mapRef) {
           [def.id]: {
             ...prev[def.id],
             loading: false,
-            error: error?.message || "Échec du chargement du shapefile.",
+            error: error?.message || "Échec du chargement de la couche.",
           },
         }));
         throw error;

@@ -5,7 +5,7 @@ export const BDTOPO_LAYERS = [
   {
     id: "bdtopo_cours_eau",
     label: "Cours d'eau (BD TOPO)",
-    shapefile: `${BDTOPO_BASE_PATH}/HYDROGRAPHIE/COURS_D_EAU.shp`,
+    geopackage: `${BDTOPO_BASE_PATH}/cours_d_eau.gpkg`,
     defaultVisible: false,
     defaultOpacity: 1,
     infoNote:
@@ -24,7 +24,7 @@ export const BDTOPO_LAYERS = [
   {
     id: "bdtopo_troncon_hydro",
     label: "Tronçons hydrographiques",
-    shapefile: `${BDTOPO_BASE_PATH}/HYDROGRAPHIE/TRONCON_HYDROGRAPHIQUE.shp`,
+    geopackage: `${BDTOPO_BASE_PATH}/troncon_hydrographique.gpkg`,
     defaultVisible: false,
     defaultOpacity: 1,
     infoNote:
@@ -43,7 +43,7 @@ export const BDTOPO_LAYERS = [
   {
     id: "bdtopo_surface_hydro",
     label: "Surfaces hydrographiques",
-    shapefile: `${BDTOPO_BASE_PATH}/HYDROGRAPHIE/SURFACE_HYDROGRAPHIQUE.shp`,
+    geopackage: `${BDTOPO_BASE_PATH}/surface_hydrographique.gpkg`,
     defaultVisible: false,
     defaultOpacity: 0.6,
     infoNote: "Plans et surfaces d'eau cartographiés par l'IGN.",
@@ -71,7 +71,7 @@ export const BDTOPO_LAYERS = [
   {
     id: "bdtopo_plan_eau",
     label: "Plans d'eau",
-    shapefile: `${BDTOPO_BASE_PATH}/HYDROGRAPHIE/PLAN_D_EAU.shp`,
+    geopackage: `${BDTOPO_BASE_PATH}/plan_d_eau.gpkg`,
     defaultVisible: false,
     defaultOpacity: 0.6,
     infoNote: "Polygones des plans d'eau issus de la BD TOPO.",
@@ -99,7 +99,7 @@ export const BDTOPO_LAYERS = [
   {
     id: "bdtopo_bassin_versant",
     label: "Bassins versants",
-    shapefile: `${BDTOPO_BASE_PATH}/HYDROGRAPHIE/BASSIN_VERSANT_TOPOGRAPHIQUE.shp`,
+    geopackage: `${BDTOPO_BASE_PATH}/bassin_versant_topographique.gpkg`,
     defaultVisible: false,
     defaultOpacity: 0.4,
     infoNote: "Contours des bassins versants topographiques.",
@@ -127,7 +127,7 @@ export const BDTOPO_LAYERS = [
   {
     id: "bdtopo_detail_hydro",
     label: "Détails hydrographiques",
-    shapefile: `${BDTOPO_BASE_PATH}/HYDROGRAPHIE/DETAIL_HYDROGRAPHIQUE.shp`,
+    geopackage: `${BDTOPO_BASE_PATH}/detail_hydrographique.gpkg`,
     defaultVisible: false,
     defaultOpacity: 1,
     infoNote: "Autres éléments hydrographiques linéaires (biefs, canaux...).",
@@ -145,7 +145,7 @@ export const BDTOPO_LAYERS = [
   {
     id: "bdtopo_noeud_hydro",
     label: "Nœuds hydrographiques",
-    shapefile: `${BDTOPO_BASE_PATH}/HYDROGRAPHIE/NOEUD_HYDROGRAPHIQUE.shp`,
+    geopackage: `${BDTOPO_BASE_PATH}/noeud_hydrographique.gpkg`,
     defaultVisible: false,
     defaultOpacity: 0.8,
     infoNote: "Points caractéristiques du réseau hydrographique.",
@@ -166,7 +166,7 @@ export const BDTOPO_LAYERS = [
   {
     id: "bdtopo_haies",
     label: "Haies",
-    shapefile: `${BDTOPO_BASE_PATH}/OCCUPATION_DU_SOL/HAIE.shp`,
+    geopackage: `${BDTOPO_BASE_PATH}/haie.gpkg`,
     defaultVisible: false,
     defaultOpacity: 1,
     infoNote: "Linéraires de haies cartographiés (BD TOPO).",
@@ -184,7 +184,7 @@ export const BDTOPO_LAYERS = [
   {
     id: "bdtopo_zone_vegetation",
     label: "Zones de végétation",
-    shapefile: `${BDTOPO_BASE_PATH}/OCCUPATION_DU_SOL/ZONE_DE_VEGETATION.shp`,
+    geopackage: `${BDTOPO_BASE_PATH}/zone_de_vegetation.gpkg`,
     defaultVisible: false,
     defaultOpacity: 0.45,
     infoNote: "Polygones de zones végétalisées.",
@@ -212,7 +212,7 @@ export const BDTOPO_LAYERS = [
   {
     id: "bdtopo_zone_habitation",
     label: "Zones d'habitation",
-    shapefile: `${BDTOPO_BASE_PATH}/LIEUX_NOMMES/ZONE_D_HABITATION.shp`,
+    geopackage: `${BDTOPO_BASE_PATH}/zone_d_habitation.gpkg`,
     defaultVisible: false,
     defaultOpacity: 0.4,
     infoNote: "Emprise des zones d'habitation recensées.",
@@ -240,7 +240,7 @@ export const BDTOPO_LAYERS = [
   {
     id: "bdtopo_routes",
     label: "Réseau routier",
-    shapefile: `${BDTOPO_BASE_PATH}/TRANSPORT/TRONCON_DE_ROUTE.shp`,
+    geopackage: `${BDTOPO_BASE_PATH}/troncon_de_route.gpkg`,
     defaultVisible: false,
     defaultOpacity: 1,
     infoNote: "Tronçons de routes (toutes catégories).",
@@ -258,7 +258,7 @@ export const BDTOPO_LAYERS = [
   {
     id: "bdtopo_foret_publique",
     label: "Forêts publiques",
-    shapefile: `${BDTOPO_BASE_PATH}/ZONES_REGLEMENTEES/FORET_PUBLIQUE.shp`,
+    geopackage: `${BDTOPO_BASE_PATH}/foret_publique.gpkg`,
     defaultVisible: false,
     defaultOpacity: 0.4,
     infoNote: "Polygones des forêts publiques.",
@@ -286,7 +286,7 @@ export const BDTOPO_LAYERS = [
   {
     id: "bdtopo_parcs",
     label: "Parcs ou réserves",
-    shapefile: `${BDTOPO_BASE_PATH}/ZONES_REGLEMENTEES/PARC_OU_RESERVE.shp`,
+    geopackage: `${BDTOPO_BASE_PATH}/parc_ou_reserve.gpkg`,
     defaultVisible: false,
     defaultOpacity: 0.4,
     infoNote: "Parcs, réserves et autres zones réglementées.",
