@@ -313,6 +313,11 @@ export const BDTOPO_LAYERS = [
   },
 ];
 
+export function getBdtTopoRendererLayerId(def, renderer, index) {
+  if (!renderer) return `${def.id}-renderer-${index}`;
+  return renderer.id || `${def.id}-${renderer.type}-${index}`;
+}
+
 export const BDTOPO_DEFAULT_STATE = BDTOPO_LAYERS.reduce((acc, def) => {
   acc[def.id] = {
     visible: def.defaultVisible ?? false,
