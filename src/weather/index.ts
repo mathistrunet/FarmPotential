@@ -34,12 +34,7 @@ function determineProviders(params: WeatherRequestParams): WeatherProvider[] {
   if (params.provider && params.provider !== 'auto') {
     return [params.provider];
   }
-  const order: WeatherProvider[] = [];
-  if (import.meta.env.VITE_INFOCLIMAT_TOKEN) {
-    order.push('infoclimat');
-  }
-  order.push('meteostat', 'open-meteo');
-  return order;
+  return ['infoclimat', 'meteostat', 'open-meteo'];
 }
 
 function mergeAttributions(values: (string | undefined)[]): string | undefined {

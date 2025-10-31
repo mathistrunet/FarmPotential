@@ -12,6 +12,7 @@ vi.mock('./openMeteoFallback.js', () => ({
     fetchOpenMeteoObservations: vi.fn(),
 }));
 vi.mock('./infoclimat.js', () => ({
+    fetchInfoclimat: vi.fn(),
     fetchInfoclimatRange: vi.fn(),
 }));
 vi.mock('./observations.js', async () => {
@@ -26,7 +27,77 @@ import { findNearestStations } from './stations.js';
 import { getObservationsForStation } from './infoclimatClient.js';
 import { mergeStationsObservations } from './observations.js';
 import { fetchOpenMeteoObservations } from './openMeteoFallback.js';
-import { fetchInfoclimatRange } from './infoclimat.js';
+import { fetchInfoclimat, fetchInfoclimatRange } from './infoclimat.js';
+
+describe('GET /api/weather/infoclimat', () => {
+    const app = createApp();
+    beforeEach(() => {
+        vi.mocked(fetchInfoclimat).mockReset();
+    });
+    it('returns normalized hourly data for the requested station', async () => {
+        vi.mocked(fetchInfoclimat).mockResolvedValue({
+            hourly: {
+                '07015': [
+                    { dh_utc: '2025-10-28 00:00:00', temperature: '9.6' },
+                ],
+            },
+            daily: {
+                '07015': [
+                    { date: '2025-10-28', tmax: '12.4', tmin: '7.5' },
+                ],
+            },
+            license: '© Infoclimat',
+            attribution: 'Données © Infoclimat',
+        });
+
+        const response = await request(app)
+            .get('/api/weather/infoclimat')
+            .query({ station: '07015', dateStart: '2025-10-28', dateEnd: '2025-10-30' });
+
+        expect(response.status).toBe(200);
+        expect(response.body).toEqual({
+            source: 'Infoclimat (Open Data)',
+            station: '07015',
+            dateStart: '2025-10-28',
+            dateEnd: '2025-10-30',
+            hourly: [
+                { dh_utc: '2025-10-28 00:00:00', temperature: '9.6' },
+            ],
+            daily: [
+                { date: '2025-10-28', tmax: '12.4', tmin: '7.5' },
+            ],
+            stations: [],
+            metadata: null,
+            license: '© Infoclimat',
+            attribution: 'Données © Infoclimat',
+        });
+        expect(fetchInfoclimat).toHaveBeenCalledWith({
+            station: '07015',
+            start: '2025-10-28',
+            end: '2025-10-30',
+        });
+    });
+
+    it('returns 400 on invalid query', async () => {
+        const response = await request(app)
+            .get('/api/weather/infoclimat')
+            .query({ station: '', dateStart: '2025-10-28', dateEnd: '2025-10-30' });
+
+        expect(response.status).toBe(400);
+        expect(response.body.error).toBe('Invalid query');
+    });
+
+    it('returns 500 when the upstream call fails', async () => {
+        vi.mocked(fetchInfoclimat).mockRejectedValue(new Error('boom'));
+
+        const response = await request(app)
+            .get('/api/weather/infoclimat')
+            .query({ station: '07015', dateStart: '2025-10-28', dateEnd: '2025-10-30' });
+
+        expect(response.status).toBe(500);
+        expect(response.body).toEqual({ error: 'Cannot fetch Infoclimat data' });
+    });
+});
 describe('GET /api/weather/analyze', () => {
     const app = createApp();
     beforeEach(() => {

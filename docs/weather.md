@@ -22,22 +22,24 @@ Les champs normalisés sont strictement documentés pour faciliter la consommati
 ## Clés et configuration
 
 ```dotenv
-VITE_INFOCLIMAT_TOKEN=
+INFOCLIMAT_API_TOKEN=
+# Optionnel :
+# INFOCLIMAT_API_BASE=https://www.infoclimat.fr/opendata/
 VITE_WEATHER_TTL_HOURS=24
 # Optionnel :
 # VITE_METEOSTAT_TOKEN=
 ```
 
-- Si `VITE_INFOCLIMAT_TOKEN` est défini, `getWeather()` tente en priorité Infoclimat.
+- `INFOCLIMAT_API_TOKEN` est consommée côté serveur (`/api/weather/infoclimat`) afin de ne plus exposer la clé dans le bundle Vite.
+- `INFOCLIMAT_API_BASE` permet de surcharger l'URL de base (utile pour les environnements de test).
 - `VITE_WEATHER_TTL_HOURS` pilote la durée de vie du cache (24h par défaut).
 - `VITE_METEOSTAT_TOKEN` permet d'ajouter un header `x-api-key` pour Meteostat si vous disposez d'une clé.
-
-⚠️ **Sécurité** : si les CGU Infoclimat interdisent d'exposer la clé côté client, utilisez un proxy serveur (ex. Cloud Functions) pour signer la requête, puis adaptez `fetchInfoclimat` pour cibler ce proxy (voir TODO ci-dessous).
 
 ## Infoclimat
 
 - Adaptateur : `src/weather/providers/infoclimat.ts`
-- TODO majeur : **`buildInfoclimatUrl()` doit être configurée selon l'endpoint Infoclimat exact** (`/historique` ou équivalent) et ses paramètres (`token`, `station`, `start`, `end`, `pas`, `format=json`, etc.).
+- Les appels sont désormais proxifiés via `/api/weather/infoclimat` (voir `server/src/weather/controller.js`) qui signe la requête avec `INFOCLIMAT_API_TOKEN`.
+- `buildInfoclimatRequestParams()` encapsule les paramètres transmis au backend (`station`, `dateStart`, `dateEnd`).
 - Gestion station : `findNearestStation()` sélectionne la station la plus proche via un catalogue préchargé (API `/api/weather/stations` puis fallback JSON local).
 - Attribution par défaut : `Données © Infoclimat`.
 - Gestion d'erreurs : 401/403/429 déclenchent un `WeatherProviderError` afin que la façade passe au fallback.
@@ -46,8 +48,8 @@ VITE_WEATHER_TTL_HOURS=24
 
 1. Créer un compte sur [https://www.infoclimat.fr](https://www.infoclimat.fr).
 2. Demander un accès API (formulaire dédié aux développeurs).
-3. Une fois la clé reçue, l'ajouter à votre `.env` : `VITE_INFOCLIMAT_TOKEN=...`.
-4. Vérifier les CGU : certaines clauses imposent d'appeler l'API côté serveur.
+3. Une fois la clé reçue, l'ajouter à votre `.env` serveur : `INFOCLIMAT_API_TOKEN=...`.
+4. Vérifier les CGU : certaines clauses imposent d'appeler l'API côté serveur (ce flux les respecte désormais).
 
 ## Meteostat
 
@@ -91,7 +93,7 @@ VITE_WEATHER_TTL_HOURS=24
 
 ## TODO / évolutions
 
-- [ ] Finaliser `buildInfoclimatUrl()` selon la documentation officielle (paramètre `&type=...`, gestion pagination >365 jours, timezone).
-- [ ] Ajouter un proxy sécurisé côté serveur si la clé Infoclimat ne doit pas transiter côté client.
+- [ ] Supporter les paramètres avancés Infoclimat (`pas`, `type`, pagination > 365 jours, timezone personnalisée) côté serveur.
+- [ ] Ajouter un proxy sécurisé côté serveur si la clé Infoclimat ne doit pas transiter côté client. *(✓ fait : `/api/weather/infoclimat`)*
 - [ ] Ajouter une persistance serveur des stations pour éviter le chargement d'un gros JSON côté client.
 - [ ] Collecter automatiquement des métadonnées de licence supplémentaires (Creative Commons, etc.).

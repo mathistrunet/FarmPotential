@@ -10,7 +10,8 @@ export interface InfoclimatRequest extends WeatherRequestParams {
 }
 
 export interface InfoclimatRawHourlyPoint {
-  time: string;
+  time?: string;
+  dh_utc?: string;
   temperature?: number | string | null;
   dew_point?: number | string | null;
   humidity?: number | string | null;
@@ -39,6 +40,20 @@ export interface InfoclimatRawResponse {
   daily?: InfoclimatRawDailyPoint[];
   license?: string;
   attribution?: string;
+  metadata?: Record<string, unknown> | null;
+}
+
+export interface InfoclimatBackendResponse {
+  source?: string;
+  station: string;
+  dateStart: string;
+  dateEnd: string;
+  hourly?: InfoclimatRawHourlyPoint[] | Record<string, InfoclimatRawHourlyPoint[]>;
+  daily?: InfoclimatRawDailyPoint[] | Record<string, InfoclimatRawDailyPoint[]>;
+  stations?: Array<{ id?: string; name?: string | null; tz?: string | null }>;
+  metadata?: Record<string, unknown> | null;
+  license?: string | null;
+  attribution?: string | null;
 }
 
 function toNumber(value: unknown): number | null {
@@ -52,9 +67,18 @@ function normalizeHourly(points?: InfoclimatRawHourlyPoint[]): WeatherPointHourl
   if (!Array.isArray(points)) return undefined;
   const normalized: WeatherPointHourly[] = [];
   for (const point of points) {
-    if (!point?.time) continue;
+    const rawTime = point?.time ?? point?.dh_utc;
+    if (!rawTime || typeof rawTime !== 'string') continue;
+    const trimmed = rawTime.trim();
+    if (!trimmed.length) continue;
+    const isoCandidate = trimmed.includes('T') ? trimmed : trimmed.replace(' ', 'T');
+    const withTimezone = /Z$|[+-]\d{2}:?\d{2}$/.test(isoCandidate)
+      ? isoCandidate
+      : `${isoCandidate}Z`;
+    const timestamp = new Date(withTimezone);
+    if (Number.isNaN(timestamp.getTime())) continue;
     normalized.push({
-      time: new Date(point.time).toISOString(),
+      time: timestamp.toISOString(),
       t2m: toNumber(point.temperature),
       tp: toNumber(point.precipitation),
       ws: toNumber(point.wind_speed),
@@ -87,32 +111,23 @@ function normalizeDaily(points?: InfoclimatRawDailyPoint[]): WeatherPointDaily[]
   return normalized.length ? normalized : undefined;
 }
 
-export function buildInfoclimatUrl(params: {
-  baseUrl?: string;
-  stationId: string;
-  start: string;
-  end: string;
-  granularity: 'hourly' | 'daily';
-  token: string;
-}): string {
-  const { baseUrl = 'https://api.infoclimat.fr/v1', stationId, start, end, granularity, token } = params;
-  const search = new URLSearchParams();
-  search.set('token', token);
-  search.set('station', stationId);
-  search.set('start', start);
-  search.set('end', end);
-  search.set('granularity', granularity);
-  search.set('format', 'json');
-  // TODO: Renseigner l'URL et les paramètres exacts selon la documentation Infoclimat.
-  return `${baseUrl}/historique?${search.toString()}`;
+export function buildInfoclimatRequestParams({
+  station,
+  dateStart,
+  dateEnd,
+}: {
+  station: string;
+  dateStart: string;
+  dateEnd: string;
+}) {
+  return {
+    station,
+    dateStart,
+    dateEnd,
+  };
 }
 
 export async function fetchInfoclimat(params: InfoclimatRequest): Promise<WeatherSeries> {
-  const token = import.meta.env.VITE_INFOCLIMAT_TOKEN as string | undefined;
-  if (!token) {
-    throw new WeatherProviderError(PROVIDER, 'Clé Infoclimat manquante.', { code: 'TOKEN_MISSING' });
-  }
-
   const limiter = getRateLimiter(PROVIDER);
   const station = await findNearestStation({
     provider: PROVIDER,
@@ -126,17 +141,20 @@ export async function fetchInfoclimat(params: InfoclimatRequest): Promise<Weathe
     throw new WeatherProviderError(PROVIDER, 'Aucune station Infoclimat à proximité.', { code: 'NO_STATION' });
   }
 
-  const url = buildInfoclimatUrl({
-    stationId: station.id,
-    start: params.start,
-    end: params.end,
-    granularity: params.granularity,
-    token,
+  const request = buildInfoclimatRequestParams({
+    station: station.id,
+    dateStart: params.start,
+    dateEnd: params.end,
   });
+
+  const search = new URLSearchParams();
+  search.set('station', request.station);
+  search.set('dateStart', request.dateStart);
+  search.set('dateEnd', request.dateEnd);
 
   const response = await limiter.schedule(
     () =>
-      fetch(url, {
+      fetch(`/api/weather/infoclimat?${search.toString()}`, {
         headers: { Accept: 'application/json' },
         signal: params.signal,
       }),
@@ -144,20 +162,54 @@ export async function fetchInfoclimat(params: InfoclimatRequest): Promise<Weathe
   );
 
   if (!response.ok) {
-    throw new WeatherProviderError(PROVIDER, `Infoclimat indisponible (${response.status})`, {
+    let errorMessage = `Infoclimat indisponible (${response.status})`;
+    try {
+      const payload = (await response.json()) as { error?: string };
+      if (payload?.error) {
+        errorMessage = payload.error;
+      }
+    } catch {
+      // Ignore JSON parsing errors, keep default message
+    }
+    throw new WeatherProviderError(PROVIDER, errorMessage, {
       status: response.status,
       retryable: response.status === 429,
     });
   }
 
-  const json = (await response.json()) as InfoclimatRawResponse;
+  const payload = (await response.json()) as InfoclimatBackendResponse;
 
-  const hourly = normalizeHourly(json.hourly);
-  const daily = normalizeDaily(json.daily);
+  const hourlyMap =
+    payload.hourly && !Array.isArray(payload.hourly) && typeof payload.hourly === 'object'
+      ? (payload.hourly as Record<string, InfoclimatRawHourlyPoint[]>)
+      : undefined;
+  const dailyMap =
+    payload.daily && !Array.isArray(payload.daily) && typeof payload.daily === 'object'
+      ? (payload.daily as Record<string, InfoclimatRawDailyPoint[]>)
+      : undefined;
+
+  const hourlyRaw = Array.isArray(payload.hourly)
+    ? payload.hourly
+    : hourlyMap?.[station.id] ?? hourlyMap?.[station.id.toUpperCase()] ?? hourlyMap?.[station.id.toLowerCase()];
+  const dailyRaw = Array.isArray(payload.daily)
+    ? payload.daily
+    : dailyMap?.[station.id] ?? dailyMap?.[station.id.toUpperCase()] ?? dailyMap?.[station.id.toLowerCase()];
+
+  const hourly = normalizeHourly(hourlyRaw as InfoclimatRawHourlyPoint[] | undefined);
+  const daily = normalizeDaily(dailyRaw as InfoclimatRawDailyPoint[] | undefined);
 
   if (!hourly?.length && !daily?.length) {
     throw new WeatherProviderError(PROVIDER, 'Réponse Infoclimat vide.', { code: 'EMPTY_PAYLOAD' });
   }
+
+  const metadata = payload.metadata && typeof payload.metadata === 'object' ? payload.metadata : undefined;
+  const timezone = metadata
+    ? typeof (metadata as Record<string, unknown>).timezone === 'string'
+      ? ((metadata as Record<string, unknown>).timezone as string)
+      : typeof (metadata as Record<string, unknown>).time_zone === 'string'
+        ? ((metadata as Record<string, unknown>).time_zone as string)
+        : undefined
+    : undefined;
 
   return {
     meta: {
@@ -166,9 +218,9 @@ export async function fetchInfoclimat(params: InfoclimatRequest): Promise<Weathe
       stationName: station.name ?? undefined,
       lat: station.lat,
       lon: station.lon,
-      tz: json.station?.tz ?? undefined,
-      license: json.license ?? '© Infoclimat',
-      attribution: json.attribution ?? 'Données © Infoclimat',
+      tz: timezone ?? payload.stations?.find((item) => item?.id === station.id)?.tz ?? undefined,
+      license: payload.license ?? '© Infoclimat',
+      attribution: payload.attribution ?? 'Données © Infoclimat',
       sources: [PROVIDER],
     },
     hourly,

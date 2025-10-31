@@ -25,7 +25,6 @@ beforeEach(() => {
 
 describe('fetchInfoclimat', () => {
   it('normalizes Infoclimat payloads', async () => {
-    vi.stubEnv('VITE_INFOCLIMAT_TOKEN', 'token');
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => infoclimatFixture,
@@ -41,6 +40,7 @@ describe('fetchInfoclimat', () => {
     });
 
     expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock.mock.calls[0]?.[0]).toContain('/api/weather/infoclimat');
     expect(series.meta.provider).toBe('infoclimat');
     expect(series.meta.stationId).toBe('FR0001');
     expect(series.hourly?.[0]?.t2m).toBeCloseTo(5.1, 5);

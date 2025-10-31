@@ -1,5 +1,5 @@
 import express from 'express';
-import { ZodError } from 'zod';
+import { ZodError, z } from 'zod';
 import { findNearestStations, getAllStations, refreshStations, } from './stations.js';
 import { fetchStationsCatalog } from './infoclimatStations.js';
 import { getObservationsForStation } from './infoclimatClient.js';
@@ -7,7 +7,7 @@ import { mergeStationsObservations } from './observations.js';
 import { fetchOpenMeteoObservations } from './openMeteoFallback.js';
 import { buildWeatherSummary } from './summary.js';
 import { AnalyzeWeatherSchema } from './schemas.js';
-import { fetchInfoclimatRange } from './infoclimat.js';
+import { fetchInfoclimat, fetchInfoclimatRange } from './infoclimat.js';
 export const router = express.Router();
 function parseMaxYears(query) {
     if (query.maxYears == null)
@@ -18,6 +18,12 @@ function parseMaxYears(query) {
     const clamped = Math.min(Math.max(Math.round(parsed), 1), 50);
     return clamped;
 }
+const InfoclimatQuery = z.object({
+    station: z.string().min(1),
+    dateStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    dateEnd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+});
+
 router.get('/availability', async (req, res, next) => {
     try {
         const lat = Number(req.query.lat);
@@ -69,6 +75,41 @@ router.get('/availability', async (req, res, next) => {
     }
     catch (error) {
         next(error);
+    }
+});
+
+router.get('/infoclimat', async (req, res) => {
+    try {
+        const { station, dateStart, dateEnd } = InfoclimatQuery.parse(req.query);
+        const json = await fetchInfoclimat({ station, start: dateStart, end: dateEnd });
+        const stationUpper = station.toUpperCase();
+        const stationLower = station.toLowerCase();
+        const hourlySource = Array.isArray(json?.hourly)
+            ? json.hourly
+            : json?.hourly?.[station] ?? json?.hourly?.[stationUpper] ?? json?.hourly?.[stationLower];
+        const dailySource = Array.isArray(json?.daily)
+            ? json.daily
+            : json?.daily?.[station] ?? json?.daily?.[stationUpper] ?? json?.daily?.[stationLower];
+        res.json({
+            source: 'Infoclimat (Open Data)',
+            station,
+            dateStart,
+            dateEnd,
+            hourly: Array.isArray(hourlySource) ? hourlySource : [],
+            daily: Array.isArray(dailySource) ? dailySource : [],
+            stations: Array.isArray(json?.stations) ? json.stations : [],
+            metadata: json?.metadata ?? null,
+            license: json?.license ?? null,
+            attribution: json?.attribution ?? null,
+        });
+    }
+    catch (error) {
+        if (error instanceof ZodError) {
+            res.status(400).json({ error: 'Invalid query', details: error.errors });
+            return;
+        }
+        console.error(error);
+        res.status(500).json({ error: 'Cannot fetch Infoclimat data' });
     }
 });
 router.get('/analyze', async (req, res) => {
