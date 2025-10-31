@@ -6,10 +6,8 @@ import { loadGeoPackageFeatureCollection } from "../../utils/geopackage.ts";
 import {
   BDTOPO_DEFAULT_STATE,
   BDTOPO_LAYERS,
+  getBdtTopoRendererLayerId,
 } from "../../config/bdtopoLayers";
-
-const getRendererLayerId = (def, renderer, index) =>
-  renderer.id || `${def.id}-${renderer.type}-${index}`;
 
 const waitForMapLoad = (map) => {
   if (!map) return Promise.resolve();
@@ -83,7 +81,7 @@ export function useBdtTopoLayers(mapRef) {
         }
 
         def.renderers.forEach((renderer, index) => {
-          const layerId = getRendererLayerId(def, renderer, index);
+          const layerId = getBdtTopoRendererLayerId(def, renderer, index);
           if (!map.getLayer(layerId)) {
             const layerConfig = {
               id: layerId,
@@ -170,7 +168,7 @@ export function useBdtTopoLayers(mapRef) {
       }
 
       def.renderers.forEach((renderer, index) => {
-        const id = getRendererLayerId(def, renderer, index);
+        const id = getBdtTopoRendererLayerId(def, renderer, index);
         if (map.getLayer(id)) {
           map.setLayoutProperty(id, "visibility", visible ? "visible" : "none");
         }
@@ -196,7 +194,7 @@ export function useBdtTopoLayers(mapRef) {
 
       def.renderers.forEach((renderer, index) => {
         if (!renderer.opacityPaintProperty) return;
-        const id = getRendererLayerId(def, renderer, index);
+        const id = getBdtTopoRendererLayerId(def, renderer, index);
         if (map.getLayer(id)) {
           map.setPaintProperty(id, renderer.opacityPaintProperty, opacity);
         }

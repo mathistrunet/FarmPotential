@@ -10,6 +10,7 @@ import { DEFAULT_FILL_OPACITY } from "./config/soilsLocalConfig";
 import { GEO_PORTAIL_SOIL_DEFAULT_OPACITY } from "./config/soilGeoportal";
 import { RASTER_LAYERS, DEFAULT_FEATURE_INFO_PARSER } from "./config/rasterLayers";
 import { useBdtTopoLayers } from "./features/map/useBdtTopoLayers";
+import { getBdtTopoRendererLayerId } from "./config/bdtopoLayers";
 
 // ⛔️ retirés car liés aux calques/queries en ligne (Géoportail)
 // import SoilsControl from "./features/soils/components/SoilsControl";
@@ -106,6 +107,54 @@ function buildFeatureInfoUrl(def, map, point) {
   return url.toString();
 }
 
+const BDTOPO_TITLE_FIELDS = [
+  "nom",
+  "NOM",
+  "nom_officiel",
+  "NOM_OFFICIEL",
+  "nom_complet",
+  "NOM_COMPLET",
+  "libelle",
+  "LIBELLE",
+  "libelle1",
+  "LIBELLE1",
+  "toponyme",
+  "TOPONYME",
+  "appellation",
+  "APPELLATION",
+  "nature",
+  "NATURE",
+  "type",
+  "TYPE",
+];
+
+function getBdtTopoFeatureTitle(properties, layerLabel, index) {
+  if (!properties) {
+    return `${layerLabel} ${index + 1}`;
+  }
+
+  for (const key of BDTOPO_TITLE_FIELDS) {
+    const value = properties[key];
+    if (value != null && String(value).trim() !== "") {
+      return String(value);
+    }
+  }
+
+  const idValue =
+    properties.id ??
+    properties.ID ??
+    properties.objectid ??
+    properties.OBJECTID ??
+    properties.cleabs ??
+    properties.CLEABS;
+
+  if (idValue != null && String(idValue).trim() !== "") {
+    return String(idValue);
+  }
+
+  return `${layerLabel} ${index + 1}`;
+}
+
 export default function App() {
   const {
     mapRef,
@@ -142,6 +191,7 @@ export default function App() {
 
   const {
     state: bdtopoState,
+    definitions: bdtopoDefinitions,
     toggleLayer: toggleBdtopoLayer,
     setOpacity: setBdtopoOpacity,
     reloadLayer: reloadBdtopoLayer,
@@ -210,9 +260,12 @@ export default function App() {
       const visibleInfoDefs = infoEnabledDefs.filter(
         (def) => layerState[def.id]?.visible,
       );
+      const visibleBdtopoDefs = bdtopoDefinitions.filter(
+        (def) => bdtopoState?.[def.id]?.visible,
+      );
       const querySoils = rrpVisible;
 
-      if (!querySoils && visibleInfoDefs.length === 0) {
+      if (!querySoils && visibleInfoDefs.length === 0 && visibleBdtopoDefs.length === 0) {
         setMapClickInfo(null);
         return;
       }
@@ -228,17 +281,144 @@ export default function App() {
           ? event.lngLat.wrap()
           : event.lngLat;
 
+      const bdtopoLayerInfos = visibleBdtopoDefs.map((def) => {
+        const layerStatus = bdtopoState?.[def.id] || {};
+
+        if (layerStatus.error) {
+          return {
+            id: def.id,
+            label: def.label,
+            loading: false,
+            error: layerStatus.error,
+            data: null,
+          };
+        }
+
+        const rendererIndex =
+          typeof def.infoRendererIndex === "number" ? def.infoRendererIndex : 0;
+        const renderer = def.renderers?.[rendererIndex];
+        if (!renderer) {
+          return {
+            id: def.id,
+            label: def.label,
+            loading: false,
+            error: "Configuration de rendu manquante pour cette couche.",
+            data: null,
+          };
+        }
+
+        const layerId = getBdtTopoRendererLayerId(def, renderer, rendererIndex);
+        const layerExists =
+          typeof mapInstance.getLayer === "function" && mapInstance.getLayer(layerId);
+
+        if (!layerExists) {
+          if (layerStatus.loading) {
+            return {
+              id: def.id,
+              label: def.label,
+              loading: true,
+              error: null,
+              data: null,
+            };
+          }
+
+          if (layerStatus.error) {
+            return {
+              id: def.id,
+              label: def.label,
+              loading: false,
+              error: layerStatus.error,
+              data: null,
+            };
+          }
+
+          return {
+            id: def.id,
+            label: def.label,
+            loading: false,
+            error: null,
+            data: {
+              summary: "Aucune entité à cet emplacement.",
+              items: [],
+            },
+          };
+        }
+
+        const rawFeatures = mapInstance.queryRenderedFeatures(event.point, {
+          layers: [layerId],
+        });
+
+        const seenIds = new Set();
+        const items = [];
+        rawFeatures.forEach((feature, featureIdx) => {
+          if (!feature) return;
+          const properties = { ...(feature.properties ?? {}) };
+          const keyCandidates = [
+            feature.id,
+            properties.id,
+            properties.ID,
+            properties.objectid,
+            properties.OBJECTID,
+            properties.cleabs,
+            properties.CLEABS,
+          ];
+          let itemId = keyCandidates.find((value) => value != null && value !== "");
+          if (itemId == null) {
+            itemId = `${def.id}-${featureIdx}`;
+          }
+          const uniqueKey = String(itemId);
+          if (seenIds.has(uniqueKey)) {
+            return;
+          }
+          seenIds.add(uniqueKey);
+
+          const title = getBdtTopoFeatureTitle(properties, def.label, items.length);
+          items.push({
+            id: uniqueKey,
+            title,
+            properties,
+          });
+        });
+
+        items.sort((a, b) =>
+          String(a.title || "").localeCompare(String(b.title || ""), "fr", {
+            sensitivity: "base",
+          }),
+        );
+
+        const summary =
+          items.length > 0
+            ? `${items.length} entité${items.length > 1 ? "s" : ""} trouvée${
+                items.length > 1 ? "s" : ""
+              }`
+            : "Aucune entité à cet emplacement.";
+
+        return {
+          id: def.id,
+          label: def.label,
+          loading: false,
+          error: null,
+          data: {
+            summary,
+            items,
+          },
+        };
+      });
+
       setMapClickInfo({
         requestId,
         lngLat,
         soils: querySoils ? { loading: true, features: [] } : null,
-        layers: visibleInfoDefs.map((def) => ({
-          id: def.id,
-          label: def.label,
-          loading: true,
-          error: null,
-          data: null,
-        })),
+        layers: [
+          ...visibleInfoDefs.map((def) => ({
+            id: def.id,
+            label: def.label,
+            loading: true,
+            error: null,
+            data: null,
+          })),
+          ...bdtopoLayerInfos,
+        ],
       });
 
       if (querySoils) {
@@ -353,7 +533,14 @@ export default function App() {
     return () => {
       mapInstance.off("click", handleClick);
     };
-  }, [mapInstance, infoEnabledDefs, layerState, rrpVisible]);
+  }, [
+    mapInstance,
+    infoEnabledDefs,
+    layerState,
+    rrpVisible,
+    bdtopoDefinitions,
+    bdtopoState,
+  ]);
 
   useEffect(() => {
     setMapClickInfo((prev) => {
@@ -364,8 +551,13 @@ export default function App() {
           .filter((def) => layerState[def.id]?.visible)
           .map((def) => def.id),
       );
-      const layers = (prev.layers || []).filter((layer) =>
-        visibleInfoIds.has(layer.id),
+      const visibleBdtopoIds = new Set(
+        bdtopoDefinitions
+          .filter((def) => bdtopoState?.[def.id]?.visible)
+          .map((def) => def.id),
+      );
+      const layers = (prev.layers || []).filter(
+        (layer) => visibleInfoIds.has(layer.id) || visibleBdtopoIds.has(layer.id),
       );
       const soils = rrpVisible ? prev.soils : null;
 
@@ -379,7 +571,7 @@ export default function App() {
 
       return { ...prev, layers, soils };
     });
-  }, [layerState, rrpVisible, infoEnabledDefs]);
+  }, [layerState, rrpVisible, infoEnabledDefs, bdtopoDefinitions, bdtopoState]);
 
   const totalFrozenFeatures = useMemo(
     () => frozenTiles.reduce((acc, tile) => acc + tile.features.length, 0),
