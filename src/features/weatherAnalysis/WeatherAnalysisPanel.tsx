@@ -1,7 +1,20 @@
 import { useEffect, useMemo, useState } from 'react';
-import useWeatherAnalysis, { type WeatherAnalysisParams } from './useWeatherAnalysis';
+import useWeatherAnalysis, {
+  type WeatherAnalysisParams,
+  type WeatherAnalysisSource,
+} from './useWeatherAnalysis';
 import useStationAvailability from './useStationAvailability';
 import type { StationAvailability, WeatherHistorySelection } from './types';
+import type { WeatherProvider } from '../../weather';
+
+const ANALYSIS_SOURCE_BY_PROVIDER: Partial<Record<WeatherProvider, WeatherAnalysisSource>> = {
+  'infoclimat': 'Infoclimat (Open Data)',
+  'meteostat': 'MeteoFrance',
+};
+
+function mapProviderToSource(provider: WeatherProvider): WeatherAnalysisSource | undefined {
+  return ANALYSIS_SOURCE_BY_PROVIDER[provider];
+}
 
 const HOURLY_COLUMNS = [
   { key: 'dh_utc', label: 'Heure (UTC)' },
@@ -81,18 +94,28 @@ export default function WeatherAnalysisPanel({ lat, lon, parcelLabel, historySel
     setShouldAnalyze(true);
   }, [historySelection, selectedStation]);
 
+  const historyProvider = historySelection?.series.meta.provider ?? null;
+  const unsupportedHistoryProvider =
+    historyProvider != null && mapProviderToSource(historyProvider) == null;
+
   const params: WeatherAnalysisParams | null = useMemo(() => {
     if (!shouldAnalyze) return null;
     if (!startDate || !endDate) return null;
+
+    const source = historyProvider != null ? mapProviderToSource(historyProvider) : undefined;
+    if (historySelection && historyProvider && !source) {
+      return null;
+    }
+
     return {
       station: selectedStation ?? undefined,
       lat: lat ?? undefined,
       lon: lon ?? undefined,
       dateStart: startDate,
       dateEnd: endDate,
-      source: historySelection?.series.meta.provider,
+      source,
     };
-  }, [shouldAnalyze, selectedStation, startDate, endDate, lat, lon, historySelection]);
+  }, [shouldAnalyze, selectedStation, startDate, endDate, lat, lon, historySelection, historyProvider]);
 
   const { data, loading, error, refetch } = useWeatherAnalysis(params);
 
@@ -104,7 +127,8 @@ export default function WeatherAnalysisPanel({ lat, lon, parcelLabel, historySel
     }
   };
 
-  const analyzeDisabled = !startDate || !endDate || (availability.loading && !historySelection);
+  const analyzeDisabled =
+    !startDate || !endDate || (availability.loading && !historySelection) || unsupportedHistoryProvider;
   const stationLocked = Boolean(historySelection?.stationId);
   const historySources = historySelection?.sources?.length ? historySelection.sources.join(' • ') : null;
 
@@ -140,6 +164,12 @@ export default function WeatherAnalysisPanel({ lat, lon, parcelLabel, historySel
             </span>
             {historySources ? <span>Sources : {historySources}</span> : null}
           </div>
+        ) : null}
+
+        {unsupportedHistoryProvider ? (
+          <p style={{ margin: 0, color: '#b91c1c', fontSize: 13 }}>
+            Analyse météo indisponible pour la source {historyProvider}.
+          </p>
         ) : null}
 
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
