@@ -8,6 +8,10 @@ import { fetchOpenMeteoObservations } from './openMeteoFallback.js';
 import { buildWeatherSummary } from './summary.js';
 import { AnalyzeWeatherSchema } from './schemas.js';
 import { fetchInfoclimat, fetchInfoclimatRange } from './infoclimat.js';
+
+const MISSING_INFOCLIMAT_TOKEN_REGEX = /INFOCLIMAT_API_(?:KEY|TOKEN)/i;
+const MISSING_INFOCLIMAT_TOKEN_MESSAGE =
+    "Impossible de contacter l'API Infoclimat : configurez la variable d'environnement INFOCLIMAT_API_KEY ou INFOCLIMAT_API_TOKEN.";
 export const router = express.Router();
 function parseMaxYears(query) {
     if (query.maxYears == null)
@@ -60,8 +64,8 @@ router.get('/availability', async (req, res, next) => {
         }
         catch (error) {
             const message = error instanceof Error ? error.message : String(error ?? '');
-            if (/INFOCLIMAT_API_KEY/i.test(message ?? '')) {
-                res.status(502).json({ error: "Impossible de contacter l'API Infoclimat : configurez la variable d'environnement INFOCLIMAT_API_KEY." });
+            if (MISSING_INFOCLIMAT_TOKEN_REGEX.test(message ?? '')) {
+                res.status(502).json({ error: MISSING_INFOCLIMAT_TOKEN_MESSAGE });
                 return;
             }
             res.status(502).json({ error: 'Impossible de récupérer les observations Infoclimat pour estimer la disponibilité.' });
@@ -193,9 +197,9 @@ router.get('/summary', async (req, res, next) => {
         }
         if (!merged.length) {
             if (fetchErrors.length) {
-                const missingKey = fetchErrors.some((error) => /INFOCLIMAT_API_KEY/i.test(error.message ?? ''));
+                const missingKey = fetchErrors.some((error) => MISSING_INFOCLIMAT_TOKEN_REGEX.test(error.message ?? ''));
                 const message = missingKey
-                    ? "Impossible de contacter l'API Infoclimat : configurez la variable d'environnement INFOCLIMAT_API_KEY."
+                    ? MISSING_INFOCLIMAT_TOKEN_MESSAGE
                     : "Impossible de récupérer les observations Infoclimat pour la période demandée.";
                 res.status(502).json({ error: message });
             }
