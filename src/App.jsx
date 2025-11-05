@@ -192,7 +192,7 @@ export default function App() {
         {activeTab === "parcelles" && (
           <>
             <p style={{ color: "#666", marginTop: 0 }}>
-              • “Importer XML Télépac” pour charger un export.
+              • “Importer XML Télépac” pour charger un export (XML ou shapefile .zip).
               <br />
               • “Dessiner un polygone” pour ajouter une parcelle.
               <br />• “Exporter XML Télépac” pour générer un fichier compatible
