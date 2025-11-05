@@ -12,6 +12,16 @@ import { fetchInfoclimat, fetchInfoclimatRange } from './infoclimat.js';
 const MISSING_INFOCLIMAT_TOKEN_REGEX = /INFOCLIMAT_API_(?:KEY|TOKEN)/i;
 const MISSING_INFOCLIMAT_TOKEN_MESSAGE =
     "Impossible de contacter l'API Infoclimat : configurez la variable d'environnement INFOCLIMAT_API_KEY ou INFOCLIMAT_API_TOKEN.";
+
+function logRouteError(route, error, context) {
+    const normalizedError = error instanceof Error ? error : new Error(String(error ?? ''));
+    const prefix = `[weather:${route}]`;
+    if (context) {
+        console.error(`${prefix} ${context}`, normalizedError);
+        return;
+    }
+    console.error(prefix, normalizedError);
+}
 export const router = express.Router();
 function parseMaxYears(query) {
     if (query.maxYears == null)
@@ -65,9 +75,11 @@ router.get('/availability', async (req, res, next) => {
         catch (error) {
             const message = error instanceof Error ? error.message : String(error ?? '');
             if (MISSING_INFOCLIMAT_TOKEN_REGEX.test(message ?? '')) {
+                logRouteError('availability', error, 'Missing Infoclimat credentials while fetching observations');
                 res.status(502).json({ error: MISSING_INFOCLIMAT_TOKEN_MESSAGE });
                 return;
             }
+            logRouteError('availability', error, 'Failed to fetch observations to estimate availability');
             res.status(502).json({ error: 'Impossible de récupérer les observations Infoclimat pour estimer la disponibilité.' });
             return;
         }
@@ -78,6 +90,7 @@ router.get('/availability', async (req, res, next) => {
         });
     }
     catch (error) {
+        logRouteError('availability', error);
         next(error);
     }
 });
@@ -112,7 +125,7 @@ router.get('/infoclimat', async (req, res) => {
             res.status(400).json({ error: 'Invalid query', details: error.errors });
             return;
         }
-        console.error(error);
+        logRouteError('infoclimat', error);
         res.status(500).json({ error: 'Cannot fetch Infoclimat data' });
     }
 });
@@ -137,7 +150,7 @@ router.get('/analyze', async (req, res) => {
             res.status(400).json({ error: 'Invalid request', details: error.errors });
             return;
         }
-        console.error(error);
+        logRouteError('analyze', error);
         res.status(500).json({ error: 'Weather analyze failed' });
     }
 });
@@ -201,6 +214,11 @@ router.get('/summary', async (req, res, next) => {
                 const message = missingKey
                     ? MISSING_INFOCLIMAT_TOKEN_MESSAGE
                     : "Impossible de récupérer les observations Infoclimat pour la période demandée.";
+                fetchErrors.forEach((fetchError) => {
+                    logRouteError('summary', fetchError, missingKey
+                        ? 'Missing Infoclimat credentials while loading observations'
+                        : 'Failed to load Infoclimat observations for requested period');
+                });
                 res.status(502).json({ error: message });
             }
             else {
@@ -219,6 +237,7 @@ router.get('/summary', async (req, res, next) => {
         res.json(summary);
     }
     catch (error) {
+        logRouteError('summary', error);
         next(error);
     }
 });
@@ -247,6 +266,7 @@ router.get('/stations', async (req, res, next) => {
         });
     }
     catch (error) {
+        logRouteError('stations', error);
         next(error);
     }
 });
@@ -268,6 +288,7 @@ router.get('/stations/catalog', async (_req, res, next) => {
         });
     }
     catch (error) {
+        logRouteError('stations/catalog', error);
         next(error);
     }
 });
