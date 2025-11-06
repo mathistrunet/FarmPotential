@@ -41,28 +41,3 @@ Run ESLint on the project with:
 ```bash
 npm run lint
 ```
-
-## Données climat SAFRAN
-
-Le monorepo inclut désormais un worker Python (`workers/safran`) capable de télécharger, agréger et enrichir les mailles SAFRAN avec des indicateurs agroclimatiques (GDD, ETP FAO-56, bilan hydrique journalier). Les exports (CSV ou Parquet) peuvent ensuite être ingérés par le backend pour alimenter l'API et le frontend.
-
-### Variables utilisées
-
-Les fichiers NetCDF SAFRAN doivent contenir les variables suivantes :
-
-| Variable | Description | Unité |
-| --- | --- | --- |
-| `T2m` | Température de l'air à 2 m | Kelvin (converti en °C) |
-| `RR` | Précipitations | kg·m⁻² (équivalent mm) |
-| `RH` | Humidité relative | % |
-| `SWdown` | Rayonnement global incident | W·m⁻² |
-| `Wind` | Vent à 10 m | m·s⁻¹ |
-| `Nebulosity` | Nébulosité (fraction ciel couvert) | 0-1 |
-
-### Hypothèses agroclimatiques
-
-* **GDD** : base paramétrable via `SAFRAN_GDD_BASE` (10°C par défaut).
-* **ETP FAO-56** : pression atmosphérique estimée à partir de l'altitude (`SAFRAN_ALTITUDE_M`, 200 m par défaut). Albédo fixé à 0,23 (`SAFRAN_ALBEDO`). Rayonnement net calculé à partir de `SWdown` sans rayonnement long descendant.
-* **Bilan hydrique** : réserve utile maximale `SAFRAN_SOIL_STORAGE_MM` (150 mm par défaut). L'ETR correspond au minimum entre l'ETP et l'eau disponible dans le réservoir.
-
-Ces paramètres sont exposés via les variables d'environnement et détaillés dans `docs/safran-demo.md`.
