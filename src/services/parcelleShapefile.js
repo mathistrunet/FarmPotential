@@ -1,8 +1,22 @@
-import shpwrite from "@mapbox/shp-write";
 import { ringAreaM2 } from "../utils/geometry";
+import { toLambert93 } from "../utils/proj";
+import { createShapefileZip } from "./shapefileWriter";
 import { labelFromCode } from "../utils/cultureLabels";
 
 const TYPE_PARCELLE_LABEL = "Parcelleáprincipale";
+
+const PARCEL_FIELD_SCHEMA = [
+  { name: "CODE_EXPLO", type: "C", size: 20 },
+  { name: "RAIS_SOCIA", type: "C", size: 50 },
+  { name: "CAMPAGNE", type: "N", size: 9 },
+  { name: "GUID_PARC", type: "C", size: 36 },
+  { name: "TYPE_PARC", type: "C", size: 30 },
+  { name: "NOM_PARCEL", type: "C", size: 253 },
+  { name: "SURFACE", type: "N", size: 18 },
+  { name: "CP_CULTU", type: "C", size: 25 },
+  { name: "CULT_PREC", type: "C", size: 25 },
+  { name: "TYPE_SOL", type: "C", size: 75 },
+];
 
 const CULTURE_LABEL_KEYS = [
   "LIB_CULTURE",
@@ -125,10 +139,14 @@ function normalizeParcelFeature(feature, meta, index) {
   const prev2Label = resolveCultureLabel(props, CULTURE_PREV2_LABEL_KEYS, CULTURE_PREV2_CODE_KEYS);
   const surfaceHa = computeSurfaceHa(feature);
 
+  const campagneInt = Number.isFinite(meta.campagneInt)
+    ? meta.campagneInt
+    : Number.parseInt(meta.campagne, 10);
+
   const shapeProps = {
     CODE_EXPLO: toLatin1String(meta.codeExploit),
     RAIS_SOCIA: toLatin1String(meta.raisSoc),
-    CAMPAGNE: toLatin1String(meta.campagne),
+    CAMPAGNE: Number.isFinite(campagneInt) ? campagneInt : new Date().getFullYear(),
     GUID_PARC: toLatin1String(guid),
     TYPE_PARC: toLatin1String(TYPE_PARCELLE_LABEL),
     NOM_PARCEL: toLatin1String(name),
@@ -148,6 +166,43 @@ function normalizeParcelFeature(feature, meta, index) {
   };
 }
 
+function projectRingToLambert(ring = []) {
+  return ring.map((coord) => {
+    const [lon, lat] = Array.isArray(coord) ? coord : [0, 0];
+    const [x, y] = toLambert93([lon, lat]);
+    return [x, y];
+  });
+}
+
+function projectGeometryToLambert(geometry) {
+  if (!geometry) return null;
+  if (geometry.type === "Polygon") {
+    return {
+      type: "Polygon",
+      coordinates: (geometry.coordinates || []).map((ring) => projectRingToLambert(ring)),
+    };
+  }
+  if (geometry.type === "MultiPolygon") {
+    return {
+      type: "MultiPolygon",
+      coordinates: (geometry.coordinates || []).map((polygon) =>
+        (polygon || []).map((ring) => projectRingToLambert(ring))
+      ),
+    };
+  }
+  return null;
+}
+
+function projectFeaturesToLambert(features) {
+  return features
+    .map((feature) => {
+      const geometry = projectGeometryToLambert(feature.geometry);
+      if (!geometry) return null;
+      return { ...feature, geometry };
+    })
+    .filter(Boolean);
+}
+
 export async function buildParcelShapefileZip(features, { raisSoc, campagne, codeExploit } = {}) {
   if (!Array.isArray(features) || features.length === 0) {
     throw new Error("NO_PARCELS");
@@ -157,7 +212,9 @@ export async function buildParcelShapefileZip(features, { raisSoc, campagne, cod
     throw new Error("RAIS_SOCIA_REQUIRED");
   }
   const currentYear = new Date().getFullYear().toString();
-  const campagneValue = toLatin1String((campagne ?? currentYear).toString().trim() || currentYear);
+  const campagneInput = (campagne ?? currentYear).toString().trim() || currentYear;
+  const campagneValue = toLatin1String(campagneInput);
+  const campagneInt = Number.parseInt(campagneInput, 10);
 
   const codeValue = toLatin1String(ensureCodeExploit(features, codeExploit));
 
@@ -165,11 +222,16 @@ export async function buildParcelShapefileZip(features, { raisSoc, campagne, cod
   const shapefileFeatures = [];
 
   features.forEach((feature, index) => {
-    const normalizedEntry = normalizeParcelFeature(feature, {
-      raisSoc: rais,
-      campagne: campagneValue,
-      codeExploit: codeValue,
-    }, index);
+    const normalizedEntry = normalizeParcelFeature(
+      feature,
+      {
+        raisSoc: rais,
+        campagne: campagneValue,
+        campagneInt: Number.isFinite(campagneInt) ? campagneInt : undefined,
+        codeExploit: codeValue,
+      },
+      index
+    );
     if (!normalizedEntry) return;
     const { feature: nextFeature, shapefileFeature } = normalizedEntry;
     nextFeature.properties = {
@@ -187,11 +249,11 @@ export async function buildParcelShapefileZip(features, { raisSoc, campagne, cod
     throw new Error("NO_POLYGONS");
   }
 
-  const geojson = { type: "FeatureCollection", features: shapefileFeatures };
-  const arrayBuffer = await shpwrite.zip(geojson, {
-    folder: "parcellaire",
-    types: { polygon: "parcelles" },
-    outputType: "arraybuffer",
+  const lambertFeatures = projectFeaturesToLambert(shapefileFeatures);
+  const arrayBuffer = await createShapefileZip({
+    features: lambertFeatures,
+    baseName: rais,
+    fields: PARCEL_FIELD_SCHEMA,
   });
   const blob = new Blob([arrayBuffer], { type: "application/zip" });
 
