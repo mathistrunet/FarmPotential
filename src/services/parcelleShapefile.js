@@ -5,17 +5,19 @@ import { labelFromCode } from "../utils/cultureLabels";
 
 const TYPE_PARCELLE_LABEL = "Parcelleáprincipale";
 
+const MAX_CHAR_FIELD_SIZE = 254;
+
 const PARCEL_FIELD_SCHEMA = [
-  { name: "CODE_EXPLO", type: "C", size: 20 },
-  { name: "RAIS_SOCIA", type: "C", size: 50 },
-  { name: "CAMPAGNE", type: "N", size: 9 },
-  { name: "GUID_PARC", type: "C", size: 36 },
-  { name: "TYPE_PARC", type: "C", size: 30 },
-  { name: "NOM_PARCEL", type: "C", size: 253 },
-  { name: "SURFACE", type: "N", size: 18 },
-  { name: "CP_CULTU", type: "C", size: 25 },
-  { name: "CULT_PREC", type: "C", size: 25 },
-  { name: "TYPE_SOL", type: "C", size: 75 },
+  { name: "CODE_EXPLO", type: "C", size: MAX_CHAR_FIELD_SIZE },
+  { name: "RAIS_SOCIA", type: "C", size: MAX_CHAR_FIELD_SIZE },
+  { name: "CAMPAGNE", type: "N", size: 9, decimal: 0 },
+  { name: "GUID_PARC", type: "C", size: MAX_CHAR_FIELD_SIZE },
+  { name: "TYPE_PARC", type: "C", size: MAX_CHAR_FIELD_SIZE },
+  { name: "NOM_PARCEL", type: "C", size: MAX_CHAR_FIELD_SIZE },
+  { name: "SURFACE", type: "N", size: 18, decimal: 4 },
+  { name: "CP_CULTU", type: "C", size: MAX_CHAR_FIELD_SIZE },
+  { name: "CULT_PREC", type: "C", size: MAX_CHAR_FIELD_SIZE },
+  { name: "TYPE_SOL", type: "C", size: MAX_CHAR_FIELD_SIZE },
 ];
 
 const CULTURE_LABEL_KEYS = [
@@ -142,11 +144,14 @@ function normalizeParcelFeature(feature, meta, index) {
   const campagneInt = Number.isFinite(meta.campagneInt)
     ? meta.campagneInt
     : Number.parseInt(meta.campagne, 10);
+  const campagneValue = Number.isFinite(campagneInt)
+    ? Math.trunc(campagneInt)
+    : new Date().getFullYear();
 
   const shapeProps = {
     CODE_EXPLO: toLatin1String(meta.codeExploit),
     RAIS_SOCIA: toLatin1String(meta.raisSoc),
-    CAMPAGNE: Number.isFinite(campagneInt) ? campagneInt : new Date().getFullYear(),
+    CAMPAGNE: campagneValue,
     GUID_PARC: toLatin1String(guid),
     TYPE_PARC: toLatin1String(TYPE_PARCELLE_LABEL),
     NOM_PARCEL: toLatin1String(name),
