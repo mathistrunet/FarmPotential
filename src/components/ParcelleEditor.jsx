@@ -23,6 +23,17 @@ function computeCultureWarning(raw) {
   return null;
 }
 
+function parseBioFlag(value) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value === 1;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true" || normalized === "1" || normalized === "oui") return true;
+    if (normalized === "false" || normalized === "0" || normalized === "non") return false;
+  }
+  return false;
+}
+
 export default function ParcelleEditor({ features, setFeatures, selectedId, onSelect }) {
   const options = entriesCodebook();
   const rowsRef = useRef(new Map());
@@ -368,6 +379,7 @@ export default function ParcelleEditor({ features, setFeatures, selectedId, onSe
               <th style={headerStyle}>Nom</th>
               <th style={headerStyle}>Code explo.</th>
               <th style={headerStyle}>Surface (ha)</th>
+              <th style={headerStyle}>Bio</th>
               <th style={headerStyle}>Culture N</th>
               <th style={headerStyle}>Culture N-1</th>
               <th style={headerStyle}>Culture N-2</th>
@@ -384,6 +396,7 @@ export default function ParcelleEditor({ features, setFeatures, selectedId, onSe
 
               const ring = f.geometry?.coordinates?.[0];
               const surfaceHa = ring ? ringAreaM2(ring) / 10000 : null;
+              const isBio = parseBioFlag(props.conduite_bio ?? props.bio ?? props.BIO);
 
               const rowStyle = {
                 background: selected ? "#eef2ff" : idx % 2 === 0 ? "#fff" : "#f9fafb",
@@ -458,6 +471,27 @@ export default function ParcelleEditor({ features, setFeatures, selectedId, onSe
                   </td>
                   <td style={{ padding: "6px", borderBottom: "1px solid #e5e7eb", fontSize: 13 }}>
                     {surfaceHa != null && !Number.isNaN(surfaceHa) ? surfaceHa.toFixed(2) : "-"}
+                  </td>
+                  <td style={{ padding: "6px", borderBottom: "1px solid #e5e7eb" }}>
+                    <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+                      <input
+                        type="checkbox"
+                        checked={isBio}
+                        onChange={(e) => {
+                          const next = e.target.checked;
+                          const updated = { ...props };
+                          if (next) {
+                            updated.conduite_bio = true;
+                          } else {
+                            delete updated.conduite_bio;
+                          }
+                          f.properties = updated;
+                          setFeatures([...features]);
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                      <span>AB</span>
+                    </label>
                   </td>
                   <td style={{ padding: "6px", borderBottom: "1px solid #e5e7eb" }}>
                     <input

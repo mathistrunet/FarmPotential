@@ -5,6 +5,16 @@ import { telepacMesParcellesImporter } from "../lib/importers";
 
 let autoNumero = 1;
 
+function isTruthyBoolean(value) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value === 1;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    return normalized === "true" || normalized === "1" || normalized === "oui";
+  }
+  return false;
+}
+
 export function buildTelepacXML(features) {
   const NS = "urn:x-telepac:fr.gouv.agriculture.telepac:echange-producteur";
   const GML = "http://www.opengis.net/gml";
@@ -55,19 +65,23 @@ export function buildTelepacXML(features) {
     let numero = 0
     for (let i = 0; i < features.length; i++) {
       const f = features[i];
-      const props = f.properties || {}; 
+      const props = f.properties || {};
       const rawNumero = (props.numero ?? "").toString().trim();
       numero = rawNumero !== "" ? rawNumero : String(autoNumero++);
     }
     const code = (props.code || "").trim() || "JAC"; // Mets automatiquement le code culture JAC quand on exporte une parcelle sans code culture
     const gmlCoords = ringToGml(f.geometry.coordinates[0]);
     const ares = Math.round(ringAreaM2(f.geometry.coordinates[0]) / 100); //surface arrondie et transformée en ares
+    const conduiteBio = isTruthyBoolean(props.conduite_bio ?? props.bio ?? props.BIO);
 
     xml += `<parcelle>`;
     xml += `<descriptif-parcelle numero-parcelle="${esc(numero)}">`;
     xml += `<culture-principale>`;
     xml += `<code-culture>${esc(code)}</code-culture>`;
     xml += `</culture-principale>`;
+    if (conduiteBio) {
+      xml += `<agri-bio conduite-bio="true" />`;
+    }
     xml += `</descriptif-parcelle>`;
     xml += `<geometrie><gml:Polygon><gml:outerBoundaryIs><gml:LinearRing><gml:coordinates>${gmlCoords}</gml:coordinates></gml:LinearRing></gml:outerBoundaryIs></gml:Polygon></geometrie>`;
     xml += `<surface-admissible>${ares}</surface-admissible>`;
