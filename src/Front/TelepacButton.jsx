@@ -2,6 +2,7 @@
 import React, { useRef, useState } from "react";
 import { parseTelepacXmlToFeatures, buildTelepacXML } from "../services/telepacXml";
 import { parseShapefileZipToFeatures } from "../services/shapefileZip";
+import { buildParcelShapefileZip } from "../services/parcelleShapefile";
 
 /** Icônes légères inline (gardées) */
 const iconStyle = { width: 18, height: 18, display: "inline-block", verticalAlign: "-3px" };
@@ -233,6 +234,99 @@ export function ExportTelepacButton({
     >
       <IconDownload />{" "}
       {compact ? null : <span>{labelExport || (loading ? "Export..." : "Exporter XML")}</span>}
+    </button>
+  );
+}
+
+export function ExportShapefileButton({
+  features = [],
+  setFeatures,
+  compact = false,
+  buttonStyle,
+  disabled = false,
+  labelExport,
+  filenamePrefix = "parcellaire_",
+  onError,
+}) {
+  const [loading, setLoading] = useState(false);
+
+  const btnDefault = {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 8,
+    padding: compact ? "6px 8px" : "8px 12px",
+    borderRadius: 8,
+    background: "#15803d",
+    color: "#fff",
+    border: "none",
+    cursor: disabled || loading ? "not-allowed" : "pointer",
+    opacity: disabled || loading ? 0.7 : 1,
+    fontSize: 14,
+  };
+  const btn = { ...btnDefault, ...(buttonStyle || {}) };
+
+  async function exportShapefile() {
+    if (!features.length) {
+      alert("Dessine ou importe au moins une parcelle.");
+      return;
+    }
+
+    const firstProps = features[0]?.properties || {};
+    const defaultName = (firstProps.RAIS_SOCIA || firstProps.rais_soc || "").toString();
+    const exploitationName = window.prompt(
+      "Nom de l'exploitation (sera exporté en majuscules)",
+      defaultName.toUpperCase()
+    );
+    if (exploitationName == null) return;
+    const trimmedName = exploitationName.trim();
+    if (!trimmedName) {
+      alert("Le nom de l'exploitation est obligatoire pour l'export shapefile.");
+      return;
+    }
+
+    const defaultYear = (firstProps.CAMPAGNE || new Date().getFullYear()).toString();
+    const campagneInput = window.prompt("Campagne (année)", defaultYear);
+    const campagneValue = (campagneInput == null ? defaultYear : campagneInput).trim() || defaultYear;
+
+    setLoading(true);
+    try {
+      const { blob, updatedFeatures } = await buildParcelShapefileZip(features, {
+        raisSoc: trimmedName,
+        campagne: campagneValue,
+      });
+      if (typeof setFeatures === "function") {
+        setFeatures(updatedFeatures);
+      }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${filenamePrefix}${Date.now()}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error(err);
+      onError?.(err);
+      if (err?.message === "RAIS_SOCIA_REQUIRED") {
+        alert("Renseigne un nom d'exploitation pour l'export shapefile.");
+      } else {
+        alert("Échec de l'export shapefile.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <button
+      onClick={exportShapefile}
+      style={btn}
+      title="Exporter les parcelles en shapefile (.zip)"
+      disabled={disabled || loading}
+    >
+      <IconDownload />{" "}
+      {compact ? null : (
+        <span>{labelExport || (loading ? "Export..." : "Exporter SHP")}</span>
+      )}
     </button>
   );
 }

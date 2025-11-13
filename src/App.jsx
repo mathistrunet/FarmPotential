@@ -17,7 +17,7 @@ import RpgFeature from "./Front/useRpgLayer";
 // ✅ composant Dessin autonome (chemin conservé)
 import DrawToolbar from "./Front/DrawToolbar";
 // ✅ Import/Export Télépac (chemin conservé)
-import ImportTelepacButton, { ExportTelepacButton } from "./Front/TelepacButton";
+import ImportTelepacButton, { ExportTelepacButton, ExportShapefileButton } from "./Front/TelepacButton";
 
 // ✅ NOUVEAU : hook d’affichage RRP local (depuis un ZIP placé dans /public/data)
 import { useSoilLayerLocal } from "./features/useSoilLayerLocal";
@@ -195,8 +195,8 @@ export default function App() {
               • “Importer XML Télépac” pour charger un export (XML ou shapefile .zip).
               <br />
               • “Dessiner un polygone” pour ajouter une parcelle.
-              <br />• “Exporter XML Télépac” pour générer un fichier compatible
-              Assolia.
+              <br />• “Exporter XML Télépac” ou “Exporter SHP” pour récupérer le
+              parcellaire.
             </p>
 
             <ParcelleEditor
@@ -288,6 +288,12 @@ export default function App() {
             features={features}
             compact={compact}
             buttonStyle={{ ...btn, background: "#111", color: "#fff", border: "none" }}
+          />
+          <ExportShapefileButton
+            features={features}
+            setFeatures={setFeatures}
+            compact={compact}
+            buttonStyle={{ ...btn, background: "#15803d", color: "#fff", border: "none" }}
           />
         </div>
 
