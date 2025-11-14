@@ -63,8 +63,17 @@ function writeShapefile(rows, geometryType, geometries, fields) {
   shxView.setInt32(24, 50 + geometries.length * 4);
 
   const dbfBuf = dbf.structure(rows, fields);
+  markDbfCodePage(dbfBuf);
 
   return { shp: shpView, shx: shxView, dbf: dbfBuf };
+}
+
+function markDbfCodePage(dbfView, codePage = 0x57) {
+  if (!dbfView || typeof dbfView.setUint8 !== "function") return;
+  // Byte 29 of the DBF header stores the language driver identifier.
+  // 0x57 corresponds to Windows ANSI (codepage 1252), which matches
+  // the encoding used by Telepac shapefiles.
+  dbfView.setUint8(29, codePage);
 }
 
 function writeHeader(view, TYPE) {
