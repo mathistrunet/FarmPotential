@@ -3,7 +3,7 @@ import { toLambert93 } from "../utils/proj";
 import { createShapefileZip } from "./shapefileWriter";
 import { labelFromCode } from "../utils/cultureLabels";
 
-const TYPE_PARCELLE_LABEL = "Parcelleáprincipale";
+const TYPE_PARCELLE_LABEL = "Parcelle principale";
 
 const MAX_CHAR_FIELD_SIZE = 254;
 
@@ -33,16 +33,46 @@ const CULTURE_CODE_KEYS = ["CP_CULTU", "code", "CODE", "code_culture", "CODE_CUL
 const CULTURE_PREV2_LABEL_KEYS = ["CULT_PREC2_LIB", "CULT_PREC_LABEL", "CULT_PREC2_LABEL"];
 const CULTURE_PREV2_CODE_KEYS = ["CULT_PREC2", "culture_prec2"];
 
-function toLatin1String(input) {
+const CP1252_OVERRIDES = new Map([
+  [0x20ac, 0x80], // €
+  [0x201a, 0x82], // ‚
+  [0x0192, 0x83], // ƒ
+  [0x201e, 0x84], // „
+  [0x2026, 0x85], // …
+  [0x2020, 0x86], // †
+  [0x2021, 0x87], // ‡
+  [0x02c6, 0x88], // ˆ
+  [0x2030, 0x89], // ‰
+  [0x0160, 0x8a], // Š
+  [0x2039, 0x8b], // ‹
+  [0x0152, 0x8c], // Œ
+  [0x017d, 0x8e], // Ž
+  [0x2018, 0x91], // ‘
+  [0x2019, 0x92], // ’
+  [0x201c, 0x93], // “
+  [0x201d, 0x94], // ”
+  [0x2022, 0x95], // •
+  [0x2013, 0x96], // –
+  [0x2014, 0x97], // —
+  [0x02dc, 0x98], // ˜
+  [0x2122, 0x99], // ™
+  [0x0161, 0x9a], // š
+  [0x203a, 0x9b], // ›
+  [0x0153, 0x9c], // œ
+  [0x017e, 0x9e], // ž
+  [0x0178, 0x9f], // Ÿ
+]);
+
+function toCp1252String(input) {
   if (input == null) return "";
-  const normalized = String(input).normalize("NFKD");
+  const normalized = String(input).replace(/\u00A0/g, " ");
   let out = "";
   for (const char of normalized) {
-    const code = char.codePointAt(0);
-    if (code <= 0xff) {
-      out += String.fromCharCode(code);
-    } else if (code >= 0x0300 && code <= 0x036f) {
-      // ignore combining marks outside latin1 once normalized
+    const codePoint = char.codePointAt(0);
+    if (codePoint <= 0xff) {
+      out += String.fromCharCode(codePoint);
+    } else if (CP1252_OVERRIDES.has(codePoint)) {
+      out += String.fromCharCode(CP1252_OVERRIDES.get(codePoint));
     } else {
       out += "?";
     }
@@ -149,16 +179,16 @@ function normalizeParcelFeature(feature, meta, index) {
     : new Date().getFullYear();
 
   const shapeProps = {
-    CODE_EXPLO: toLatin1String(meta.codeExploit),
-    RAIS_SOCIA: toLatin1String(meta.raisSoc),
+    CODE_EXPLO: toCp1252String(meta.codeExploit),
+    RAIS_SOCIA: toCp1252String(meta.raisSoc),
     CAMPAGNE: campagneValue,
-    GUID_PARC: toLatin1String(guid),
-    TYPE_PARC: toLatin1String(TYPE_PARCELLE_LABEL),
-    NOM_PARCEL: toLatin1String(name),
+    GUID_PARC: toCp1252String(guid),
+    TYPE_PARC: toCp1252String(TYPE_PARCELLE_LABEL),
+    NOM_PARCEL: toCp1252String(name),
     SURFACE: Number(surfaceHa.toFixed(4)),
-    CP_CULTU: toLatin1String(cultureLabel),
-    CULT_PREC: toLatin1String(prev2Label),
-    TYPE_SOL: toLatin1String(typeSol),
+    CP_CULTU: toCp1252String(cultureLabel),
+    CULT_PREC: toCp1252String(prev2Label),
+    TYPE_SOL: toCp1252String(typeSol),
   };
 
   return {
@@ -212,16 +242,16 @@ export async function buildParcelShapefileZip(features, { raisSoc, campagne, cod
   if (!Array.isArray(features) || features.length === 0) {
     throw new Error("NO_PARCELS");
   }
-  const rais = toLatin1String((raisSoc ?? "").trim().toUpperCase());
+  const rais = toCp1252String((raisSoc ?? "").trim().toUpperCase());
   if (!rais) {
     throw new Error("RAIS_SOCIA_REQUIRED");
   }
   const currentYear = new Date().getFullYear().toString();
   const campagneInput = (campagne ?? currentYear).toString().trim() || currentYear;
-  const campagneValue = toLatin1String(campagneInput);
+  const campagneValue = toCp1252String(campagneInput);
   const campagneInt = Number.parseInt(campagneInput, 10);
 
-  const codeValue = toLatin1String(ensureCodeExploit(features, codeExploit));
+  const codeValue = toCp1252String(ensureCodeExploit(features, codeExploit));
 
   const normalized = [];
   const shapefileFeatures = [];
