@@ -23,7 +23,7 @@ const SAMPLE_XML = `<?xml version="1.0" encoding="UTF-8"?>
                   <reconversion-pp>false</reconversion-pp>
                   <obligation-reimplantation-pp>false</obligation-reimplantation-pp>
                 </culture-principale>
-                <agri-bio conduite-bio="false" />
+                <agri-bio conduite-bio="false" type-conduite-bio="AB" />
                 <engagements-maec surface-cible="false" elevage-monogastrique="false" />
               </descriptif-parcelle>
               <geometrie>
@@ -112,6 +112,8 @@ describe('readTelepacMesParcellesXml', () => {
 
     expect(first.properties.production_semences).toBe(false);
     expect(first.properties.conduite_bio).toBe(false);
+    expect(first.properties.isOrganic).toBe(false);
+    expect(first.properties.organicType).toBe('AB');
     expect(first.properties.date_labour).toBeNull();
     expect(first.properties.code_culture).toBe('BTH');
     expect(first.properties.precision).toBe('001');
@@ -124,6 +126,8 @@ describe('readTelepacMesParcellesXml', () => {
     expect(second.properties.reconversion_pp).toBe(true);
     expect(second.properties.date_labour).toBe('20240112');
     expect(second.properties.precision).toBe('002');
+    expect(second.properties.isOrganic).toBeUndefined();
+    expect(second.properties.organicType).toBeUndefined();
   });
 
   it('accepts ArrayBuffer input', async () => {

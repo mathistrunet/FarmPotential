@@ -396,7 +396,9 @@ export default function ParcelleEditor({ features, setFeatures, selectedId, onSe
 
               const ring = f.geometry?.coordinates?.[0];
               const surfaceHa = ring ? ringAreaM2(ring) / 10000 : null;
-              const isBio = parseBioFlag(props.conduite_bio ?? props.bio ?? props.BIO);
+              const isBio = parseBioFlag(
+                props.isOrganic ?? props.conduite_bio ?? props.bio ?? props.BIO
+              );
 
               const rowStyle = {
                 background: selected ? "#eef2ff" : idx % 2 === 0 ? "#fff" : "#f9fafb",
@@ -482,8 +484,14 @@ export default function ParcelleEditor({ features, setFeatures, selectedId, onSe
                           const updated = { ...props };
                           if (next) {
                             updated.conduite_bio = true;
+                            updated.isOrganic = true;
+                            if (!updated.organicType) {
+                              updated.organicType = "AB";
+                            }
                           } else {
                             delete updated.conduite_bio;
+                            delete updated.isOrganic;
+                            delete updated.organicType;
                           }
                           f.properties = updated;
                           setFeatures([...features]);

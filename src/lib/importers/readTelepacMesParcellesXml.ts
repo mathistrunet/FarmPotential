@@ -245,6 +245,7 @@ function buildProperties(
     reconversionPP?: boolean;
     obligationReimplantationPP?: boolean;
     conduiteBio?: boolean;
+    organicType?: string | null;
     maecSurfaceCible?: boolean;
     maecElevageMonogastrique?: boolean;
     dateLabour: string | null;
@@ -252,7 +253,7 @@ function buildProperties(
     justificationTexte: string | null;
   },
 ): TelepacParcelleProperties {
-  return {
+  const properties: TelepacParcelleProperties = {
     pacage,
     ilot: ilotNumber,
     ilot_ref: details.ilotReference,
@@ -267,6 +268,7 @@ function buildProperties(
     reconversion_pp: details.reconversionPP,
     obligation_reimplantation_pp: details.obligationReimplantationPP,
     conduite_bio: details.conduiteBio,
+    isOrganic: details.conduiteBio,
     maec_surface_cible: details.maecSurfaceCible,
     maec_elevage_monogastrique: details.maecElevageMonogastrique,
     date_labour: details.dateLabour,
@@ -274,6 +276,12 @@ function buildProperties(
     justification_texte: details.justificationTexte,
     source: TELEPAC_SOURCE,
   };
+
+  if (details.organicType != null && details.organicType !== '') {
+    properties.organicType = details.organicType;
+  }
+
+  return properties;
 }
 
 export async function readTelepacMesParcellesXml(input: string | ArrayBuffer): Promise<TelepacFeatureCollection> {
@@ -344,6 +352,7 @@ export async function readTelepacMesParcellesXml(input: string | ArrayBuffer): P
 
         const agriBio = firstChildByLocalName(descriptif, 'agri-bio');
         const conduiteBio = parseBooleanAttribute(agriBio, 'conduite-bio');
+        const organicType = agriBio?.getAttribute('type-conduite-bio') ?? null;
 
         const engagementsMaec = firstChildByLocalName(descriptif, 'engagements-maec');
         const maecSurfaceCible = parseBooleanAttribute(engagementsMaec, 'surface-cible');
@@ -376,6 +385,7 @@ export async function readTelepacMesParcellesXml(input: string | ArrayBuffer): P
           reconversionPP,
           obligationReimplantationPP,
           conduiteBio,
+          organicType,
           maecSurfaceCible,
           maecElevageMonogastrique,
           dateLabour,

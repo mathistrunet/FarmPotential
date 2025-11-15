@@ -38,6 +38,8 @@ export interface TelepacParcelleProperties {
   reconversion_pp?: boolean;
   obligation_reimplantation_pp?: boolean;
   conduite_bio?: boolean;
+  isOrganic?: boolean;
+  organicType?: string | null;
   maec_surface_cible?: boolean;
   maec_elevage_monogastrique?: boolean;
   date_labour?: string | null;

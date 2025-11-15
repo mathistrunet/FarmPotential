@@ -72,7 +72,12 @@ export function buildTelepacXML(features) {
     const code = (props.code || "").trim() || "JAC"; // Mets automatiquement le code culture JAC quand on exporte une parcelle sans code culture
     const gmlCoords = ringToGml(f.geometry.coordinates[0]);
     const ares = Math.round(ringAreaM2(f.geometry.coordinates[0]) / 100); //surface arrondie et transformée en ares
-    const conduiteBio = isTruthyBoolean(props.conduite_bio ?? props.bio ?? props.BIO);
+    const conduiteBioSource =
+      props.isOrganic ?? props.conduite_bio ?? props.bio ?? props.BIO ?? null;
+    const conduiteBio = isTruthyBoolean(conduiteBioSource);
+    const organicTypeSource =
+      props.organicType ?? props.type_conduite_bio ?? props["type-conduite-bio"] ?? null;
+    const organicType = organicTypeSource ? String(organicTypeSource).trim() : "";
 
     xml += `<parcelle>`;
     xml += `<descriptif-parcelle numero-parcelle="${esc(numero)}">`;
@@ -80,7 +85,10 @@ export function buildTelepacXML(features) {
     xml += `<code-culture>${esc(code)}</code-culture>`;
     xml += `</culture-principale>`;
     if (conduiteBio) {
-      xml += `<agri-bio conduite-bio="true" />`;
+      const typeAttr = organicType || "AB";
+      xml += `<agri-bio conduite-bio="true" type-conduite-bio="${esc(
+        typeAttr
+      )}" conduite-maraichage="false" />`;
     }
     xml += `</descriptif-parcelle>`;
     xml += `<geometrie><gml:Polygon><gml:outerBoundaryIs><gml:LinearRing><gml:coordinates>${gmlCoords}</gml:coordinates></gml:LinearRing></gml:outerBoundaryIs></gml:Polygon></geometrie>`;
@@ -109,6 +117,13 @@ function normalisePropertiesFromMesParcelles(feature) {
   }
   if (code != null && properties.code == null) {
     properties.code = code;
+  }
+
+  if (properties.conduite_bio != null && properties.isOrganic == null) {
+    properties.isOrganic = properties.conduite_bio;
+  }
+  if (properties.organicType == null && properties.type_conduite_bio != null) {
+    properties.organicType = properties.type_conduite_bio;
   }
 
   if (ilotNumero != null || parcelleNumero != null) {
@@ -190,6 +205,9 @@ function parseLegacyTelepacXml(text) {
 
     let numero = "";
     let code = "";
+    let conduiteBio;
+    let hasConduiteBio = false;
+    let organicType = null;
 
     const desc = p.getElementsByTagName("descriptif-parcelle")[0];
     if (desc) {
@@ -199,6 +217,19 @@ function parseLegacyTelepacXml(text) {
       if (cp) {
         const codeNode = cp.getElementsByTagName("code-culture")[0];
         if (codeNode) code = codeNode.textContent.trim().toUpperCase();
+      }
+
+      const agriBioNode = desc.getElementsByTagName("agri-bio")[0];
+      if (agriBioNode) {
+        const conduiteAttr = agriBioNode.getAttribute("conduite-bio");
+        if (conduiteAttr != null) {
+          hasConduiteBio = true;
+          conduiteBio = isTruthyBoolean(conduiteAttr);
+        }
+        const typeAttr = agriBioNode.getAttribute("type-conduite-bio");
+        if (typeAttr) {
+          organicType = typeAttr.trim();
+        }
       }
     }
 
@@ -227,7 +258,7 @@ function parseLegacyTelepacXml(text) {
     const nom_affiche =
       ilot_numero && numero ? `${ilot_numero}-${numero}` : numero;
 
-    features.push({
+    const feature = {
       type: "Feature",
       properties: {
         numero,
@@ -235,9 +266,13 @@ function parseLegacyTelepacXml(text) {
         ilot_numero,
         nom_affiche,
         ...(surfaceA !== undefined ? { surface_admissible: surfaceA } : {}),
+        ...(hasConduiteBio ? { conduite_bio: conduiteBio, isOrganic: conduiteBio } : {}),
+        ...(organicType ? { organicType } : {}),
       },
       geometry: { type: "Polygon", coordinates: [ringWgs] },
-    });
+    };
+
+    features.push(feature);
   }
 
   return features;

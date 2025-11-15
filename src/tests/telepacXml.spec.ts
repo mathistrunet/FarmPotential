@@ -22,19 +22,34 @@ const baseFeature: SimpleFeature = {
 };
 
 describe('buildTelepacXML', () => {
-  it('includes agri-bio flag when conduite_bio is true', () => {
+  it('includes agri-bio flag with custom type when organic', () => {
     const xml = buildTelepacXML([
-      { ...baseFeature, properties: { ...baseFeature.properties, conduite_bio: true } },
+      {
+        ...baseFeature,
+        properties: { ...baseFeature.properties, isOrganic: true, organicType: 'DEM' },
+      },
     ]);
 
-    expect(xml).toContain('<agri-bio conduite-bio="true" />');
+    expect(xml).toContain(
+      '<agri-bio conduite-bio="true" type-conduite-bio="DEM" conduite-maraichage="false" />',
+    );
   });
 
-  it('omits agri-bio node when conduite_bio is falsey', () => {
+  it('falls back to type AB when none is provided', () => {
+    const xml = buildTelepacXML([
+      { ...baseFeature, properties: { ...baseFeature.properties, isOrganic: true } },
+    ]);
+
+    expect(xml).toContain(
+      '<agri-bio conduite-bio="true" type-conduite-bio="AB" conduite-maraichage="false" />',
+    );
+  });
+
+  it('omits agri-bio node when organic flag is falsey', () => {
     const xml = buildTelepacXML([
       { ...baseFeature, properties: { ...baseFeature.properties, conduite_bio: false } },
     ]);
 
-    expect(xml).not.toContain('<agri-bio conduite-bio="true" />');
+    expect(xml).not.toContain('<agri-bio conduite-bio="true"');
   });
 });
