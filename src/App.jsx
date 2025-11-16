@@ -28,6 +28,7 @@ import ExportMenuButton from "./Front/ExportMenuButton";
 
 // ✅ NOUVEAU : hook d’affichage RRP local (depuis un fichier MBTiles placé dans /public/data)
 import { useSoilLayerLocal } from "./features/useSoilLayerLocal";
+import { useToponymieAutoNaming } from "./features/useToponymieAutoNaming";
 
 const EARTH_RADIUS = 6378137;
 
@@ -164,6 +165,8 @@ export default function App() {
     selectedId,
     selectFeatureOnMap,
   } = useMapInitialization();
+
+  useToponymieAutoNaming(features, setFeatures);
 
   // Onglets + panneau latéral repliable
   const [sideOpen, setSideOpen] = useState(true);          // panneau latéral ouvert/fermé
