@@ -30,6 +30,7 @@ import ExportMenuButton from "./Front/ExportMenuButton";
 import { useSoilLayerLocal } from "./features/useSoilLayerLocal";
 import { useToponymieAutoNaming } from "./features/useToponymieAutoNaming";
 import { withBasePath } from "./utils/publicBase";
+import { ERROR_CODES } from "./utils/errors";
 
 const EARTH_RADIUS = 6378137;
 
@@ -165,6 +166,7 @@ export default function App() {
     setFeatures,
     selectedId,
     selectFeatureOnMap,
+    mapInitError,
   } = useMapInitialization();
 
   useToponymieAutoNaming(features, setFeatures);
@@ -192,6 +194,7 @@ export default function App() {
     return initial;
   });
   const [mapClickInfo, setMapClickInfo] = useState(null);
+  const [appWarnings, setAppWarnings] = useState([]);
 
   const {
     state: bdtopoState,
@@ -218,6 +221,34 @@ export default function App() {
   // ✅ expose maplibregl pour les popups utilisés par le hook local
   useEffect(() => {
     (window).maplibregl = maplibregl;
+  }, []);
+
+  useEffect(() => {
+    const warnings = [];
+    if (
+      typeof window !== "undefined" &&
+      (window.CODEBOOK_EXTRA == null || typeof window.CODEBOOK_EXTRA !== "object")
+    ) {
+      warnings.push({
+        code: ERROR_CODES.CODEBOOK_MISSING,
+        message: "codebook.js est absent ou invalide (labels cultures indisponibles).",
+      });
+    }
+    if (
+      typeof window !== "undefined" &&
+      (window.CULTURE_COLORS == null || typeof window.CULTURE_COLORS !== "object")
+    ) {
+      warnings.push({
+        code: ERROR_CODES.COLORBOOK_MISSING,
+        message: "colorbook.js est absent ou invalide (couleurs cultures indisponibles).",
+      });
+    }
+    if (warnings.length) {
+      setAppWarnings(warnings);
+      warnings.forEach((warning) =>
+        console.warn(`[${warning.code}] ${warning.message}`)
+      );
+    }
   }, []);
 
   // ✅ Charge la couche RRP France depuis un fichier MBTiles local (placer le fichier dans /public/data/)
@@ -699,6 +730,55 @@ export default function App() {
     <div style={layoutStyle}>
       {/* Carte */}
       <div id="map" style={{ height: "100dvh", width: "100%" }} />
+      {mapInitError && (
+        <div
+          style={{
+            position: "absolute",
+            inset: 12,
+            zIndex: 30,
+            background: "rgba(255,255,255,0.96)",
+            border: "1px solid #fca5a5",
+            borderRadius: 12,
+            padding: 16,
+            maxWidth: 520,
+            boxShadow: "0 10px 30px rgba(0,0,0,0.15)",
+          }}
+        >
+          <h2 style={{ margin: 0, fontSize: 16, color: "#b91c1c" }}>
+            Erreur carte ({mapInitError.code || ERROR_CODES.MAP_INIT_FAILED})
+          </h2>
+          <p style={{ margin: "8px 0 0", color: "#7f1d1d", fontSize: 13 }}>
+            {mapInitError.message ||
+              "Impossible d'initialiser la carte. Vérifie la console pour plus de détails."}
+          </p>
+        </div>
+      )}
+      {appWarnings.length > 0 && (
+        <div
+          style={{
+            position: "absolute",
+            left: 12,
+            bottom: 72,
+            zIndex: 25,
+            background: "rgba(255,255,255,0.92)",
+            border: "1px solid #fde68a",
+            borderRadius: 10,
+            padding: 12,
+            maxWidth: 360,
+            fontSize: 12,
+            color: "#92400e",
+          }}
+        >
+          <strong>Alertes de configuration</strong>
+          <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>
+            {appWarnings.map((warning) => (
+              <li key={warning.code}>
+                [{warning.code}] {warning.message}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <MapInfoPanel info={mapClickInfo} onClose={handleCloseInfoPanel} />
 

@@ -230,7 +230,11 @@ export function useSoilLayerLocal({
         applyCombinedFeatures(clipped);
       } catch (error) {
         if (!aborted) {
-          console.error("Failed to load soil department", error);
+          const code = (error && typeof error === "object" && "code" in error)
+            ? error.code
+            : undefined;
+          const prefix = code ? `[${code}] ` : "";
+          console.error(`${prefix}Failed to load soil department`, error);
         }
       } finally {
         if (!aborted) setLoadingTiles(false);
