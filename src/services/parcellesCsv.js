@@ -1,11 +1,12 @@
 // src/services/parcellesCsv.js
-import { parse } from "csv-parse/sync";
+import { parse } from "csv-parse/browser/esm/sync";
 import { featureAreaHa } from "../utils/geometry";
 import {
   codeFromLabel,
   displayLabelFromProps,
   labelFromCode,
 } from "../utils/cultureLabels";
+import { buildError, ERROR_CODES } from "../utils/errors";
 
 const CSV_HEADERS = [
   "Secteur",
@@ -172,14 +173,23 @@ export async function parseParcellesCsvToFeatures(file) {
     r.readAsText(file, "utf-8");
   });
 
-  const rows = parse(text, {
-    columns: true,
-    delimiter: [";", "\t"],
-    relax_quotes: true,
-    skip_empty_lines: true,
-    bom: true,
-    trim: true,
-  });
+  let rows = [];
+  try {
+    rows = parse(text, {
+      columns: true,
+      delimiter: [";", "\t"],
+      relax_quotes: true,
+      skip_empty_lines: true,
+      bom: true,
+      trim: true,
+    });
+  } catch (error) {
+    throw buildError(
+      ERROR_CODES.CSV_PARSE_FAILED,
+      "Impossible d'analyser le fichier CSV.",
+      error
+    );
+  }
 
   const features = [];
   for (const row of rows) {

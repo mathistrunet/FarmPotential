@@ -6,6 +6,7 @@ import "@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css";
 import MultipleSelectionMode from "./multipleSelectionMode.js";
 
 import { useRasterLayers } from "./useRasterLayers";
+import { buildError, ERROR_CODES } from "../../utils/errors";
 
 if (typeof window !== "undefined") window.mapboxgl = maplibregl;
 
@@ -24,6 +25,7 @@ export function useMapInitialization() {
   const drawRef = useRef(null);
   const [features, setFeatures] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
+  const [mapInitError, setMapInitError] = useState(null);
   const ensureRaster = useRasterLayers();
 
   const selectFeatureOnMap = useCallback((id, fit = false) => {
@@ -55,6 +57,15 @@ export function useMapInitialization() {
   }, []);
 
   useEffect(() => {
+    if (typeof maplibregl.supported === "function" && !maplibregl.supported()) {
+      setMapInitError(
+        buildError(
+          ERROR_CODES.MAPLIBRE_UNSUPPORTED,
+          "Votre navigateur ne supporte pas WebGL."
+        )
+      );
+      return;
+    }
     const style = {
       version: 8,
       glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
@@ -68,12 +79,24 @@ export function useMapInitialization() {
       ],
     };
 
-    const map = new maplibregl.Map({
-      container: "map",
-      style,
-      center: [2.2137, 46.2276],
-      zoom: 5,
-    });
+    let map;
+    try {
+      map = new maplibregl.Map({
+        container: "map",
+        style,
+        center: [2.2137, 46.2276],
+        zoom: 5,
+      });
+    } catch (error) {
+      setMapInitError(
+        buildError(
+          ERROR_CODES.MAP_INIT_FAILED,
+          "Impossible d'initialiser la carte.",
+          error
+        )
+      );
+      return;
+    }
     mapRef.current = map;
     map.addControl(new maplibregl.NavigationControl(), "top-left");
 
@@ -260,5 +283,6 @@ export function useMapInitialization() {
     selectedId,
     setSelectedId,
     selectFeatureOnMap,
+    mapInitError,
   };
 }

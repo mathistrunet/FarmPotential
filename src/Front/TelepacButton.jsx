@@ -119,10 +119,11 @@ export default function ImportTelepacButton({
 
       onImported?.(feats);
     } catch (err) {
+      const code = err?.code ? ` [${err.code}]` : "";
       console.error(err);
       onError?.(err);
       alert(
-        "Impossible de lire ce fichier. Vérifie qu’il s’agit bien d’un export Télépac ou CSV."
+        `Impossible de lire ce fichier.${code} Vérifie qu’il s’agit bien d’un export Télépac ou CSV.`
       );
     } finally {
       setLoading(false);
