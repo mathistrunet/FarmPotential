@@ -1,6 +1,7 @@
 // src/Front/TelepacButton.jsx
 import React, { useRef, useState } from "react";
 import { parseTelepacXmlToFeatures, buildTelepacXML } from "../services/telepacXml";
+import { parseParcellesCsvToFeatures } from "../services/parcellesCsv";
 
 /** Icônes légères inline (gardées) */
 const iconStyle = { width: 18, height: 18, display: "inline-block", verticalAlign: "-3px" };
@@ -24,7 +25,7 @@ export default function ImportTelepacButton({
   compact = false,
   buttonStyle,
   disabled = false,
-  fileAccept = ".xml",
+  fileAccept = ".xml,.csv",
   // mode = "append", Si on veut réactiver la fonction replace à l'import d'un parcellaire
   zoomOnImport = true,
   labelImport,
@@ -48,12 +49,16 @@ export default function ImportTelepacButton({
   };
   const btn = { ...btnDefault, ...(buttonStyle || {}) };
 
-  async function onPickXmlFile(e) {
+  async function onPickFile(e) {
     const file = e.target.files?.[0];
     if (!file) return;
     setLoading(true);
     try {
-      const feats = await parseTelepacXmlToFeatures(file);
+      const isCsv =
+        file.type === "text/csv" || file.name.toLowerCase().endsWith(".csv");
+      const feats = isCsv
+        ? await parseParcellesCsvToFeatures(file)
+        : await parseTelepacXmlToFeatures(file);
       const draw = drawRef?.current,
         map = mapRef?.current;
       if (!draw || !map) return;
@@ -116,7 +121,9 @@ export default function ImportTelepacButton({
     } catch (err) {
       console.error(err);
       onError?.(err);
-      alert("Impossible de lire ce XML. Vérifie qu’il s’agit bien d’un export Télépac.");
+      alert(
+        "Impossible de lire ce fichier. Vérifie qu’il s’agit bien d’un export Télépac ou CSV."
+      );
     } finally {
       setLoading(false);
       // Permet de ré-importer le même fichier juste après
@@ -129,17 +136,19 @@ export default function ImportTelepacButton({
       <button
         onClick={() => !disabled && !loading && fileInputRef.current?.click()}
         style={btn}
-        title="Importer un XML Télépac"
+        title="Importer un XML Télépac ou CSV"
         disabled={disabled || loading}
       >
         <IconUpload />{" "}
-        {compact ? null : <span>{labelImport || (loading ? "Import..." : "Importer XML")}</span>}
+        {compact ? null : (
+          <span>{labelImport || (loading ? "Import..." : "Importer XML/CSV")}</span>
+        )}
       </button>
       <input
         ref={fileInputRef}
         type="file"
         accept={fileAccept}
-        onChange={onPickXmlFile}
+        onChange={onPickFile}
         style={{ display: "none" }}
       />
     </>
