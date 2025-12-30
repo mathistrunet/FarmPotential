@@ -29,6 +29,7 @@ import ExportMenuButton from "./Front/ExportMenuButton";
 // ✅ NOUVEAU : hook d’affichage RRP local (depuis un fichier MBTiles placé dans /public/data)
 import { useSoilLayerLocal } from "./features/useSoilLayerLocal";
 import { useToponymieAutoNaming } from "./features/useToponymieAutoNaming";
+import { withBasePath } from "./utils/publicBase";
 
 const EARTH_RADIUS = 6378137;
 
@@ -231,7 +232,7 @@ export default function App() {
     currentTileSummary,
   } = useSoilLayerLocal({
     map: mapRef.current,
-    dataPath: "/data/soilmap_dep",
+    dataPath: withBasePath("/data/soilmap_dep"),
     sourceId: "soils-rrp",
     fillLayerId: "soils-rrp-fill",
     lineLayerId: "soils-rrp-outline",

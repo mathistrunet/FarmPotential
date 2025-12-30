@@ -30,6 +30,7 @@ export const clipIntersection: IntersectionFn =
 import type { LngLatBBox } from "../services/rrpLocal";
 import { loadDepartmentGeoJSON } from "../services/soilmapLocal";
 import departementsMeta from "../data/departements_meta.json";
+import { withBasePath } from "../utils/publicBase";
 
 import {
   FIELD_UCS,
@@ -92,7 +93,7 @@ type Options = {
 
 export function useSoilLayerLocal({
   map,
-  dataPath = "/data/soilmap_dep",
+  dataPath = withBasePath("/data/soilmap_dep"),
   sourceId = "soils-rrp",
   fillLayerId = "soils-rrp-fill",
   lineLayerId = "soils-rrp-outline",

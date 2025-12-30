@@ -1,4 +1,6 @@
-export const TOPONYMIE_BASE_PATH = "/data/TOPONYMIE";
+import { withBasePath } from "../utils/publicBase";
+
+export const TOPONYMIE_BASE_PATH = withBasePath("/data/TOPONYMIE");
 
 export const TOPONYMIE_REGION_PATHS = {
   ARA: `${TOPONYMIE_BASE_PATH}/TOPONYMIE_ARA.gpkg`,
