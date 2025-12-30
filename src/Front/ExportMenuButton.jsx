@@ -1,7 +1,7 @@
 // src/Front/ExportMenuButton.jsx
 import React, { useMemo, useState } from "react";
 import { buildTelepacXML } from "../services/telepacXml";
-import { displayLabelFromProps, labelFromCode } from "../utils/cultureLabels";
+import { buildParcellesCsv } from "../services/parcellesCsv";
 
 const iconStyle = { width: 18, height: 18, display: "inline-block", verticalAlign: "-3px" };
 const IconDownload = () => (
@@ -17,68 +17,6 @@ function downloadBlob(blob, filename) {
   a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
-}
-
-function escapeCsvCell(value) {
-  const str = value == null ? "" : String(value);
-  if (/[";\n\r]/.test(str)) {
-    return `"${str.replace(/"/g, '""')}"`;
-  }
-  return str;
-}
-
-function getParcelleLabel(feature, index) {
-  const props = feature?.properties || {};
-  const ilot = (props.ilot_numero ?? "").toString().trim();
-  const numero = (props.numero ?? "").toString().trim();
-  if (ilot || numero) return `${ilot}.${numero}`;
-  if (props.nom_affiche) return String(props.nom_affiche);
-  if (props.nom) return String(props.nom);
-  if (props.name) return String(props.name);
-  return `Parcelle ${index + 1}`;
-}
-
-function displayCultureValue(raw) {
-  if (raw == null) return "";
-  const value = String(raw).trim();
-  if (!value) return "";
-  return labelFromCode(value) || value;
-}
-
-function buildCsvContent(features, secteur, exploitation, codeExploitation) {
-  const header = [
-    "Secteur",
-    "Exploitation",
-    "Code exploitation",
-    "Parcelle",
-    "Nom",
-    "CultureN",
-    "CultureN-1",
-  ];
-
-  const rows = features.map((feature, idx) => {
-    const parcelle = getParcelleLabel(feature, idx);
-    const parcelleName = (feature?.properties?.nom ?? "").toString().trim();
-    const culture = displayLabelFromProps(feature?.properties || {});
-    const culturePrev = displayCultureValue(
-      feature?.properties?.cultureN_1 ??
-        feature?.properties?.cultureN1 ??
-        feature?.properties?.culture_prec
-    );
-    return [
-      secteur,
-      exploitation,
-      codeExploitation,
-      parcelle,
-      parcelleName,
-      culture,
-      culturePrev,
-    ];
-  });
-
-  return [header, ...rows]
-    .map((row) => row.map(escapeCsvCell).join(";"))
-    .join("\r\n");
 }
 
 function ChoiceModal({ onClose, onTelepac, onCsv }) {
@@ -294,7 +232,7 @@ export default function ExportMenuButton({
   const exportCsv = () => {
     if (!ensureFeatures()) return;
     try {
-      const csv = buildCsvContent(
+      const csv = buildParcellesCsv(
         features,
         csvValues.secteur,
         csvValues.exploitation,
