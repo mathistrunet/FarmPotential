@@ -5,7 +5,7 @@ import {
   labelFromCode,
   codeFromLabel,
 } from "../utils/cultureLabels";
-import { ringAreaM2 } from "../utils/geometry";
+import { featureAreaM2 } from "../utils/geometry";
 
 const CULTURE_FIELDS = [
   {
@@ -501,8 +501,8 @@ export default function ParcelleEditor({
                   f.properties?.parcelleBio ??
                   f.properties?.parcelle_bio_label;
                 const parcelleBioChecked = parseParcelleBioValue(parcelleBioRaw);
-                const ring = f.geometry?.coordinates?.[0];
-                const surfaceHa = ring ? ringAreaM2(ring) / 10000 : null;
+                const area = featureAreaM2(f);
+                const surfaceHa = area != null ? area / 10000 : null;
                 const selected = selectedId === id;
 
                 return (
@@ -687,8 +687,8 @@ export default function ParcelleEditor({
           || (hasParcelleParts ? rawParcelleValue : "");
         const isEditingParcelle = editingParcelleId === id;
 
-        const ring = f.geometry?.coordinates?.[0];
-        const surfaceHa = ring ? ringAreaM2(ring) / 10000 : null;
+        const area = featureAreaM2(f);
+        const surfaceHa = area != null ? area / 10000 : null;
 
         return (
           <div
