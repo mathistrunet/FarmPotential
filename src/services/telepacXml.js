@@ -161,7 +161,19 @@ export function buildTelepacXML(features) {
 }
 
 
-export async function parseTelepacXmlToFeatures(file) {
+function buildTelepacCultureProps(code, offset) {
+  if (!code) return {};
+  const safeOffset = Number.isFinite(offset) ? Math.max(0, Math.trunc(offset)) : 0;
+  if (safeOffset === 0) {
+    return { cultureN: code, code };
+  }
+  return { [`cultureN_${safeOffset}`]: code };
+}
+
+export async function parseTelepacXmlToFeatures(file, options = {}) {
+  const cultureYearOffset = Number.isFinite(options.cultureYearOffset)
+    ? options.cultureYearOffset
+    : 0;
   const text = await new Promise((resolve, reject) => {
     const r = new FileReader();
     r.onerror = () => reject(r.error);
@@ -238,13 +250,15 @@ export async function parseTelepacXmlToFeatures(file) {
       ilot_numero && numero ? `${ilot_numero}-${numero}` : numero;
 
     // Ajout de la feature
+    const cultureProps = buildTelepacCultureProps(code, cultureYearOffset);
+
     features.push({
       type: "Feature",
       properties: {
         numero,
-        code,
         ilot_numero,
         nom_affiche,
+        ...cultureProps,
         ...(surfaceA !== undefined ? { surface_admissible: surfaceA } : {}),
       },
       geometry: { type: "Polygon", coordinates: [ringWgs] },
