@@ -7,6 +7,7 @@ import MultipleSelectionMode from "./multipleSelectionMode.js";
 
 import { useRasterLayers } from "./useRasterLayers";
 import { buildError, ERROR_CODES } from "../../utils/errors";
+import { resolveOverlappingParcels } from "../../utils/overlapResolution";
 
 if (typeof window !== "undefined") window.mapboxgl = maplibregl;
 
@@ -27,6 +28,7 @@ export function useMapInitialization() {
   const [selectedId, setSelectedId] = useState(null);
   const [mapInitError, setMapInitError] = useState(null);
   const ensureRaster = useRasterLayers();
+  const isResolvingRef = useRef(false);
 
   const selectFeatureOnMap = useCallback((id, fit = false) => {
     const map = mapRef.current;
@@ -255,12 +257,23 @@ export function useMapInitialization() {
         setFeatures(polys);
       };
 
+      const handleDrawChange = () => {
+        if (!isResolvingRef.current) {
+          isResolvingRef.current = true;
+          resolveOverlappingParcels(draw);
+          setTimeout(() => {
+            isResolvingRef.current = false;
+          }, 0);
+        }
+        updateList();
+      };
+
       map.on("draw.selectionchange", (e) => {
         const ids = e?.features?.map((f) => f.id) || [];
         setSelectedId(ids[0] || null);
       });
-      map.on("draw.create", updateList);
-      map.on("draw.update", updateList);
+      map.on("draw.create", handleDrawChange);
+      map.on("draw.update", handleDrawChange);
       map.on("draw.delete", updateList);
     });
 
