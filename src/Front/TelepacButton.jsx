@@ -120,10 +120,17 @@ function mergeProperties(props) {
   return filterMergeProps(props);
 }
 
+function getFeatureLabel(feature, index) {
+  const props = feature?.properties || {};
+  const label = props.nom_affiche || props.numero || props.id || null;
+  if (label != null && String(label).trim() !== "") return String(label);
+  return `Parcelle ${index + 1}`;
+}
+
 function mergeTelepacFeatures(draw, incomingFeatures) {
   const existing = draw.getAll()?.features ?? [];
   if (!existing.length) {
-    return { toAdd: incomingFeatures, didMerge: false };
+    return { toAdd: incomingFeatures, didMerge: false, mismatches: [] };
   }
 
   const similarityThreshold = 0.95;
@@ -162,8 +169,18 @@ function mergeTelepacFeatures(draw, incomingFeatures) {
   const toAdd = [];
   const matchedExistingIds = new Set();
   const existingToRemove = new Set();
+  const mismatches = [];
 
   overlapsByIncoming.forEach((overlaps, incomingIndex) => {
+    if (overlaps.length) {
+      const maxSimilarity = Math.max(...overlaps.map((item) => item.similarity));
+      if (maxSimilarity < similarityThreshold) {
+        mismatches.push({
+          label: getFeatureLabel(incomingEntries[incomingIndex]?.feature, incomingIndex),
+          maxSimilarity,
+        });
+      }
+    }
     overlaps.forEach(({ existingIndex, similarity }) => {
       if (similarity < similarityThreshold) return;
       const existingEntry = existingEntries[existingIndex];
@@ -240,7 +257,7 @@ function mergeTelepacFeatures(draw, incomingFeatures) {
     }
   });
 
-  return { toAdd, didMerge: true };
+  return { toAdd, didMerge: true, mismatches };
 }
 
 
@@ -329,7 +346,9 @@ export default function ImportTelepacButton({
 
       // Ajout des features
       // (on peut ajouter un FeatureCollection d’un coup mais on garde l’itératif robuste)
-      const { toAdd } = isCsv ? { toAdd: feats } : mergeTelepacFeatures(draw, feats);
+      const { toAdd, mismatches } = isCsv
+        ? { toAdd: feats, mismatches: [] }
+        : mergeTelepacFeatures(draw, feats);
       for (const ft of toAdd) draw.add(ft);
 
       resolveOverlappingParcels(draw);
@@ -377,6 +396,22 @@ export default function ImportTelepacButton({
       setFeatures?.(polys);
       if (arr[0]?.id && typeof selectFeatureOnMap === "function") {
         selectFeatureOnMap(arr[0].id, false);
+      }
+
+      if (mismatches.length) {
+        const topMismatches = mismatches.slice(0, 5);
+        const details = topMismatches
+          .map(
+            (entry) =>
+              `- ${entry.label} (similarité max ${(entry.maxSimilarity * 100).toFixed(1)}%)`
+          )
+          .join("\n");
+        alert(
+          "Certaines parcelles se chevauchent mais ne correspondent pas au seuil attendu (95%).\n" +
+            `Parcelles concernées: ${mismatches.length}.\n` +
+            details +
+            (mismatches.length > topMismatches.length ? "\n..." : "")
+        );
       }
 
       onImported?.(feats);
