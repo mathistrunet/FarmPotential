@@ -18,6 +18,35 @@ const IconDownload = () => (
   </svg>
 );
 
+function extractYearFromFilename(name) {
+  const matches = String(name || "").match(/(?:19|20)\d{2}/g);
+  if (!matches?.length) return null;
+  const year = Number.parseInt(matches[0], 10);
+  if (!Number.isFinite(year) || year < 1990 || year > 2100) return null;
+  return year;
+}
+
+function parseYearInput(value) {
+  if (value == null) return null;
+  const year = Number.parseInt(String(value).trim(), 10);
+  if (!Number.isFinite(year) || year < 1990 || year > 2100) return null;
+  return year;
+}
+
+function resolveCsvYear(file) {
+  const detected = extractYearFromFilename(file?.name || "");
+  if (detected != null) {
+    const confirmed = window.confirm(
+      `Le fichier "${file.name}" correspond-il à l'année ${detected} ?`
+    );
+    if (confirmed) return detected;
+  }
+  const input = window.prompt(
+    "Indique l'année du fichier importé (ex: 2023)."
+  );
+  return parseYearInput(input);
+}
+
 function filterMergeProps(props) {
   return Object.fromEntries(
     Object.entries(props || {}).filter(
@@ -300,6 +329,7 @@ export default function ImportTelepacButton({
 }) {
   const fileInputRef = useRef(null);
   const [loading, setLoading] = useState(false);
+  const baseCultureYearRef = useRef(null);
 
   const btnDefault = {
     display: "inline-flex",
@@ -322,9 +352,27 @@ export default function ImportTelepacButton({
     try {
       const isCsv =
         file.type === "text/csv" || file.name.toLowerCase().endsWith(".csv");
+      let cultureYearOffset = 0;
+      if (!isCsv) {
+        const fileYear = resolveCsvYear(file);
+        if (!fileYear) {
+          alert("Année invalide. Import annulé.");
+          return;
+        }
+        if (baseCultureYearRef.current == null) {
+          baseCultureYearRef.current = fileYear;
+        }
+        if (fileYear > baseCultureYearRef.current) {
+          alert(
+            `Le fichier est plus récent que l'année de référence (${baseCultureYearRef.current}). Import annulé.`
+          );
+          return;
+        }
+        cultureYearOffset = baseCultureYearRef.current - fileYear;
+      }
       const feats = isCsv
         ? await parseParcellesCsvToFeatures(file)
-        : await parseTelepacXmlToFeatures(file);
+        : await parseTelepacXmlToFeatures(file, { cultureYearOffset });
       const draw = drawRef?.current,
         map = mapRef?.current;
       if (!draw || !map) return;
