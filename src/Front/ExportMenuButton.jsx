@@ -166,6 +166,8 @@ export default function ExportMenuButton({
   label = "Faire un export",
   filenamePrefixXml = "telepac_export_",
   filenamePrefixCsv = "parcelles_",
+  csvValues: csvValuesProp,
+  onCsvValuesChange,
 }) {
   const [showChoice, setShowChoice] = useState(false);
   const [showCsv, setShowCsv] = useState(false);
@@ -176,11 +178,13 @@ export default function ExportMenuButton({
     []
   );
 
-  const [csvValues, setCsvValues] = useState({
+  const [internalCsvValues, setInternalCsvValues] = useState({
     secteur: "TEST",
     exploitation: "Exploitation 1",
     codeExploitation: defaultCode,
   });
+  const csvValues = csvValuesProp ?? internalCsvValues;
+  const setCsvValues = onCsvValuesChange ?? setInternalCsvValues;
 
   const btnDefault = {
     display: "inline-flex",

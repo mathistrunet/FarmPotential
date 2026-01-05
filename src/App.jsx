@@ -144,6 +144,15 @@ export default function App() {
   });
   const [mapClickInfo, setMapClickInfo] = useState(null);
   const [appWarnings, setAppWarnings] = useState([]);
+  const defaultCsvCode = useMemo(
+    () => String(Math.floor(Math.random() * 99999) + 1).padStart(5, "0"),
+    []
+  );
+  const [csvValues, setCsvValues] = useState({
+    secteur: "TEST",
+    exploitation: "Exploitation 1",
+    codeExploitation: defaultCsvCode,
+  });
 
   useEffect(() => {
     if (!sideOpen) {
@@ -746,6 +755,8 @@ export default function App() {
               selectedId={selectedId}
               onSelect={(id) => selectFeatureOnMap(id, true)}
               viewMode={parcelleViewMode}
+              csvValues={csvValues}
+              onCsvValuesChange={setCsvValues}
             />
 
             <p style={{ fontSize: 12, color: "#777", marginTop: 10 }}>
@@ -1043,6 +1054,8 @@ export default function App() {
             features={features}
             compact={compact}
             buttonStyle={{ ...btn, background: "#111", color: "#fff", border: "none" }}
+            csvValues={csvValues}
+            onCsvValuesChange={setCsvValues}
           />
         </div>
 

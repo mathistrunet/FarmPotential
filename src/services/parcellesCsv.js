@@ -68,6 +68,20 @@ function formatCultureValue(raw) {
   return labelFromCode(value) || value;
 }
 
+function formatParcelleBioValue(raw) {
+  if (raw == null || String(raw).trim() === "") {
+    return "Non";
+  }
+  const normalized = String(raw).trim().toLowerCase();
+  if (["1", "true", "oui", "yes", "y"].includes(normalized)) {
+    return "Oui";
+  }
+  if (["0", "false", "non", "no", "n"].includes(normalized)) {
+    return "Non";
+  }
+  return String(raw);
+}
+
 function parseCultureValue(raw) {
   const trimmed = raw == null ? "" : String(raw).trim();
   if (!trimmed) return { value: "", code: "" };
@@ -149,7 +163,7 @@ export function buildParcellesCsv(features, secteur, exploitation, codeExploitat
       codeExploitation || props.code_exploitation || props.codeExploitation || "",
       parcelleName,
       formatNumber(surfaceValue),
-      parcelleBio == null ? "" : String(parcelleBio),
+      formatParcelleBioValue(parcelleBio),
       typeSol == null ? "" : String(typeSol),
       displayLabelFromProps(props),
       formatCultureValue(props.cultureN1 ?? props.cultureN_1 ?? ""),
