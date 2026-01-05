@@ -392,7 +392,9 @@ export default function ImportTelepacButton({
 
       // Synchronise la liste et sélectionne la 1ʳᵉ
       const arr = draw.getAll()?.features ?? [];
-      const polys = arr.filter((f) => f.geometry?.type === "Polygon");
+      const polys = arr.filter(
+        (f) => f.geometry?.type === "Polygon" || f.geometry?.type === "MultiPolygon"
+      );
       setFeatures?.(polys);
       if (arr[0]?.id && typeof selectFeatureOnMap === "function") {
         selectFeatureOnMap(arr[0].id, false);

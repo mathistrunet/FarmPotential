@@ -1,6 +1,7 @@
 // src/features/draw/DrawToolbar.jsx
 import React, { useCallback, useEffect, useState } from "react";
-import { ringAreaM2 } from "../utils/geometry";
+import { featureAreaM2 } from "../utils/geometry";
+import { resolveOverlappingParcels } from "../utils/overlapResolution";
 
 
 /** Petite lib d’icônes inline, légères */
@@ -11,6 +12,11 @@ const IconSquare  = () => <svg viewBox="0 0 24 24" style={iconStyle}><rect x="5"
 const IconTrash   = () => <svg viewBox="0 0 24 24" style={iconStyle}><path d="M6 7h12l-1 13H7L6 7zm3-3h6l1 2H8l1-2z" fill="currentColor"/></svg>;
 const IconEdit    = () => <svg viewBox="0 0 24 24" style={iconStyle}><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" fill="currentColor"/></svg>;
 const IconCheck   = () => <svg viewBox="0 0 24 24" style={iconStyle}><path d="M9 16.2l-3.5-3.5L4 14.2l5 5 11-11-1.4-1.4z" fill="currentColor"/></svg>;
+const IconSplit   = () => (
+  <svg viewBox="0 0 24 24" style={iconStyle}>
+    <path d="M4 7h16v2H4V7zm0 8h16v2H4v-2zM11 5h2v14h-2V5z" fill="currentColor" />
+  </svg>
+);
 const IconSelectBox = () => (
   <svg viewBox="0 0 24 24" style={iconStyle}>
     <rect
@@ -173,7 +179,9 @@ export default function DrawToolbar({
     draw.trash?.();
     // Rafraîchir la liste après suppression
     const arr = draw.getAll()?.features ?? [];
-    const polys = arr.filter((f) => f.geometry?.type === "Polygon");
+    const polys = arr.filter(
+      (f) => f.geometry?.type === "Polygon" || f.geometry?.type === "MultiPolygon"
+    );
     setFeatures?.(polys);
   }
 
@@ -183,6 +191,29 @@ export default function DrawToolbar({
     if (!draw) return;
     const next = mode === "multiple_selection" ? "simple_select" : "multiple_selection";
     draw.changeMode(next);
+  }
+
+  const refreshFromDraw = useCallback(() => {
+    const draw = drawRef?.current;
+    if (!draw) return;
+    const arr = draw.getAll()?.features ?? [];
+    const polys = arr.filter(
+      (f) => f.geometry?.type === "Polygon" || f.geometry?.type === "MultiPolygon"
+    );
+    polys.forEach((f) => {
+      const area = featureAreaM2(f);
+      if (area != null) {
+        f.properties = { ...f.properties, surfaceHa: area / 10000 };
+      }
+    });
+    setFeatures?.(polys);
+  }, [drawRef, setFeatures]);
+
+  function resolveOverlaps() {
+    const draw = drawRef?.current;
+    if (!draw) return;
+    resolveOverlappingParcels(draw);
+    refreshFromDraw();
   }
 
   /**
@@ -195,19 +226,6 @@ export default function DrawToolbar({
     const map = mapRef?.current;
     const draw = drawRef?.current;
     if (!map || !draw) return;
-
-    const refreshFromDraw = () => {
-      const arr = draw.getAll()?.features ?? [];
-      const polys = arr.filter((f) => f.geometry?.type === "Polygon");
-      polys.forEach((f) => {
-        const ring = f.geometry?.coordinates?.[0];
-        if (ring) {
-          const ha = ringAreaM2(ring) / 10000;
-          f.properties = { ...f.properties, surfaceHa: ha };
-        }
-      });
-      setFeatures?.(polys);
-    };
 
     const onMode = (e) => {
       const m = e?.mode || "simple_select";
@@ -231,7 +249,7 @@ export default function DrawToolbar({
       map.off("draw.modechange", onMode);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mapRef?.current, drawRef?.current, setFeatures, enlargeVertexHitbox]);
+  }, [mapRef?.current, drawRef?.current, refreshFromDraw, enlargeVertexHitbox]);
 
 
   return (
@@ -261,6 +279,10 @@ export default function DrawToolbar({
         title="Sélection multiple"
       >
         <IconSelectBox /> {label("Multi-sélection")}
+      </button>
+
+      <button onClick={resolveOverlaps} style={btn} title="Découper pour éviter les superpositions">
+        <IconSplit /> {label("Découper chevauchements")}
       </button>
 
       <button onClick={addSquareAtCenter} style={btn} title="Ajouter un carré au centre">

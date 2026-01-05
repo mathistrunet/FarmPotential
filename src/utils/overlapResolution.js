@@ -1,5 +1,6 @@
 import * as polygonClipping from "polygon-clipping";
 import { featureAreaM2, polygonAreaM2 } from "./geometry";
+import { toLambert93 } from "./proj";
 
 const polygonClippingModule = polygonClipping;
 const clipIntersection =
@@ -42,11 +43,44 @@ export function intersectionArea(existingFeature, incomingFeature) {
 }
 
 function geometryFromClippingResult(result) {
-  if (!Array.isArray(result) || result.length === 0) return null;
-  if (result.length === 1) {
-    return { type: "Polygon", coordinates: result[0] };
+  const cleaned = filterClippingResult(result);
+  if (!Array.isArray(cleaned) || cleaned.length === 0) return null;
+  if (cleaned.length === 1) {
+    return { type: "Polygon", coordinates: cleaned[0] };
   }
-  return { type: "MultiPolygon", coordinates: result };
+  return { type: "MultiPolygon", coordinates: cleaned };
+}
+
+function polygonMinDimensionM(polygon) {
+  if (!Array.isArray(polygon) || polygon.length === 0) return null;
+  const ring = polygon[0];
+  if (!Array.isArray(ring) || ring.length === 0) return null;
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  ring.forEach(([lon, lat]) => {
+    const [x, y] = toLambert93([lon, lat]);
+    if (x < minX) minX = x;
+    if (y < minY) minY = y;
+    if (x > maxX) maxX = x;
+    if (y > maxY) maxY = y;
+  });
+  if (!Number.isFinite(minX) || !Number.isFinite(minY)) return null;
+  const width = maxX - minX;
+  const height = maxY - minY;
+  return Math.min(width, height);
+}
+
+function filterClippingResult(result, minWidthMeters = 0.5) {
+  if (!Array.isArray(result) || result.length === 0) return [];
+  return result.filter((polygon) => {
+    const minDim = polygonMinDimensionM(polygon);
+    if (minDim == null) return false;
+    if (minDim < minWidthMeters) return false;
+    if (polygonAreaM2(polygon) <= 0) return false;
+    return true;
+  });
 }
 
 export function resolveOverlappingParcels(draw) {
