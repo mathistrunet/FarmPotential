@@ -799,218 +799,220 @@ export default function App() {
                     marginTop: 8,
                   }}
                 >
-                <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <input
-                    type="checkbox"
-                    checked={rrpVisible}
-                    onChange={(e) => setRrpVisible(e.target.checked)}
-                  />
-                  <span>Carte des sols France</span>
-                </label>
-                <p style={{ color: "#666", fontSize: 12, marginTop: 8 }}>
-                  Chargée depuis <code>/public/data/rrp_france_wgs84_shp.mbtiles</code>.
-                </p>
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    marginTop: 6,
-                  }}
-                >
-                  <span style={{ fontSize: 12, color: "#666" }}>Opacité</span>
-                  <input
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.05"
-                    value={rrpOpacity}
-                    onInput={(e) => {
-                      const v = parseFloat(e.currentTarget.value);
-                      setRrpOpacity(v);
-                      const map = mapRef.current;
-                      if (map) map.setPaintProperty("soils-rrp-fill", "fill-opacity", v);
-                    }}
-                    style={{ width: "100%" }}
-                  />
-                </div>
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    marginTop: 6,
-                  }}
-                >
-                  <span style={{ fontSize: 12, color: "#666" }}>
-                    Opacité couleurs Géoportail
-                  </span>
-                  <input
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.05"
-                    value={geoportalOpacity}
-                    onInput={(e) => {
-                      const v = parseFloat(e.currentTarget.value);
-                      setGeoportalOpacity(v);
-                    }}
-                    style={{ width: "100%" }}
-                  />
-                </div>
-                <div style={{ marginTop: 8 }}>
-                  <label
+                  <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <input
+                      type="checkbox"
+                      checked={rrpVisible}
+                      onChange={(e) => setRrpVisible(e.target.checked)}
+                    />
+                    <span>Carte des sols France</span>
+                  </label>
+                  <p style={{ color: "#666", fontSize: 12, marginTop: 8 }}>
+                    Chargée depuis <code>/public/data/rrp_france_wgs84_shp.mbtiles</code>.
+                  </p>
+                  <div
                     style={{
                       display: "flex",
                       alignItems: "center",
                       gap: 8,
-                      fontSize: 12,
-                      color: "#444",
+                      marginTop: 6,
                     }}
                   >
+                    <span style={{ fontSize: 12, color: "#666" }}>Opacité</span>
                     <input
-                      type="checkbox"
-                      checked={freezeTiles}
-                      onChange={(e) => setFreezeTiles(e.target.checked)}
-                      disabled={!rrpVisible}
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      value={rrpOpacity}
+                      onInput={(e) => {
+                        const v = parseFloat(e.currentTarget.value);
+                        setRrpOpacity(v);
+                        const map = mapRef.current;
+                        if (map) map.setPaintProperty("soils-rrp-fill", "fill-opacity", v);
+                      }}
+                      style={{ width: "100%" }}
                     />
-                    <span>Mettre en pause le rechargement automatique</span>
-                  </label>
-                </div>
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 4,
-                    fontSize: 12,
-                    color: "#444",
-                    marginTop: 8,
-                  }}
-                >
-                  <div>Statut : {soilStatusLabel}</div>
-                  <div>
-                    Tuile visible : {currentTileSummary
-                      ? `${currentTileSummary.featureCount} polygone${
-                          currentTileSummary.featureCount > 1 ? "s" : ""
-                        }`
-                      : "—"}
                   </div>
-                  <div>
-                    Tuiles figées : {frozenTiles.length} ({totalFrozenFeatures} polygone
-                    {totalFrozenFeatures > 1 ? "s" : ""})
-                  </div>
-                </div>
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 6,
-                    marginTop: 8,
-                  }}
-                >
-                  <button
-                    type="button"
-                    onClick={() => freezeCurrentTile()}
-                    disabled={!rrpVisible || !canFreezeCurrentTile}
-                    style={{
-                      padding: "6px 10px",
-                      fontSize: 12,
-                      borderRadius: 6,
-                      border: "1px solid #d1d5db",
-                      background: canFreezeCurrentTile ? "#fff" : "#f3f4f6",
-                      cursor:
-                        rrpVisible && canFreezeCurrentTile ? "pointer" : "not-allowed",
-                      opacity: rrpVisible && canFreezeCurrentTile ? 1 : 0.6,
-                      transition: "background-color 0.2s ease",
-                    }}
-                    title="Ajoute la tuile actuellement visible à la liste des tuiles figées"
-                  >
-                    Figer la tuile visible
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => clearFrozenTiles()}
-                    disabled={!frozenTiles.length}
-                    style={{
-                      padding: "6px 10px",
-                      fontSize: 12,
-                      borderRadius: 6,
-                      border: "1px solid #d1d5db",
-                      background: frozenTiles.length ? "#fff" : "#f3f4f6",
-                      cursor: frozenTiles.length ? "pointer" : "not-allowed",
-                      opacity: frozenTiles.length ? 1 : 0.6,
-                    }}
-                    title="Supprime toutes les tuiles figées"
-                  >
-                    Vider les tuiles figées
-                  </button>
-                </div>
-                {frozenTiles.length > 0 && (
                   <div
                     style={{
-                      marginTop: 10,
-                      borderTop: "1px solid #eee",
-                      paddingTop: 8,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      marginTop: 6,
+                    }}
+                  >
+                    <span style={{ fontSize: 12, color: "#666" }}>
+                      Opacité couleurs Géoportail
+                    </span>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      value={geoportalOpacity}
+                      onInput={(e) => {
+                        const v = parseFloat(e.currentTarget.value);
+                        setGeoportalOpacity(v);
+                      }}
+                      style={{ width: "100%" }}
+                    />
+                  </div>
+                  <div style={{ marginTop: 8 }}>
+                    <label
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        fontSize: 12,
+                        color: "#444",
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={freezeTiles}
+                        onChange={(e) => setFreezeTiles(e.target.checked)}
+                        disabled={!rrpVisible}
+                      />
+                      <span>Mettre en pause le rechargement automatique</span>
+                    </label>
+                  </div>
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 4,
+                      fontSize: 12,
+                      color: "#444",
+                      marginTop: 8,
+                    }}
+                  >
+                    <div>Statut : {soilStatusLabel}</div>
+                    <div>
+                      Tuile visible : {currentTileSummary
+                        ? `${currentTileSummary.featureCount} polygone${
+                            currentTileSummary.featureCount > 1 ? "s" : ""
+                          }`
+                        : "—"}
+                    </div>
+                    <div>
+                      Tuiles figées : {frozenTiles.length} ({totalFrozenFeatures} polygone
+                      {totalFrozenFeatures > 1 ? "s" : ""})
+                    </div>
+                  </div>
+                  <div
+                    style={{
                       display: "flex",
                       flexDirection: "column",
                       gap: 6,
-                      fontSize: 12,
-                      color: "#444",
+                      marginTop: 8,
                     }}
                   >
-                    <strong style={{ fontSize: 12 }}>
-                      Tuiles figées ({frozenTiles.length})
-                    </strong>
-                    <ul
+                    <button
+                      type="button"
+                      onClick={() => freezeCurrentTile()}
+                      disabled={!rrpVisible || !canFreezeCurrentTile}
                       style={{
-                        listStyle: "none",
-                        padding: 0,
-                        margin: 0,
+                        padding: "6px 10px",
+                        fontSize: 12,
+                        borderRadius: 6,
+                        border: "1px solid #d1d5db",
+                        background: canFreezeCurrentTile ? "#fff" : "#f3f4f6",
+                        cursor:
+                          rrpVisible && canFreezeCurrentTile ? "pointer" : "not-allowed",
+                        opacity: rrpVisible && canFreezeCurrentTile ? 1 : 0.6,
+                        transition: "background-color 0.2s ease",
+                      }}
+                      title="Ajoute la tuile actuellement visible à la liste des tuiles figées"
+                    >
+                      Figer la tuile visible
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => clearFrozenTiles()}
+                      disabled={!frozenTiles.length}
+                      style={{
+                        padding: "6px 10px",
+                        fontSize: 12,
+                        borderRadius: 6,
+                        border: "1px solid #d1d5db",
+                        background: frozenTiles.length ? "#fff" : "#f3f4f6",
+                        cursor: frozenTiles.length ? "pointer" : "not-allowed",
+                        opacity: frozenTiles.length ? 1 : 0.6,
+                      }}
+                      title="Supprime toutes les tuiles figées"
+                    >
+                      Vider les tuiles figées
+                    </button>
+                  </div>
+                  {frozenTiles.length > 0 && (
+                    <div
+                      style={{
+                        marginTop: 10,
+                        borderTop: "1px solid #eee",
+                        paddingTop: 8,
                         display: "flex",
                         flexDirection: "column",
                         gap: 6,
+                        fontSize: 12,
+                        color: "#444",
                       }}
                     >
-                      {frozenTiles.map((tile, index) => (
-                        <li
-                          key={tile.id}
-                          style={{
-                            border: "1px solid #e5e7eb",
-                            borderRadius: 6,
-                            padding: 6,
-                            background: "#fafafa",
-                          }}
-                        >
-                          <div style={{ fontWeight: 600 }}>
-                            #{index + 1} – {tile.features.length} polygone
-                            {tile.features.length > 1 ? "s" : ""}
-                          </div>
-                          <div style={{ color: "#666" }}>
-                            Centre : {tile.center[1].toFixed(4)}°, {tile.center[0].toFixed(4)}°
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => removeFrozenTile(tile.id)}
+                      <strong style={{ fontSize: 12 }}>
+                        Tuiles figées ({frozenTiles.length})
+                      </strong>
+                      <ul
+                        style={{
+                          listStyle: "none",
+                          padding: 0,
+                          margin: 0,
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 6,
+                        }}
+                      >
+                        {frozenTiles.map((tile, index) => (
+                          <li
+                            key={tile.id}
                             style={{
-                              marginTop: 6,
-                              padding: "4px 8px",
-                              fontSize: 12,
-                              borderRadius: 4,
-                              border: "1px solid #d1d5db",
-                              background: "#fff",
-                              cursor: "pointer",
+                              border: "1px solid #e5e7eb",
+                              borderRadius: 6,
+                              padding: 6,
+                              background: "#fafafa",
                             }}
                           >
-                            Retirer cette tuile
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
+                            <div style={{ fontWeight: 600 }}>
+                              #{index + 1} – {tile.features.length} polygone
+                              {tile.features.length > 1 ? "s" : ""}
+                            </div>
+                            <div style={{ color: "#666" }}>
+                              Centre : {tile.center[1].toFixed(4)}°,{" "}
+                              {tile.center[0].toFixed(4)}°
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => removeFrozenTile(tile.id)}
+                              style={{
+                                marginTop: 6,
+                                padding: "4px 8px",
+                                fontSize: 12,
+                                borderRadius: 4,
+                                border: "1px solid #d1d5db",
+                                background: "#fff",
+                                cursor: "pointer",
+                              }}
+                            >
+                              Retirer cette tuile
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+                {/* ⛔️ retiré : contrôle sols en ligne (WMS/WFS) */}
+                {/* <SoilsControl ... /> */}
               </div>
-              {/* ⛔️ retiré : contrôle sols en ligne (WMS/WFS) */}
-              {/* <SoilsControl ... /> */}
             </div>
           </div>
         )}
