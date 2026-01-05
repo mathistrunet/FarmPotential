@@ -68,6 +68,19 @@ function formatCultureValue(raw) {
   return labelFromCode(value) || value;
 }
 
+function buildCultureProps(cultureValues, offset) {
+  const props = {};
+  const safeOffset = Number.isFinite(offset) ? Math.max(0, Math.trunc(offset)) : 0;
+  cultureValues.forEach((entry, index) => {
+    if (!entry?.value && !entry?.code) return;
+    const targetIndex = index + safeOffset;
+    const key = targetIndex === 0 ? "cultureN" : `cultureN_${targetIndex}`;
+    if (entry.value) props[key] = entry.value;
+    if (entry.code && targetIndex === 0) props.code = entry.code;
+  });
+  return props;
+}
+
 function formatParcelleBioValue(raw) {
   if (raw == null || String(raw).trim() === "") {
     return "Non";
@@ -167,9 +180,9 @@ export function buildParcellesCsv(features, secteur, exploitation, codeExploitat
       typeSol == null ? "" : String(typeSol),
       displayLabelFromProps(props),
       formatCultureValue(props.cultureN1 ?? props.cultureN_1 ?? ""),
-      formatCultureValue(props.cultureN2 ?? ""),
-      formatCultureValue(props.cultureN3 ?? ""),
-      formatCultureValue(props.cultureN4 ?? ""),
+      formatCultureValue(props.cultureN2 ?? props.cultureN_2 ?? ""),
+      formatCultureValue(props.cultureN3 ?? props.cultureN_3 ?? ""),
+      formatCultureValue(props.cultureN4 ?? props.cultureN_4 ?? ""),
       formatGeometry(feature),
     ];
   });
@@ -179,7 +192,10 @@ export function buildParcellesCsv(features, secteur, exploitation, codeExploitat
     .join("\r\n");
 }
 
-export async function parseParcellesCsvToFeatures(file) {
+export async function parseParcellesCsvToFeatures(file, options = {}) {
+  const cultureYearOffset = Number.isFinite(options.cultureYearOffset)
+    ? options.cultureYearOffset
+    : 0;
   const text = await new Promise((resolve, reject) => {
     const r = new FileReader();
     r.onerror = () => reject(r.error);
@@ -224,6 +240,11 @@ export async function parseParcellesCsvToFeatures(file) {
     const ring = parseGeometry(map.get("geometrie"));
     if (!ring) continue;
 
+    const cultureProps = buildCultureProps(
+      [cultureN, cultureN1, cultureN2, cultureN3, cultureN4],
+      cultureYearOffset
+    );
+
     const properties = {
       ...(secteur ? { secteur } : {}),
       ...(exploitation ? { exploitation } : {}),
@@ -232,12 +253,7 @@ export async function parseParcellesCsvToFeatures(file) {
       ...(surfaceParcelle != null ? { surface_parcelle: surfaceParcelle } : {}),
       ...(parcelleBio ? { parcelle_bio: parcelleBio } : {}),
       ...(typeSol ? { type_sol: typeSol } : {}),
-      ...(cultureN.value ? { cultureN: cultureN.value } : {}),
-      ...(cultureN.code ? { code: cultureN.code } : {}),
-      ...(cultureN1.value ? { cultureN1: cultureN1.value } : {}),
-      ...(cultureN2.value ? { cultureN2: cultureN2.value } : {}),
-      ...(cultureN3.value ? { cultureN3: cultureN3.value } : {}),
-      ...(cultureN4.value ? { cultureN4: cultureN4.value } : {}),
+      ...cultureProps,
     };
 
     features.push({
