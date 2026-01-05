@@ -184,6 +184,27 @@ export function useMapInitialization() {
 
         styles: [
           {
+            id: "draw-polygon-fill-overlap-warning",
+            type: "fill",
+            filter: [
+              "all",
+              ["==", "$type", "Polygon"],
+              ["==", ["get", "overlap_warning"], true],
+            ],
+            paint: { "fill-color": "#ef4444", "fill-opacity": 0.45 },
+          },
+          {
+            id: "draw-polygon-stroke-overlap-warning",
+            type: "line",
+            filter: [
+              "all",
+              ["==", "$type", "Polygon"],
+              ["==", ["get", "overlap_warning"], true],
+            ],
+            layout: { "line-cap": "round", "line-join": "round" },
+            paint: { "line-color": "#b91c1c", "line-width": 3 },
+          },
+          {
             id: "draw-polygon-fill-inactive",
             type: "fill",
             filter: ["all", ["==", "$type", "Polygon"], ["!=", "mode", "static"]],
