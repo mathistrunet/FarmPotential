@@ -16,6 +16,76 @@ const IconDownload = () => (
   </svg>
 );
 
+function normalizeTelepacKeyPart(value) {
+  return value == null ? "" : String(value).trim();
+}
+
+function buildTelepacKey(feature) {
+  const props = feature?.properties || {};
+  const ilot = normalizeTelepacKeyPart(props.ilot_numero);
+  const numero = normalizeTelepacKeyPart(props.numero);
+  if (!ilot && !numero) return null;
+  return `${ilot}__${numero}`;
+}
+
+function filterMergeProps(props) {
+  return Object.fromEntries(
+    Object.entries(props || {}).filter(
+      ([, value]) => value !== undefined && value !== null && value !== ""
+    )
+  );
+}
+
+function updateDrawFeatureProperties(draw, feature, propsToMerge) {
+  const merged = { ...(feature.properties || {}), ...filterMergeProps(propsToMerge) };
+  if (feature.id && typeof draw?.setFeatureProperty === "function") {
+    Object.entries(merged).forEach(([key, value]) => {
+      draw.setFeatureProperty(feature.id, key, value);
+    });
+    return;
+  }
+  if (typeof draw?.delete === "function" && typeof draw?.add === "function") {
+    if (feature.id) draw.delete(feature.id);
+    draw.add({ ...feature, properties: merged });
+    return;
+  }
+  feature.properties = merged;
+}
+
+function mergeTelepacFeatures(draw, incomingFeatures) {
+  const existing = draw.getAll()?.features ?? [];
+  if (!existing.length) {
+    return { toAdd: incomingFeatures, didMerge: false };
+  }
+
+  const existingByKey = new Map();
+  existing.forEach((feature) => {
+    const key = buildTelepacKey(feature);
+    if (!key) return;
+    const list = existingByKey.get(key) || [];
+    list.push(feature);
+    existingByKey.set(key, list);
+  });
+
+  const toAdd = [];
+  incomingFeatures.forEach((feature) => {
+    const key = buildTelepacKey(feature);
+    if (!key) {
+      toAdd.push(feature);
+      return;
+    }
+    const matches = existingByKey.get(key);
+    if (!matches || matches.length === 0) {
+      toAdd.push(feature);
+      return;
+    }
+    const props = feature.properties || {};
+    matches.forEach((match) => updateDrawFeatureProperties(draw, match, props));
+  });
+
+  return { toAdd, didMerge: true };
+}
+
 
 export default function ImportTelepacButton({
   mapRef,
@@ -71,15 +141,16 @@ export default function ImportTelepacButton({
 
       // Ajout des features
       // (on peut ajouter un FeatureCollection d’un coup mais on garde l’itératif robuste)
-      for (const ft of feats) draw.add(ft);
+      const { toAdd } = isCsv ? { toAdd: feats } : mergeTelepacFeatures(draw, feats);
+      for (const ft of toAdd) draw.add(ft);
 
       // Zoom sur l’emprise (MultiPolygon pris en charge)
-      if (zoomOnImport && feats.length) {
+      if (zoomOnImport && toAdd.length) {
         let minLon = Infinity,
           minLat = Infinity,
           maxLon = -Infinity,
           maxLat = -Infinity;
-        for (const f of feats) {
+        for (const f of toAdd) {
           const t = f.geometry?.type;
           const coords =
             t === "Polygon"
