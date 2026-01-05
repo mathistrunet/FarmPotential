@@ -7,6 +7,54 @@ import {
 } from "../utils/cultureLabels";
 import { ringAreaM2 } from "../utils/geometry";
 
+const CULTURE_FIELDS = [
+  {
+    field: "cultureN",
+    label: "Culture N",
+    propKey: "cultureN",
+    placeholders: ["cultureN", "code", "CULTURE"],
+    syncCode: true,
+  },
+  {
+    field: "cultureN_1",
+    label: "Culture N1",
+    propKey: "cultureN_1",
+    placeholders: ["cultureN_1", "cultureN1", "culture_prec"],
+  },
+  {
+    field: "cultureN_2",
+    label: "Culture N2",
+    propKey: "cultureN_2",
+    placeholders: ["cultureN_2", "cultureN2"],
+  },
+  {
+    field: "cultureN_3",
+    label: "Culture N3",
+    propKey: "cultureN_3",
+    placeholders: ["cultureN_3", "cultureN3"],
+  },
+  {
+    field: "cultureN_4",
+    label: "Culture N4",
+    propKey: "cultureN_4",
+    placeholders: ["cultureN_4", "cultureN4"],
+  },
+  {
+    field: "cultureN_5",
+    label: "Culture N5",
+    propKey: "cultureN_5",
+    placeholders: ["cultureN_5", "cultureN5"],
+  },
+  {
+    field: "cultureN_6",
+    label: "Culture N6",
+    propKey: "cultureN_6",
+    placeholders: ["cultureN_6", "cultureN6"],
+  },
+];
+
+const TABLE_CELL_PADDING = "4px 6px";
+
 function normalizePart(raw) {
   if (raw == null) return "";
   return String(raw).trim();
@@ -57,6 +105,20 @@ function getCultureWarning(value) {
   return null;
 }
 
+function pickFirstValue(props, keys) {
+  if (!props) return "";
+  for (const key of keys) {
+    if (props[key] != null && String(props[key]).trim() !== "") {
+      return props[key];
+    }
+  }
+  return "";
+}
+
+function resolveTypeSol(props) {
+  return pickFirstValue(props, ["type_sol", "typeSol", "type_de_sol", "sol"]);
+}
+
 export default function ParcelleEditor({
   features,
   setFeatures,
@@ -102,23 +164,15 @@ export default function ParcelleEditor({
         const id = f.id || idx;
         const prevRow = prev[id] || {};
         const props = f.properties || {};
-        next[id] = {
-          cultureN:
-            prevRow.cultureN !== undefined
-              ? prevRow.cultureN
-              : normalizeDisplayValue(
-                  props.cultureN ?? props.code ?? props.CULTURE ?? ""
-                ),
-          cultureN_1:
-            prevRow.cultureN_1 !== undefined
-              ? prevRow.cultureN_1
-              : normalizeDisplayValue(
-                  props.cultureN_1 ??
-                    props.cultureN1 ??
-                    props.culture_prec ??
-                    ""
-                ),
-        };
+        next[id] = CULTURE_FIELDS.reduce((acc, field) => {
+          if (prevRow[field.field] !== undefined) {
+            acc[field.field] = prevRow[field.field];
+            return acc;
+          }
+          const rawValue = pickFirstValue(props, field.placeholders);
+          acc[field.field] = normalizeDisplayValue(rawValue);
+          return acc;
+        }, {});
       });
       return next;
     });
@@ -174,13 +228,15 @@ export default function ParcelleEditor({
   };
 
   const handleCultureChange = (id, index, field, rawValue) => {
+    const config = CULTURE_FIELDS.find((item) => item.field === field);
+    if (!config) return;
     const trimmed = rawValue.trim();
     let displayValue = rawValue;
 
     const nextFeatures = [...features];
     const feature = nextFeatures[index];
     if (feature) {
-      const propKey = field === "cultureN" ? "cultureN" : "cultureN_1";
+      const propKey = config.propKey;
       const nextProps = { ...(feature.properties || {}) };
       let shouldUpdate = false;
 
@@ -190,7 +246,7 @@ export default function ParcelleEditor({
           delete nextProps[propKey];
           shouldUpdate = true;
         }
-        if (field === "cultureN" && "code" in nextProps) {
+        if (config.syncCode && "code" in nextProps) {
           delete nextProps.code;
           shouldUpdate = true;
         }
@@ -198,13 +254,13 @@ export default function ParcelleEditor({
         const exactCode = codeFromLabel(trimmed);
         if (exactCode) {
           nextProps[propKey] = exactCode;
-          if (field === "cultureN") nextProps.code = exactCode;
+          if (config.syncCode) nextProps.code = exactCode;
           displayValue = labelFromCode(exactCode) || exactCode;
           shouldUpdate = true;
         } else if (/^[A-Za-z0-9]{2,10}$/.test(trimmed)) {
           const upper = trimmed.toUpperCase();
           nextProps[propKey] = upper;
-          if (field === "cultureN") nextProps.code = upper;
+          if (config.syncCode) nextProps.code = upper;
           displayValue = upper;
           shouldUpdate = true;
         }
@@ -222,6 +278,23 @@ export default function ParcelleEditor({
     }));
   };
 
+  const updateTypeSol = (index, rawValue, { trim = false } = {}) => {
+    const nextFeatures = [...features];
+    const feature = nextFeatures[index];
+    if (!feature) return;
+
+    const nextProps = { ...(feature.properties || {}) };
+    const nextValue = trim ? rawValue.trim() : rawValue;
+    if (nextValue) nextProps.type_sol = nextValue;
+    else delete nextProps.type_sol;
+
+    const prevValue = feature.properties?.type_sol;
+    if (prevValue === nextProps.type_sol) return;
+
+    nextFeatures[index] = { ...feature, properties: nextProps };
+    setFeatures(nextFeatures);
+  };
+
   const renderWarning = (value) => {
     const message = getCultureWarning(value);
     if (!message) return null;
@@ -237,7 +310,7 @@ export default function ParcelleEditor({
           <table
             style={{
               width: "100%",
-              minWidth: 620,
+              minWidth: 1400,
               borderCollapse: "collapse",
               border: "1px solid #e5e7eb",
               borderRadius: 12,
@@ -250,9 +323,9 @@ export default function ParcelleEditor({
                 <th
                   style={{
                     textAlign: "left",
-                    padding: "8px 10px",
+                    padding: TABLE_CELL_PADDING,
                     fontSize: 12,
-                    width: 110,
+                    width: 90,
                     whiteSpace: "nowrap",
                   }}
                 >
@@ -261,9 +334,9 @@ export default function ParcelleEditor({
                 <th
                   style={{
                     textAlign: "left",
-                    padding: "8px 10px",
+                    padding: TABLE_CELL_PADDING,
                     fontSize: 12,
-                    width: 220,
+                    width: 200,
                   }}
                 >
                   Nom
@@ -271,35 +344,38 @@ export default function ParcelleEditor({
                 <th
                   style={{
                     textAlign: "right",
-                    padding: "8px 10px",
+                    padding: TABLE_CELL_PADDING,
                     fontSize: 12,
-                    width: 110,
+                    width: 80,
                     whiteSpace: "nowrap",
                   }}
                 >
                   Surface (ha)
                 </th>
+                {CULTURE_FIELDS.map((field) => (
+                  <th
+                    key={field.field}
+                    style={{
+                      textAlign: "left",
+                      padding: TABLE_CELL_PADDING,
+                      fontSize: 12,
+                      width: 150,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {field.label}
+                  </th>
+                ))}
                 <th
                   style={{
                     textAlign: "left",
-                    padding: "8px 10px",
+                    padding: TABLE_CELL_PADDING,
                     fontSize: 12,
-                    width: 200,
+                    width: 160,
                     whiteSpace: "nowrap",
                   }}
                 >
-                  Culture N
-                </th>
-                <th
-                  style={{
-                    textAlign: "left",
-                    padding: "8px 10px",
-                    fontSize: 12,
-                    width: 200,
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  Culture N-1
+                  Type de sol
                 </th>
               </tr>
             </thead>
@@ -311,6 +387,7 @@ export default function ParcelleEditor({
                 const num = (f.properties?.numero ?? "").toString().trim();
                 const parcelleValue = buildParcelleValue(ilot, num);
                 const parcelleName = (f.properties?.nom ?? "").toString();
+                const typeSolValue = resolveTypeSol(f.properties || "");
                 const ring = f.geometry?.coordinates?.[0];
                 const surfaceHa = ring ? ringAreaM2(ring) / 10000 : null;
                 const selected = selectedId === id;
@@ -326,13 +403,14 @@ export default function ParcelleEditor({
                     style={{
                       background: selected ? "#e0ecff" : idx % 2 === 0 ? "#fff" : "#f9fafb",
                       cursor: "pointer",
+                      borderBottom: "1px solid #e5e7eb",
                     }}
                   >
                     <td
                       style={{
-                        padding: "8px 10px",
-                        minWidth: 96,
-                        width: 110,
+                        padding: TABLE_CELL_PADDING,
+                        minWidth: 80,
+                        width: 90,
                         whiteSpace: "nowrap",
                       }}
                     >
@@ -346,10 +424,10 @@ export default function ParcelleEditor({
                         placeholder="Îlot.Numéro"
                         style={{
                           width: "100%",
-                          padding: "4px 6px",
-                          borderRadius: 6,
+                          padding: "2px 4px",
+                          borderRadius: 4,
                           border: "1px solid #d1d5db",
-                          fontSize: 13,
+                          fontSize: 12,
                           fontWeight: 600,
                           textAlign: "center",
                         }}
@@ -357,38 +435,33 @@ export default function ParcelleEditor({
                     </td>
                     <td
                       style={{
-                        padding: "8px 10px",
-                        minWidth: 160,
-                        width: 220,
+                        padding: TABLE_CELL_PADDING,
+                        minWidth: 140,
+                        width: 200,
                         whiteSpace: "normal",
                         verticalAlign: "top",
                       }}
                     >
-                      <textarea
+                      <input
                         value={parcelleName}
                         onChange={(e) => updateNomValue(idx, e.target.value)}
                         onBlur={(e) => updateNomValue(idx, e.target.value, { trim: true })}
                         onClick={(e) => e.stopPropagation()}
-                        rows={1}
                         placeholder="Nom personnalisé"
                         style={{
                           width: "100%",
-                          minHeight: 36,
-                          padding: "6px 8px",
-                          borderRadius: 6,
+                          padding: "3px 6px",
+                          borderRadius: 4,
                           border: "1px solid #d1d5db",
-                          fontSize: 13,
-                          lineHeight: "18px",
-                          resize: "vertical",
-                          overflow: "hidden",
+                          fontSize: 12,
                         }}
                       />
                     </td>
                     <td
                       style={{
-                        padding: "8px 10px",
+                        padding: TABLE_CELL_PADDING,
                         textAlign: "right",
-                        fontSize: 13,
+                        fontSize: 12,
                         color: "#374151",
                         whiteSpace: "nowrap",
                       }}
@@ -397,57 +470,57 @@ export default function ParcelleEditor({
                         ? surfaceHa.toFixed(2)
                         : "–"}
                     </td>
+                    {CULTURE_FIELDS.map((field) => (
+                      <td
+                        key={field.field}
+                        style={{
+                          padding: TABLE_CELL_PADDING,
+                          minWidth: 140,
+                          width: 150,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        <div style={{ display: "flex", flexDirection: "column" }}>
+                          <input
+                            list={datalistId}
+                            value={typedRow[field.field] ?? ""}
+                            onChange={(e) => handleCultureChange(id, idx, field.field, e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
+                            placeholder="Nom ou code…"
+                            style={{
+                              width: "100%",
+                              padding: "3px 6px",
+                              borderRadius: 4,
+                              border: "1px solid #d1d5db",
+                              fontSize: 12,
+                            }}
+                          />
+                          {renderWarning(typedRow[field.field])}
+                        </div>
+                      </td>
+                    ))}
                     <td
                       style={{
-                        padding: "8px 10px",
-                        minWidth: 180,
-                        width: 200,
+                        padding: TABLE_CELL_PADDING,
+                        minWidth: 140,
+                        width: 160,
                         whiteSpace: "nowrap",
                       }}
                     >
-                      <div style={{ display: "flex", flexDirection: "column" }}>
-                        <input
-                          list={datalistId}
-                          value={typedRow.cultureN ?? ""}
-                          onChange={(e) => handleCultureChange(id, idx, "cultureN", e.target.value)}
-                          onClick={(e) => e.stopPropagation()}
-                          placeholder="Tapez le nom ou le code…"
-                          style={{
-                            width: "100%",
-                            padding: "6px 8px",
-                            borderRadius: 6,
-                            border: "1px solid #d1d5db",
-                            fontSize: 13,
-                          }}
-                        />
-                        {renderWarning(typedRow.cultureN)}
-                      </div>
-                    </td>
-                    <td
-                      style={{
-                        padding: "8px 10px",
-                        minWidth: 180,
-                        width: 200,
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      <div style={{ display: "flex", flexDirection: "column" }}>
-                        <input
-                          list={datalistId}
-                          value={typedRow.cultureN_1 ?? ""}
-                          onChange={(e) => handleCultureChange(id, idx, "cultureN_1", e.target.value)}
-                          onClick={(e) => e.stopPropagation()}
-                          placeholder="Tapez le nom ou le code…"
-                          style={{
-                            width: "100%",
-                            padding: "6px 8px",
-                            borderRadius: 6,
-                            border: "1px solid #d1d5db",
-                            fontSize: 13,
-                          }}
-                        />
-                        {renderWarning(typedRow.cultureN_1)}
-                      </div>
+                      <input
+                        value={typeSolValue}
+                        onChange={(e) => updateTypeSol(idx, e.target.value)}
+                        onBlur={(e) => updateTypeSol(idx, e.target.value, { trim: true })}
+                        onClick={(e) => e.stopPropagation()}
+                        placeholder="Type de sol"
+                        style={{
+                          width: "100%",
+                          padding: "3px 6px",
+                          borderRadius: 4,
+                          border: "1px solid #d1d5db",
+                          fontSize: 12,
+                        }}
+                      />
                     </td>
                   </tr>
                 );
