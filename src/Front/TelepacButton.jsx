@@ -2,6 +2,8 @@
 import React, { useRef, useState } from "react";
 import { parseTelepacXmlToFeatures, buildTelepacXML } from "../services/telepacXml";
 import { parseParcellesCsvToFeatures } from "../services/parcellesCsv";
+import { featureAreaM2, polygonAreaM2 } from "../utils/geometry";
+import * as polygonClipping from "polygon-clipping";
 
 /** Icônes légères inline (gardées) */
 const iconStyle = { width: 18, height: 18, display: "inline-block", verticalAlign: "-3px" };
@@ -15,6 +17,175 @@ const IconDownload = () => (
     <path d="M11 5h2v8h3l-4 4-4-4h3V5zM5 19h14v2H5v-2z" fill="currentColor" />
   </svg>
 );
+
+function filterMergeProps(props) {
+  return Object.fromEntries(
+    Object.entries(props || {}).filter(
+      ([, value]) => value !== undefined && value !== null && value !== ""
+    )
+  );
+}
+
+function updateDrawFeatureProperties(draw, feature, propsToMerge) {
+  const merged = { ...(feature.properties || {}), ...filterMergeProps(propsToMerge) };
+  if (feature.id && typeof draw?.setFeatureProperty === "function") {
+    Object.entries(merged).forEach(([key, value]) => {
+      draw.setFeatureProperty(feature.id, key, value);
+    });
+    return;
+  }
+  if (typeof draw?.delete === "function" && typeof draw?.add === "function") {
+    if (feature.id) draw.delete(feature.id);
+    draw.add({ ...feature, properties: merged });
+    return;
+  }
+  feature.properties = merged;
+}
+
+const polygonClippingModule = polygonClipping;
+const clipIntersection =
+  polygonClippingModule.intersection ?? polygonClippingModule.default?.intersection;
+
+function getClippingGeometry(feature) {
+  if (!feature?.geometry) return null;
+  const { type, coordinates } = feature.geometry;
+  if (type === "Polygon") return coordinates;
+  if (type === "MultiPolygon") return coordinates;
+  return null;
+}
+
+function intersectionArea(existingFeature, incomingFeature) {
+  if (!clipIntersection) return 0;
+  const existingGeom = getClippingGeometry(existingFeature);
+  const incomingGeom = getClippingGeometry(incomingFeature);
+  if (!existingGeom || !incomingGeom) return 0;
+  const intersection = clipIntersection(existingGeom, incomingGeom);
+  if (!Array.isArray(intersection) || intersection.length === 0) return 0;
+  return intersection.reduce((sum, polygon) => sum + polygonAreaM2(polygon), 0);
+}
+
+function mergeTelepacFeatures(draw, incomingFeatures) {
+  const existing = draw.getAll()?.features ?? [];
+  if (!existing.length) {
+    return { toAdd: incomingFeatures, didMerge: false };
+  }
+
+  const similarityThreshold = 0.95;
+  const existingEntries = existing.map((feature, index) => ({
+    feature,
+    id: feature.id ?? `existing-${index}`,
+    hasId: feature.id != null,
+    area: featureAreaM2(feature) ?? 0,
+  }));
+  const incomingEntries = incomingFeatures.map((feature, index) => ({
+    feature,
+    index,
+    area: featureAreaM2(feature) ?? 0,
+  }));
+
+  const overlapsByIncoming = incomingEntries.map(() => []);
+  const overlapsByExisting = existingEntries.map(() => []);
+  incomingEntries.forEach((incomingEntry, incomingIndex) => {
+    existingEntries.forEach((existingEntry, existingIndex) => {
+      const interArea = intersectionArea(existingEntry.feature, incomingEntry.feature);
+      if (interArea <= 0) return;
+      const maxArea = Math.max(existingEntry.area, incomingEntry.area, 1);
+      const similarity = interArea / maxArea;
+      overlapsByIncoming[incomingIndex].push({
+        existingIndex,
+        interArea,
+        similarity,
+      });
+      overlapsByExisting[existingIndex].push({
+        incomingIndex,
+        interArea,
+      });
+    });
+  });
+
+  const toAdd = [];
+  const matchedExistingIds = new Set();
+  const existingToRemove = new Set();
+
+  overlapsByIncoming.forEach((overlaps, incomingIndex) => {
+    overlaps.forEach(({ existingIndex, similarity }) => {
+      if (similarity < similarityThreshold) return;
+      const existingEntry = existingEntries[existingIndex];
+      if (!existingEntry) return;
+      matchedExistingIds.add(existingEntry.id);
+      updateDrawFeatureProperties(
+        draw,
+        existingEntry.feature,
+        incomingEntries[incomingIndex].feature.properties || {}
+      );
+    });
+  });
+
+  const splitExistingIds = new Set();
+  overlapsByExisting.forEach((overlaps, existingIndex) => {
+    if (overlaps.length < 2) return;
+    const existingEntry = existingEntries[existingIndex];
+    if (!existingEntry || existingEntry.area <= 0) return;
+    const totalIntersection = overlaps.reduce((sum, item) => sum + item.interArea, 0);
+    if (totalIntersection / existingEntry.area >= similarityThreshold) {
+      splitExistingIds.add(existingEntry.id);
+    }
+  });
+
+  incomingEntries.forEach((incomingEntry, incomingIndex) => {
+    const overlaps = overlapsByIncoming[incomingIndex];
+    const hasSimilarityMatch = overlaps.some(
+      ({ existingIndex, similarity }) =>
+        similarity >= similarityThreshold &&
+        matchedExistingIds.has(existingEntries[existingIndex]?.id)
+    );
+    if (hasSimilarityMatch) return;
+
+    const splitOverlap = overlaps
+      .map(({ existingIndex, interArea }) => ({
+        existingEntry: existingEntries[existingIndex],
+        interArea,
+      }))
+      .filter(
+        ({ existingEntry }) =>
+          existingEntry && splitExistingIds.has(existingEntry.id)
+      )
+      .sort((a, b) => b.interArea - a.interArea)[0];
+
+    if (splitOverlap?.existingEntry) {
+      const mergedProps = {
+        ...(splitOverlap.existingEntry.feature.properties || {}),
+        ...filterMergeProps(incomingEntry.feature.properties || {}),
+      };
+      toAdd.push({
+        ...incomingEntry.feature,
+        properties: mergedProps,
+      });
+      existingToRemove.add(splitOverlap.existingEntry.id);
+      return;
+    }
+
+    const overlappingExisting = overlaps
+      .map(({ existingIndex }) => existingEntries[existingIndex])
+      .filter((entry) => entry && !matchedExistingIds.has(entry.id));
+    if (overlappingExisting.length) {
+      overlappingExisting.forEach((entry) => existingToRemove.add(entry.id));
+      toAdd.push(incomingEntry.feature);
+      return;
+    }
+
+    toAdd.push(incomingEntry.feature);
+  });
+
+  existingEntries.forEach((entry) => {
+    if (!entry.hasId) return;
+    if (existingToRemove.has(entry.id) && !matchedExistingIds.has(entry.id)) {
+      draw.delete(entry.id);
+    }
+  });
+
+  return { toAdd, didMerge: true };
+}
 
 
 export default function ImportTelepacButton({
@@ -71,15 +242,16 @@ export default function ImportTelepacButton({
 
       // Ajout des features
       // (on peut ajouter un FeatureCollection d’un coup mais on garde l’itératif robuste)
-      for (const ft of feats) draw.add(ft);
+      const { toAdd } = isCsv ? { toAdd: feats } : mergeTelepacFeatures(draw, feats);
+      for (const ft of toAdd) draw.add(ft);
 
       // Zoom sur l’emprise (MultiPolygon pris en charge)
-      if (zoomOnImport && feats.length) {
+      if (zoomOnImport && toAdd.length) {
         let minLon = Infinity,
           minLat = Infinity,
           maxLon = -Infinity,
           maxLat = -Infinity;
-        for (const f of feats) {
+        for (const f of toAdd) {
           const t = f.geometry?.type;
           const coords =
             t === "Polygon"
