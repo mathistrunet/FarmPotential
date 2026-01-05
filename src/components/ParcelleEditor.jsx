@@ -119,12 +119,25 @@ function resolveTypeSol(props) {
   return pickFirstValue(props, ["type_sol", "typeSol", "type_de_sol", "sol"]);
 }
 
+function parseParcelleBioValue(rawValue) {
+  if (rawValue == null) return false;
+  const normalized = String(rawValue).trim().toLowerCase();
+  if (!normalized) return false;
+  return ["1", "true", "oui", "yes", "y"].includes(normalized);
+}
+
+function formatParcelleBioValue(checked) {
+  return checked ? "Oui" : "Non";
+}
+
 export default function ParcelleEditor({
   features,
   setFeatures,
   selectedId,
   onSelect,
   viewMode = "cards",
+  csvValues,
+  onCsvValuesChange,
 }) {
   const options = entriesCodebook();
   const rowsRef = useRef(new Map());
@@ -295,6 +308,20 @@ export default function ParcelleEditor({
     setFeatures(nextFeatures);
   };
 
+  const updateParcelleBio = (index, checked) => {
+    const nextFeatures = [...features];
+    const feature = nextFeatures[index];
+    if (!feature) return;
+
+    const nextProps = { ...(feature.properties || {}) };
+    nextProps.parcelle_bio = formatParcelleBioValue(checked);
+
+    if (feature.properties?.parcelle_bio === nextProps.parcelle_bio) return;
+
+    nextFeatures[index] = { ...feature, properties: nextProps };
+    setFeatures(nextFeatures);
+  };
+
   const renderWarning = (value) => {
     const message = getCultureWarning(value);
     if (!message) return null;
@@ -306,11 +333,80 @@ export default function ParcelleEditor({
   if (viewMode === "table") {
     return (
       <div style={{ marginTop: 12 }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+            gap: 12,
+            marginBottom: 12,
+          }}
+        >
+          <label style={{ fontSize: 12, display: "flex", flexDirection: "column", gap: 4 }}>
+            Secteur
+            <input
+              type="text"
+              value={csvValues?.secteur ?? ""}
+              onChange={(e) =>
+                onCsvValuesChange?.({
+                  ...(csvValues || {}),
+                  secteur: e.target.value,
+                })
+              }
+              placeholder="Secteur"
+              style={{
+                padding: "6px 8px",
+                borderRadius: 6,
+                border: "1px solid #d1d5db",
+                fontSize: 12,
+              }}
+            />
+          </label>
+          <label style={{ fontSize: 12, display: "flex", flexDirection: "column", gap: 4 }}>
+            Exploitations (nom)
+            <input
+              type="text"
+              value={csvValues?.exploitation ?? ""}
+              onChange={(e) =>
+                onCsvValuesChange?.({
+                  ...(csvValues || {}),
+                  exploitation: e.target.value,
+                })
+              }
+              placeholder="Nom de l'exploitation"
+              style={{
+                padding: "6px 8px",
+                borderRadius: 6,
+                border: "1px solid #d1d5db",
+                fontSize: 12,
+              }}
+            />
+          </label>
+          <label style={{ fontSize: 12, display: "flex", flexDirection: "column", gap: 4 }}>
+            Code exploitation
+            <input
+              type="text"
+              value={csvValues?.codeExploitation ?? ""}
+              onChange={(e) =>
+                onCsvValuesChange?.({
+                  ...(csvValues || {}),
+                  codeExploitation: e.target.value,
+                })
+              }
+              placeholder="Code exploitation"
+              style={{
+                padding: "6px 8px",
+                borderRadius: 6,
+                border: "1px solid #d1d5db",
+                fontSize: 12,
+              }}
+            />
+          </label>
+        </div>
         <div style={{ overflowX: "auto" }}>
           <table
             style={{
               width: "100%",
-              minWidth: 1400,
+              minWidth: 1520,
               borderCollapse: "collapse",
               border: "1px solid #e5e7eb",
               borderRadius: 12,
@@ -352,6 +448,17 @@ export default function ParcelleEditor({
                 >
                   Surface (ha)
                 </th>
+                <th
+                  style={{
+                    textAlign: "center",
+                    padding: TABLE_CELL_PADDING,
+                    fontSize: 12,
+                    width: 110,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  Parcelle Bio
+                </th>
                 {CULTURE_FIELDS.map((field) => (
                   <th
                     key={field.field}
@@ -388,6 +495,12 @@ export default function ParcelleEditor({
                 const parcelleValue = buildParcelleValue(ilot, num);
                 const parcelleName = (f.properties?.nom ?? "").toString();
                 const typeSolValue = resolveTypeSol(f.properties || "");
+                const parcelleBioRaw =
+                  f.properties?.parcelle_bio ??
+                  f.properties?.bio ??
+                  f.properties?.parcelleBio ??
+                  f.properties?.parcelle_bio_label;
+                const parcelleBioChecked = parseParcelleBioValue(parcelleBioRaw);
                 const ring = f.geometry?.coordinates?.[0];
                 const surfaceHa = ring ? ringAreaM2(ring) / 10000 : null;
                 const selected = selectedId === id;
@@ -469,6 +582,21 @@ export default function ParcelleEditor({
                       {surfaceHa != null && !Number.isNaN(surfaceHa)
                         ? surfaceHa.toFixed(2)
                         : "–"}
+                    </td>
+                    <td
+                      style={{
+                        padding: TABLE_CELL_PADDING,
+                        textAlign: "center",
+                        width: 110,
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={parcelleBioChecked}
+                        onChange={(e) => updateParcelleBio(idx, e.target.checked)}
+                        onClick={(e) => e.stopPropagation()}
+                        aria-label="Parcelle bio"
+                      />
                     </td>
                     {CULTURE_FIELDS.map((field) => (
                       <td
