@@ -51,6 +51,63 @@ function resolveCsvYear(file) {
   return parseYearInput(input);
 }
 
+function detectTelepacMeta(text) {
+  const campaignMatch = text.match(/campagne="([^"]+)"/i);
+  const campaign = campaignMatch?.[1]?.trim() || null;
+  const yearMatch = text.match(/fichier-xsd="[^"]*?((?:19|20)\d{2})[^"]*"/i);
+  const year = yearMatch ? Number.parseInt(yearMatch[1], 10) : null;
+  return {
+    campaign: campaign ? campaign.toLowerCase() : null,
+    year: Number.isFinite(year) ? year : null,
+  };
+}
+
+function parseCultureColumnInput(value) {
+  if (value == null) return null;
+  const trimmed = String(value).trim().toLowerCase();
+  if (!trimmed) return null;
+  if (/^\d+$/.test(trimmed)) return Number.parseInt(trimmed, 10);
+  if (trimmed.startsWith("culturen")) {
+    const suffix = trimmed.replace(/^culturen[_-]?/, "");
+    if (!suffix) return 0;
+    if (/^\d+$/.test(suffix)) return Number.parseInt(suffix, 10);
+  }
+  return null;
+}
+
+async function readFileText(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error);
+    reader.onload = () => resolve(reader.result);
+    reader.readAsText(file, "ISO-8859-1");
+  });
+}
+
+async function resolveTelepacCultureOffset(file, baseCultureYearRef) {
+  const text = await readFileText(file);
+  const { campaign, year } = detectTelepacMeta(text);
+
+  let baseYear = baseCultureYearRef.current;
+  if (baseYear == null && year != null) {
+    if (campaign === "courante") baseYear = year;
+    if (campaign === "precedente") baseYear = year + 1;
+    if (baseYear != null) baseCultureYearRef.current = baseYear;
+  }
+
+  if (year != null && baseYear != null) {
+    const offset = baseYear - year;
+    if (offset >= 0 && offset <= 6) return offset;
+  }
+
+  const input = window.prompt(
+    "Impossible de déterminer automatiquement la colonne des cultures. " +
+      "Indique la colonne cible (cultureN, cultureN1, cultureN2...) ou un numéro."
+  );
+  const parsed = parseCultureColumnInput(input);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function filterMergeProps(props) {
   return Object.fromEntries(
     Object.entries(props || {}).filter(
@@ -229,6 +286,18 @@ export default function ImportTelepacButton({
         file.type === "text/csv" || file.name.toLowerCase().endsWith(".csv");
       let cultureYearOffset = 0;
       if (!isCsv) {
+        const detectedOffset = await resolveTelepacCultureOffset(
+          file,
+          baseCultureYearRef
+        );
+        if (!Number.isFinite(detectedOffset)) {
+          alert(
+            "Colonne de cultures invalide. Import Télépac annulé."
+          );
+          return;
+        }
+        cultureYearOffset = detectedOffset;
+      } else {
         const fileYear = resolveCsvYear(file);
         if (!fileYear) {
           alert("Année invalide. Import annulé.");
