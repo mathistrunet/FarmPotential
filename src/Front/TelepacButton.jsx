@@ -5,7 +5,6 @@ import { parseParcellesCsvToFeatures } from "../services/parcellesCsv";
 import {
   resolveOverlappingParcels,
 } from "../utils/overlapResolution";
-import { mergeTelepacFeatures } from "../utils/parcelleMerge";
 
 /** Icônes légères inline (gardées) */
 const iconStyle = { width: 18, height: 18, display: "inline-block", verticalAlign: "-3px" };
@@ -213,9 +212,8 @@ export default function ImportTelepacButton({
 
       // Ajout des features
       // (on peut ajouter un FeatureCollection d’un coup mais on garde l’itératif robuste)
-      const { toAdd, mismatches } = isCsv
-        ? { toAdd: feats, mismatches: [] }
-        : mergeTelepacFeatures(draw, feats);
+      const toAdd = feats;
+      const mismatches = [];
       for (const ft of toAdd) draw.add(ft);
 
       resolveOverlappingParcels(draw);
