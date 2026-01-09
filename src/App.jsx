@@ -50,6 +50,7 @@ const DRAW_LAYER_IDS = [
   "draw-line-inactive",
   "draw-line-active",
 ];
+const DRAW_LAYER_VARIANTS = ["", ".cold", ".hot"];
 
 function projectLngLatTo3857(lng, lat) {
   const rad = Math.PI / 180;
@@ -237,7 +238,10 @@ export default function App() {
         }
       }
 
-      DRAW_LAYER_IDS.forEach((layerId) => {
+      const layerIds = DRAW_LAYER_IDS.flatMap((layerId) =>
+        DRAW_LAYER_VARIANTS.map((suffix) => `${layerId}${suffix}`)
+      );
+      layerIds.forEach((layerId) => {
         if (!map.getLayer(layerId)) return;
         const stored = drawLayerFiltersRef.current.get(layerId);
         const baseFilter = stored ?? map.getFilter(layerId) ?? null;
