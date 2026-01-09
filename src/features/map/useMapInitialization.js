@@ -249,8 +249,8 @@ export function useMapInitialization() {
             filter: [
               "all",
               ["==", "$type", "Polygon"],
-              ["==", ["get", "import_mismatch"], true],
-              ["!=", ["get", "overlap_warning"], true],
+              ["==", "import_mismatch", true],
+              ["!=", "overlap_warning", true],
             ],
             paint: { "fill-color": "#f59e0b", "fill-opacity": 0.35 },
           },
@@ -289,8 +289,8 @@ export function useMapInitialization() {
             filter: [
               "all",
               ["==", "$type", "Polygon"],
-              ["==", ["get", "import_mismatch"], true],
-              ["!=", ["get", "overlap_warning"], true],
+              ["==", "import_mismatch", true],
+              ["!=", "overlap_warning", true],
             ],
             layout: { "line-cap": "round", "line-join": "round" },
             paint: { "line-color": "#b45309", "line-width": 3 },
@@ -337,11 +337,15 @@ export function useMapInitialization() {
         polys.forEach((feature) => {
           if (!feature.id) return;
           const currentYear = normalizeYearValue(feature.properties?.annee);
-          if (feature.properties?.annee !== currentYear) {
+          const importYear = normalizeYearValue(feature.properties?.import_year);
+          const resolvedYear = currentYear ?? importYear ?? null;
+          if (currentYear == null && importYear != null) {
+            draw.setFeatureProperty(feature.id, "annee", importYear);
+          } else if (feature.properties?.annee !== currentYear) {
             draw.setFeatureProperty(feature.id, "annee", currentYear);
           }
           if (!feature.properties?.color) {
-            const nextColor = resolveYearColor(currentYear);
+            const nextColor = resolveYearColor(resolvedYear);
             if (nextColor) {
               draw.setFeatureProperty(feature.id, "color", nextColor);
             }
