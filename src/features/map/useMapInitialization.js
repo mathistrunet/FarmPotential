@@ -48,10 +48,52 @@ const resolveYearColor = (year) => {
 export function useMapInitialization() {
   const mapRef = useRef(null);
   const drawRef = useRef(null);
+  const pendingFeaturesRef = useRef(null);
   const [features, setFeatures] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [mapInitError, setMapInitError] = useState(null);
   const ensureRaster = useRasterLayers();
+
+  const syncFeaturesFromDraw = useCallback((draw) => {
+    const data = draw.getAll();
+    const polys = (data && data.features ? data.features : [])
+      .filter(
+        (f) => f.geometry?.type === "Polygon" || f.geometry?.type === "MultiPolygon"
+      )
+      .map((f) => ({ ...f, properties: f.properties || {} }));
+    polys.forEach((feature) => {
+      if (!feature.id) return;
+      const currentYear = normalizeYearValue(feature.properties?.annee);
+      const importYear = normalizeYearValue(feature.properties?.import_year);
+      const resolvedYear = currentYear ?? importYear ?? null;
+      if (currentYear == null && importYear != null) {
+        draw.setFeatureProperty(feature.id, "annee", importYear);
+      } else if (feature.properties?.annee !== currentYear) {
+        draw.setFeatureProperty(feature.id, "annee", currentYear);
+      }
+      if (!feature.properties?.color) {
+        const nextColor = resolveYearColor(resolvedYear);
+        if (nextColor) {
+          draw.setFeatureProperty(feature.id, "color", nextColor);
+        }
+      }
+    });
+    setFeatures(polys);
+  }, []);
+
+  const setDrawFeatures = useCallback(
+    (collection) => {
+      if (!collection) return;
+      const draw = drawRef.current;
+      if (!draw) {
+        pendingFeaturesRef.current = collection;
+        return;
+      }
+      draw.set(collection);
+      syncFeaturesFromDraw(draw);
+    },
+    [syncFeaturesFromDraw]
+  );
 
   const selectFeatureOnMap = useCallback((id, fit = false) => {
     const map = mapRef.current;
@@ -327,32 +369,13 @@ export function useMapInitialization() {
       drawRef.current = draw;
       map.addControl(draw, "top-left");
 
-      const updateList = () => {
-        const data = draw.getAll();
-        const polys = (data && data.features ? data.features : [])
-          .filter(
-            (f) => f.geometry?.type === "Polygon" || f.geometry?.type === "MultiPolygon"
-          )
-          .map((f) => ({ ...f, properties: f.properties || {} }));
-        polys.forEach((feature) => {
-          if (!feature.id) return;
-          const currentYear = normalizeYearValue(feature.properties?.annee);
-          const importYear = normalizeYearValue(feature.properties?.import_year);
-          const resolvedYear = currentYear ?? importYear ?? null;
-          if (currentYear == null && importYear != null) {
-            draw.setFeatureProperty(feature.id, "annee", importYear);
-          } else if (feature.properties?.annee !== currentYear) {
-            draw.setFeatureProperty(feature.id, "annee", currentYear);
-          }
-          if (!feature.properties?.color) {
-            const nextColor = resolveYearColor(resolvedYear);
-            if (nextColor) {
-              draw.setFeatureProperty(feature.id, "color", nextColor);
-            }
-          }
-        });
-        setFeatures(polys);
-      };
+      const updateList = () => syncFeaturesFromDraw(draw);
+
+      if (pendingFeaturesRef.current) {
+        draw.set(pendingFeaturesRef.current);
+        pendingFeaturesRef.current = null;
+        syncFeaturesFromDraw(draw);
+      }
 
       map.on("draw.selectionchange", (e) => {
         const ids = e?.features?.map((f) => f.id) || [];
@@ -403,6 +426,7 @@ export function useMapInitialization() {
     selectedId,
     setSelectedId,
     selectFeatureOnMap,
+    setDrawFeatures,
     mapInitError,
   };
 }

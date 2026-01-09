@@ -29,6 +29,10 @@ import { useSoilLayerLocal } from "./features/useSoilLayerLocal";
 import { useToponymieAutoNaming } from "./features/useToponymieAutoNaming";
 import { withBasePath } from "./utils/publicBase";
 import { ERROR_CODES } from "./utils/errors";
+import {
+  fetchParcellesGeojson,
+  saveParcellesGeojson,
+} from "./services/parcellesBackend";
 
 const EARTH_RADIUS = 6378137;
 const DRAW_LAYER_IDS = [
@@ -144,6 +148,7 @@ export default function App() {
     setFeatures,
     selectedId,
     selectFeatureOnMap,
+    setDrawFeatures,
     mapInitError,
   } = useMapInitialization();
 
@@ -189,6 +194,8 @@ export default function App() {
   const [validatedMatches, setValidatedMatches] = useState([]);
   const drawLayerFiltersRef = useRef(new Map());
   const toolbarScrollRef = useRef(null);
+  const [backendReady, setBackendReady] = useState(false);
+  const lastSavedPayloadRef = useRef("");
 
   const yearOptions = useMemo(() => {
     const years = new Set();
@@ -365,6 +372,52 @@ export default function App() {
       );
     }
   }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchParcellesGeojson(controller.signal)
+      .then((collection) => {
+        setDrawFeatures(collection);
+        setBackendReady(true);
+        lastSavedPayloadRef.current = JSON.stringify(collection);
+      })
+      .catch((error) => {
+        console.warn("Impossible de charger les parcelles depuis le backend.", error);
+        setBackendReady(true);
+      });
+
+    return () => controller.abort();
+  }, [setDrawFeatures]);
+
+  useEffect(() => {
+    if (!backendReady) return;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => {
+      const payload = {
+        type: "FeatureCollection",
+        features: features.map((feature) => ({
+          type: "Feature",
+          id: feature.id,
+          geometry: feature.geometry,
+          properties: feature.properties || {},
+        })),
+      };
+      const serialized = JSON.stringify(payload);
+      if (serialized === lastSavedPayloadRef.current) return;
+      saveParcellesGeojson(features, controller.signal)
+        .then((collection) => {
+          lastSavedPayloadRef.current = JSON.stringify(collection);
+        })
+        .catch((error) => {
+          console.warn("Impossible d'enregistrer les parcelles.", error);
+        });
+    }, 500);
+
+    return () => {
+      controller.abort();
+      clearTimeout(timeout);
+    };
+  }, [backendReady, features]);
 
   // ✅ Charge la couche RRP France depuis un fichier MBTiles local (placer le fichier dans /public/data/)
   //    Exemple : public/data/rrp_france_wgs84_shp.mbtiles

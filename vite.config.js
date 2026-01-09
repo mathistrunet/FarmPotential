@@ -9,6 +9,14 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export default defineConfig({
   base: "./",
   plugins: [react()],
+  server: {
+    proxy: {
+      "/api": {
+        target: "http://localhost:4174",
+        changeOrigin: true,
+      },
+    },
+  },
   resolve: {
     alias: {
       "polygon-clipping": path.resolve(
