@@ -19,6 +19,31 @@ const SOIL_WMS =
   "https://data.geopf.fr/wms-r/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap" +
   "&LAYERS=INRA.CARTE.SOLS&STYLES=&FORMAT=image/png&CRS=EPSG:3857" +
   "&WIDTH=256&HEIGHT=256&BBOX={bbox-epsg-3857}";
+const YEAR_COLOR_PALETTE = [
+  "#2563eb",
+  "#16a34a",
+  "#f97316",
+  "#7c3aed",
+  "#dc2626",
+  "#0ea5e9",
+  "#84cc16",
+  "#facc15",
+];
+const DEFAULT_POLYGON_FILL = "#18A0FB";
+const DEFAULT_POLYGON_LINE = "#0066CC";
+
+const normalizeYearValue = (value) => {
+  if (value == null) return null;
+  const trimmed = typeof value === "string" ? value.trim() : value;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const resolveYearColor = (year) => {
+  if (!Number.isFinite(year)) return null;
+  const index = Math.abs(Math.trunc(year)) % YEAR_COLOR_PALETTE.length;
+  return YEAR_COLOR_PALETTE[index];
+};
 
 export function useMapInitialization() {
   const mapRef = useRef(null);
@@ -208,7 +233,15 @@ export function useMapInitialization() {
             id: "draw-polygon-fill-inactive",
             type: "fill",
             filter: ["all", ["==", "$type", "Polygon"], ["!=", "mode", "static"]],
-            paint: { "fill-color": "#18A0FB", "fill-opacity": 0.2 },
+            paint: {
+              "fill-color": [
+                "case",
+                ["has", "color"],
+                ["get", "color"],
+                DEFAULT_POLYGON_FILL,
+              ],
+              "fill-opacity": 0.2,
+            },
           },
           {
             id: "draw-polygon-fill-import-mismatch",
@@ -225,14 +258,30 @@ export function useMapInitialization() {
             id: "draw-polygon-fill-active",
             type: "fill",
             filter: ["all", ["==", "$type", "Polygon"], ["==", "active", "true"]],
-            paint: { "fill-color": "#18A0FB", "fill-opacity": 0.3 },
+            paint: {
+              "fill-color": [
+                "case",
+                ["has", "color"],
+                ["get", "color"],
+                DEFAULT_POLYGON_FILL,
+              ],
+              "fill-opacity": 0.3,
+            },
           },
           {
             id: "draw-polygon-stroke-inactive",
             type: "line",
             filter: ["all", ["==", "$type", "Polygon"], ["!=", "mode", "static"]],
             layout: { "line-cap": "round", "line-join": "round" },
-            paint: { "line-color": "#0066CC", "line-width": 2 },
+            paint: {
+              "line-color": [
+                "case",
+                ["has", "outlineColor"],
+                ["get", "outlineColor"],
+                ["case", ["has", "color"], ["get", "color"], DEFAULT_POLYGON_LINE],
+              ],
+              "line-width": 2,
+            },
           },
           {
             id: "draw-polygon-stroke-import-mismatch",
@@ -251,7 +300,15 @@ export function useMapInitialization() {
             type: "line",
             filter: ["all", ["==", "$type", "Polygon"], ["==", "active", "true"]],
             layout: { "line-cap": "round", "line-join": "round" },
-            paint: { "line-color": "#003366", "line-width": 2 },
+            paint: {
+              "line-color": [
+                "case",
+                ["has", "outlineColor"],
+                ["get", "outlineColor"],
+                ["case", ["has", "color"], ["get", "color"], "#003366"],
+              ],
+              "line-width": 2,
+            },
           },
           {
             id: "draw-vertex-halo-active",
@@ -277,6 +334,19 @@ export function useMapInitialization() {
             (f) => f.geometry?.type === "Polygon" || f.geometry?.type === "MultiPolygon"
           )
           .map((f) => ({ ...f, properties: f.properties || {} }));
+        polys.forEach((feature) => {
+          if (!feature.id) return;
+          const currentYear = normalizeYearValue(feature.properties?.annee);
+          if (feature.properties?.annee !== currentYear) {
+            draw.setFeatureProperty(feature.id, "annee", currentYear);
+          }
+          if (!feature.properties?.color) {
+            const nextColor = resolveYearColor(currentYear);
+            if (nextColor) {
+              draw.setFeatureProperty(feature.id, "color", nextColor);
+            }
+          }
+        });
         setFeatures(polys);
       };
 

@@ -50,6 +50,14 @@ const DRAW_LAYER_IDS = [
   "draw-line-inactive",
   "draw-line-active",
 ];
+const INVALID_YEAR = -9999;
+
+const normalizeYearValue = (value) => {
+  if (value == null) return null;
+  const trimmed = typeof value === "string" ? value.trim() : value;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : null;
+};
 const DRAW_LAYER_VARIANTS = ["", ".cold", ".hot"];
 
 function projectLngLatTo3857(lng, lat) {
@@ -185,9 +193,8 @@ export default function App() {
     const years = new Set();
     let hasUnknown = false;
     features.forEach((feature) => {
-      const rawYear = feature?.properties?.annee;
-      const parsedYear = Number(rawYear);
-      if (Number.isFinite(parsedYear)) {
+      const parsedYear = normalizeYearValue(feature?.properties?.annee);
+      if (parsedYear != null) {
         years.add(parsedYear);
       } else {
         hasUnknown = true;
@@ -229,12 +236,13 @@ export default function App() {
     const applyFilter = () => {
       const filterValue = parcelleYearFilter;
       let yearFilter = null;
+      const yearExpr = ["to-number", ["get", "annee"], INVALID_YEAR];
       if (filterValue === "unknown") {
-        yearFilter = ["!", ["has", "annee"]];
+        yearFilter = ["==", yearExpr, INVALID_YEAR];
       } else if (filterValue !== "all") {
-        const parsed = Number(filterValue);
-        if (Number.isFinite(parsed)) {
-          yearFilter = ["==", ["get", "annee"], parsed];
+        const parsed = normalizeYearValue(filterValue);
+        if (parsed != null) {
+          yearFilter = ["==", yearExpr, parsed];
         }
       }
 
