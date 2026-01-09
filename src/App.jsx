@@ -1051,6 +1051,13 @@ export default function App() {
             selectFeatureOnMap={selectFeatureOnMap}
             compact={compact}
             buttonStyle={btn}
+            onImportMeta={(meta) => {
+              if (!meta?.pacage) return;
+              setCsvValues((prev) => ({
+                ...prev,
+                codeExploitation: meta.pacage,
+              }));
+            }}
           />
           <ExportMenuButton
             features={features}
