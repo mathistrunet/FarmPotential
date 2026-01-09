@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "backend": "node scripts/geojson-server.mjs",
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
