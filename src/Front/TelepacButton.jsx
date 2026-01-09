@@ -207,6 +207,7 @@ export default function ImportTelepacButton({
         feats.forEach((feature) => {
           feature.properties = {
             ...(feature.properties || {}),
+            annee: importYear,
             import_year: importYear,
           };
         });

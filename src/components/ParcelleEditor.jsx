@@ -718,6 +718,17 @@ export default function ParcelleEditor({
                     textAlign: "center",
                     padding: TABLE_CELL_PADDING,
                     fontSize: 12,
+                    width: 80,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  Année
+                </th>
+                <th
+                  style={{
+                    textAlign: "center",
+                    padding: TABLE_CELL_PADDING,
+                    fontSize: 12,
                     width: 110,
                     whiteSpace: "nowrap",
                   }}
@@ -835,6 +846,10 @@ export default function ParcelleEditor({
                 const parcelleBioChecked = parseParcelleBioValue(parcelleBioRaw);
                 const area = featureAreaM2(f);
                 const surfaceHa = area != null ? area / 10000 : null;
+                const yearValue =
+                  f.properties?.annee ??
+                  f.properties?.import_year ??
+                  "";
                 const selected = selectedId === id;
                 const fillColor = normalizeHexColor(
                   f.properties?.color,
@@ -922,6 +937,33 @@ export default function ParcelleEditor({
                       {surfaceHa != null && !Number.isNaN(surfaceHa)
                         ? surfaceHa.toFixed(2)
                         : "–"}
+                    </td>
+                    <td
+                      style={{
+                        padding: TABLE_CELL_PADDING,
+                        textAlign: "center",
+                        width: 80,
+                      }}
+                    >
+                      <input
+                        type="number"
+                        value={yearValue}
+                        onChange={(e) =>
+                          updateFeatureProperty(idx, "annee", e.target.value, {
+                            trim: true,
+                          })
+                        }
+                        onClick={(e) => e.stopPropagation()}
+                        placeholder="Année"
+                        style={{
+                          width: "100%",
+                          padding: "2px 4px",
+                          borderRadius: 4,
+                          border: "1px solid #d1d5db",
+                          fontSize: 12,
+                          textAlign: "center",
+                        }}
+                      />
                     </td>
                     <td
                       style={{

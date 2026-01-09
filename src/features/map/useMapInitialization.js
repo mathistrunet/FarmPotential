@@ -214,7 +214,7 @@ export function useMapInitialization() {
             filter: [
               "all",
               ["==", "$type", "Polygon"],
-              ["==", ["get", "overlap_warning"], true],
+              ["==", "overlap_warning", true],
             ],
             paint: { "fill-color": "#ef4444", "fill-opacity": 0.45 },
           },
@@ -224,7 +224,7 @@ export function useMapInitialization() {
             filter: [
               "all",
               ["==", "$type", "Polygon"],
-              ["==", ["get", "overlap_warning"], true],
+              ["==", "overlap_warning", true],
             ],
             layout: { "line-cap": "round", "line-join": "round" },
             paint: { "line-color": "#b91c1c", "line-width": 3 },
