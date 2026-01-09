@@ -22,8 +22,7 @@ import DrawToolbar from "./Front/DrawToolbar";
 // ✅ Import/Export Télépac (chemin conservé)
 import ImportTelepacButton from "./Front/TelepacButton";
 import ExportMenuButton from "./Front/ExportMenuButton";
-import { mergeTelepacFeatures } from "./utils/parcelleMerge";
-import { resolveOverlappingParcels } from "./utils/overlapResolution";
+import ParcelleMatchView from "./components/ParcelleMatchView";
 
 // ✅ NOUVEAU : hook d’affichage RRP local (depuis un fichier MBTiles placé dans /public/data)
 import { useSoilLayerLocal } from "./features/useSoilLayerLocal";
@@ -175,6 +174,9 @@ export default function App() {
     codeExploitation: defaultCsvCode,
   });
   const [parcelleYearFilter, setParcelleYearFilter] = useState("all");
+  const [matchViewOpen, setMatchViewOpen] = useState(false);
+  const [matchYears, setMatchYears] = useState({ left: null, right: null });
+  const [validatedMatches, setValidatedMatches] = useState([]);
   const drawLayerFiltersRef = useRef(new Map());
   const toolbarScrollRef = useRef(null);
 
@@ -562,87 +564,16 @@ export default function App() {
     }));
   };
 
-  const handleMergeParcellesByYear = () => {
-    const draw = drawRef.current;
-    if (!draw) return;
-    const allFeatures = draw.getAll()?.features ?? [];
-    const featuresByYear = new Map();
-    allFeatures.forEach((feature) => {
-      const parsedYear = Number(feature?.properties?.annee);
-      if (!Number.isFinite(parsedYear)) return;
-      const existing = featuresByYear.get(parsedYear) ?? [];
-      existing.push(feature);
-      featuresByYear.set(parsedYear, existing);
-    });
-
-    const years = Array.from(featuresByYear.keys()).sort((a, b) => b - a);
-    if (years.length < 2) {
-      alert("Il faut au moins deux années pour fusionner les parcelles.");
+  const handleOpenParcelleMatch = () => {
+    if (yearOptions.years.length < 2) {
+      alert("Il faut au moins deux années pour comparer les parcelles.");
       return;
     }
-
-    const baseYear = years[0];
-    const confirmed = window.confirm(
-      `Fusionner les parcelles par année en gardant ${baseYear} comme référence ?\n` +
-        "Les parcelles similaires seront reliées automatiquement."
-    );
-    if (!confirmed) return;
-
-    const incomingYears = years.slice(1);
-    const incomingByYear = new Map();
-    incomingYears.forEach((year) => {
-      const list = featuresByYear.get(year) ?? [];
-      incomingByYear.set(year, list);
-      list.forEach((feature) => {
-        if (feature?.id != null) {
-          draw.delete(feature.id);
-        }
-      });
-    });
-
-    let totalMismatches = 0;
-    const mismatchDetails = [];
-    incomingYears.forEach((year) => {
-      const incoming = incomingByYear.get(year) ?? [];
-      if (!incoming.length) return;
-      const { toAdd, mismatches } = mergeTelepacFeatures(draw, incoming);
-      toAdd.forEach((feature) => draw.add(feature));
-      if (mismatches.length) {
-        totalMismatches += mismatches.length;
-        mismatchDetails.push({ year, mismatches });
-      }
-    });
-
-    resolveOverlappingParcels(draw);
-    const arr = draw.getAll()?.features ?? [];
-    const polys = arr.filter(
-      (feature) =>
-        feature.geometry?.type === "Polygon" || feature.geometry?.type === "MultiPolygon"
-    );
-    setFeatures(polys);
-    setParcelleYearFilter("all");
-
-    if (totalMismatches) {
-      const top = mismatchDetails.flatMap((entry) =>
-        entry.mismatches.slice(0, 3).map((mismatch) => ({
-          year: entry.year,
-          ...mismatch,
-        }))
-      );
-      const details = top
-        .map(
-          (entry) =>
-            `- ${entry.label} (${entry.year}, similarité max ${(entry.maxSimilarity * 100).toFixed(1)}%)`
-        )
-        .join("\n");
-      alert(
-        "Certaines parcelles se chevauchent sans correspondance automatique (95%).\n" +
-          `Parcelles concernées: ${totalMismatches}.\n` +
-          "Elles sont surlignées en orange sur la carte : vérifie-les manuellement.\n" +
-          details +
-          (totalMismatches > top.length ? "\n..." : "")
-      );
-    }
+    setMatchYears((prev) => ({
+      left: prev.left ?? yearOptions.years[0],
+      right: prev.right ?? yearOptions.years[1],
+    }));
+    setMatchViewOpen(true);
   };
 
   // ---- Styles de la barre d’outils bas
@@ -750,7 +681,15 @@ export default function App() {
   return (
     <div style={layoutStyle}>
       {/* Carte */}
-      <div id="map" style={{ height: "100dvh", width: "100%" }} />
+      <div
+        id="map"
+        style={{
+          height: "100dvh",
+          width: "100%",
+          opacity: matchViewOpen ? 0 : 1,
+          pointerEvents: matchViewOpen ? "none" : "auto",
+        }}
+      />
       {mapInitError && (
         <div
           style={{
@@ -810,7 +749,7 @@ export default function App() {
           paddingBottom: sideOpen ? bottomBarHeight + 24 : 0,
           borderLeft: sideOpen ? "1px solid #eee" : "none",
           overflowY: "auto",
-          display: sideOpen ? "block" : "none",
+          display: sideOpen && !matchViewOpen ? "block" : "none",
         }}
       >
         <div style={sidePanelHeaderStyle}>
@@ -998,7 +937,7 @@ export default function App() {
                 </select>
                 <button
                   type="button"
-                  onClick={handleMergeParcellesByYear}
+                  onClick={handleOpenParcelleMatch}
                   disabled={yearOptions.years.length < 2}
                   style={{
                     padding: "6px 10px",
@@ -1009,14 +948,20 @@ export default function App() {
                       yearOptions.years.length < 2 ? "not-allowed" : "pointer",
                   }}
                 >
-                  Fusionner les affichages
+                  Comparer les parcelles
                 </button>
               </div>
               <p style={{ margin: "8px 0 0", fontSize: 12, color: "#666" }}>
-                Sélectionne une année pour afficher ses polygones avant de
-                fusionner. Les parcelles similaires seront liées
-                automatiquement, puis vérifiées manuellement.
+                Ouvre une vue dédiée pour comparer deux années côte à côte et
+                valider les correspondances proposées.
               </p>
+              {validatedMatches.length > 0 && (
+                <p style={{ margin: "6px 0 0", fontSize: 12, color: "#334155" }}>
+                  Dernière validation : {validatedMatches.length} correspondance
+                  {validatedMatches.length > 1 ? "s" : ""} enregistrée
+                  {validatedMatches.length > 1 ? "s" : ""}.
+                </p>
+              )}
             </div>
 
             <ParcelleEditor
@@ -1289,7 +1234,7 @@ export default function App() {
       </div>
 
       {/* Bouton flottant pour ouvrir le panneau quand il est fermé */}
-      {!sideOpen && (
+      {!sideOpen && !matchViewOpen && (
         <button
           onClick={() => setSideOpen(true)}
           title="Déplier le panneau latéral"
@@ -1311,7 +1256,8 @@ export default function App() {
       )}
 
       {/* Barre d’outils bas */}
-      <div style={barBase}>
+      {!matchViewOpen && (
+        <div style={barBase}>
         <div style={toolbarScrollWrap}>
           {compact && (
             <button
@@ -1384,7 +1330,17 @@ export default function App() {
             {label(compact ? "Agrandir" : "Réduire")}
           </button>
         </div>
-      </div>
+        </div>
+      )}
+
+      <ParcelleMatchView
+        open={matchViewOpen}
+        features={features}
+        yearOptions={yearOptions.years}
+        initialYears={matchYears}
+        onClose={() => setMatchViewOpen(false)}
+        onValidate={(rows) => setValidatedMatches(rows)}
+      />
     </div>
   );
 }
