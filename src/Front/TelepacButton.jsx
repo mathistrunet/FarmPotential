@@ -48,6 +48,17 @@ function resolveCsvYear(file) {
   return parseYearInput(input);
 }
 
+function resolveXmlYear(file, metaYear) {
+  if (Number.isFinite(metaYear)) return metaYear;
+  const detected = extractYearFromFilename(file?.name || "");
+  if (detected != null) return detected;
+  const lastModified =
+    file?.lastModified != null ? new Date(file.lastModified) : null;
+  const lastModifiedYear = lastModified ? lastModified.getFullYear() : null;
+  if (Number.isFinite(lastModifiedYear)) return lastModifiedYear;
+  return new Date().getFullYear();
+}
+
 function detectTelepacMeta(text) {
   const pacageMatch = text.match(/numero-pacage="([^"]+)"/i);
   const pacage = pacageMatch?.[1]?.trim() || null;
@@ -169,7 +180,7 @@ export default function ImportTelepacButton({
           return;
         }
         cultureYearOffset = offset;
-        importYear = meta?.year ?? null;
+        importYear = resolveXmlYear(file, meta?.year ?? null);
         onImportMeta?.(meta);
       } else {
         const fileYear = resolveCsvYear(file);
@@ -197,6 +208,7 @@ export default function ImportTelepacButton({
           feature.properties = {
             ...(feature.properties || {}),
             annee: importYear,
+            import_year: importYear,
           };
         });
       }
