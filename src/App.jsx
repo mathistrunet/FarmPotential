@@ -981,6 +981,7 @@ export default function App() {
               setFeatures={setFeatures}
               selectedId={selectedId}
               onSelect={(id) => selectFeatureOnMap(id, true)}
+              drawRef={drawRef}
               viewMode={parcelleViewMode}
               csvValues={csvValues}
               onCsvValuesChange={setCsvValues}
