@@ -22,6 +22,8 @@ import DrawToolbar from "./Front/DrawToolbar";
 // ✅ Import/Export Télépac (chemin conservé)
 import ImportTelepacButton from "./Front/TelepacButton";
 import ExportMenuButton from "./Front/ExportMenuButton";
+import { mergeTelepacFeatures } from "./utils/parcelleMerge";
+import { resolveOverlappingParcels } from "./utils/overlapResolution";
 
 // ✅ NOUVEAU : hook d’affichage RRP local (depuis un fichier MBTiles placé dans /public/data)
 import { useSoilLayerLocal } from "./features/useSoilLayerLocal";
@@ -30,6 +32,25 @@ import { withBasePath } from "./utils/publicBase";
 import { ERROR_CODES } from "./utils/errors";
 
 const EARTH_RADIUS = 6378137;
+const DRAW_LAYER_IDS = [
+  "draw-polygon-fill-overlap-warning",
+  "draw-polygon-stroke-overlap-warning",
+  "draw-polygon-fill-inactive",
+  "draw-polygon-fill-import-mismatch",
+  "draw-polygon-fill-active",
+  "draw-polygon-stroke-inactive",
+  "draw-polygon-stroke-import-mismatch",
+  "draw-polygon-stroke-active",
+  "draw-vertex-halo-active",
+  "draw-vertex-active",
+  "draw-vertex-midpoint",
+  "draw-vertex-inactive",
+  "draw-polygon-fill-static",
+  "draw-polygon-stroke-static",
+  "draw-line-static",
+  "draw-line-inactive",
+  "draw-line-active",
+];
 
 function projectLngLatTo3857(lng, lat) {
   const rad = Math.PI / 180;
@@ -153,6 +174,26 @@ export default function App() {
     exploitation: "Exploitation 1",
     codeExploitation: defaultCsvCode,
   });
+  const [parcelleYearFilter, setParcelleYearFilter] = useState("all");
+  const drawLayerFiltersRef = useRef(new Map());
+
+  const yearOptions = useMemo(() => {
+    const years = new Set();
+    let hasUnknown = false;
+    features.forEach((feature) => {
+      const rawYear = feature?.properties?.annee;
+      const parsedYear = Number(rawYear);
+      if (Number.isFinite(parsedYear)) {
+        years.add(parsedYear);
+      } else {
+        hasUnknown = true;
+      }
+    });
+    return {
+      years: Array.from(years).sort((a, b) => b - a),
+      hasUnknown,
+    };
+  }, [features]);
 
   useEffect(() => {
     if (!sideOpen) {
@@ -161,12 +202,60 @@ export default function App() {
   }, [sideOpen]);
 
   useEffect(() => {
+    if (parcelleYearFilter === "all" || parcelleYearFilter === "unknown") {
+      return;
+    }
+    if (!yearOptions.years.includes(Number(parcelleYearFilter))) {
+      setParcelleYearFilter("all");
+    }
+  }, [parcelleYearFilter, yearOptions.years]);
+
+  useEffect(() => {
     if (parcelleViewMode === "table" && sideOpen) {
       setSideExpanded(true);
     } else if (parcelleViewMode !== "table") {
       setSideExpanded(false);
     }
   }, [parcelleViewMode, sideOpen]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const applyFilter = () => {
+      const filterValue = parcelleYearFilter;
+      let yearFilter = null;
+      if (filterValue === "unknown") {
+        yearFilter = ["!", ["has", "annee"]];
+      } else if (filterValue !== "all") {
+        const parsed = Number(filterValue);
+        if (Number.isFinite(parsed)) {
+          yearFilter = ["==", ["get", "annee"], parsed];
+        }
+      }
+
+      DRAW_LAYER_IDS.forEach((layerId) => {
+        if (!map.getLayer(layerId)) return;
+        const stored = drawLayerFiltersRef.current.get(layerId);
+        const baseFilter = stored ?? map.getFilter(layerId) ?? null;
+        if (!stored) {
+          drawLayerFiltersRef.current.set(layerId, baseFilter);
+        }
+        const nextFilter = yearFilter
+          ? baseFilter
+            ? ["all", baseFilter, yearFilter]
+            : yearFilter
+          : baseFilter;
+        map.setFilter(layerId, nextFilter);
+      });
+    };
+
+    applyFilter();
+    map.on("idle", applyFilter);
+    return () => {
+      map.off("idle", applyFilter);
+    };
+  }, [mapRef, parcelleYearFilter]);
 
   // ✅ expose maplibregl pour les popups utilisés par le hook local
   useEffect(() => {
@@ -472,6 +561,89 @@ export default function App() {
     }));
   };
 
+  const handleMergeParcellesByYear = () => {
+    const draw = drawRef.current;
+    if (!draw) return;
+    const allFeatures = draw.getAll()?.features ?? [];
+    const featuresByYear = new Map();
+    allFeatures.forEach((feature) => {
+      const parsedYear = Number(feature?.properties?.annee);
+      if (!Number.isFinite(parsedYear)) return;
+      const existing = featuresByYear.get(parsedYear) ?? [];
+      existing.push(feature);
+      featuresByYear.set(parsedYear, existing);
+    });
+
+    const years = Array.from(featuresByYear.keys()).sort((a, b) => b - a);
+    if (years.length < 2) {
+      alert("Il faut au moins deux années pour fusionner les parcelles.");
+      return;
+    }
+
+    const baseYear = years[0];
+    const confirmed = window.confirm(
+      `Fusionner les parcelles par année en gardant ${baseYear} comme référence ?\n` +
+        "Les parcelles similaires seront reliées automatiquement."
+    );
+    if (!confirmed) return;
+
+    const incomingYears = years.slice(1);
+    const incomingByYear = new Map();
+    incomingYears.forEach((year) => {
+      const list = featuresByYear.get(year) ?? [];
+      incomingByYear.set(year, list);
+      list.forEach((feature) => {
+        if (feature?.id != null) {
+          draw.delete(feature.id);
+        }
+      });
+    });
+
+    let totalMismatches = 0;
+    const mismatchDetails = [];
+    incomingYears.forEach((year) => {
+      const incoming = incomingByYear.get(year) ?? [];
+      if (!incoming.length) return;
+      const { toAdd, mismatches } = mergeTelepacFeatures(draw, incoming);
+      toAdd.forEach((feature) => draw.add(feature));
+      if (mismatches.length) {
+        totalMismatches += mismatches.length;
+        mismatchDetails.push({ year, mismatches });
+      }
+    });
+
+    resolveOverlappingParcels(draw);
+    const arr = draw.getAll()?.features ?? [];
+    const polys = arr.filter(
+      (feature) =>
+        feature.geometry?.type === "Polygon" || feature.geometry?.type === "MultiPolygon"
+    );
+    setFeatures(polys);
+    setParcelleYearFilter("all");
+
+    if (totalMismatches) {
+      const top = mismatchDetails.flatMap((entry) =>
+        entry.mismatches.slice(0, 3).map((mismatch) => ({
+          year: entry.year,
+          ...mismatch,
+        }))
+      );
+      const details = top
+        .map(
+          (entry) =>
+            `- ${entry.label} (${entry.year}, similarité max ${(entry.maxSimilarity * 100).toFixed(1)}%)`
+        )
+        .join("\n");
+      alert(
+        "Certaines parcelles se chevauchent sans correspondance automatique (95%).\n" +
+          `Parcelles concernées: ${totalMismatches}.\n` +
+          "Elles sont surlignées en orange sur la carte : vérifie-les manuellement.\n" +
+          details +
+          (totalMismatches > top.length ? "\n..." : "")
+      );
+    }
+  };
+
   // ---- Styles de la barre d’outils bas
   const barBase = {
     position: "fixed",
@@ -748,6 +920,69 @@ export default function App() {
               <br />• “Exporter XML Télépac” pour générer un fichier compatible
               Assolia.
             </p>
+
+            <div
+              style={{
+                border: "1px solid #e5e7eb",
+                borderRadius: 10,
+                padding: 10,
+                marginBottom: 12,
+                background: "#fafafa",
+              }}
+            >
+              <div style={{ fontWeight: 600, marginBottom: 8 }}>
+                Affichage par année
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: 8,
+                  alignItems: "center",
+                }}
+              >
+                <select
+                  value={parcelleYearFilter}
+                  onChange={(e) => setParcelleYearFilter(e.target.value)}
+                  style={{
+                    padding: "6px 10px",
+                    borderRadius: 6,
+                    border: "1px solid #d1d5db",
+                    background: "#fff",
+                  }}
+                >
+                  <option value="all">Toutes les années</option>
+                  {yearOptions.years.map((year) => (
+                    <option key={year} value={String(year)}>
+                      {year}
+                    </option>
+                  ))}
+                  {yearOptions.hasUnknown && (
+                    <option value="unknown">Sans année</option>
+                  )}
+                </select>
+                <button
+                  type="button"
+                  onClick={handleMergeParcellesByYear}
+                  disabled={yearOptions.years.length < 2}
+                  style={{
+                    padding: "6px 10px",
+                    borderRadius: 6,
+                    border: "1px solid #d1d5db",
+                    background: yearOptions.years.length < 2 ? "#f3f4f6" : "#fff",
+                    cursor:
+                      yearOptions.years.length < 2 ? "not-allowed" : "pointer",
+                  }}
+                >
+                  Fusionner les affichages
+                </button>
+              </div>
+              <p style={{ margin: "8px 0 0", fontSize: 12, color: "#666" }}>
+                Sélectionne une année pour afficher ses polygones avant de
+                fusionner. Les parcelles similaires seront liées
+                automatiquement, puis vérifiées manuellement.
+              </p>
+            </div>
 
             <ParcelleEditor
               features={features}
