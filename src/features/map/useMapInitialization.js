@@ -211,6 +211,17 @@ export function useMapInitialization() {
             paint: { "fill-color": "#18A0FB", "fill-opacity": 0.2 },
           },
           {
+            id: "draw-polygon-fill-import-mismatch",
+            type: "fill",
+            filter: [
+              "all",
+              ["==", "$type", "Polygon"],
+              ["==", ["get", "import_mismatch"], true],
+              ["!=", ["get", "overlap_warning"], true],
+            ],
+            paint: { "fill-color": "#f59e0b", "fill-opacity": 0.35 },
+          },
+          {
             id: "draw-polygon-fill-active",
             type: "fill",
             filter: ["all", ["==", "$type", "Polygon"], ["==", "active", "true"]],
@@ -222,6 +233,18 @@ export function useMapInitialization() {
             filter: ["all", ["==", "$type", "Polygon"], ["!=", "mode", "static"]],
             layout: { "line-cap": "round", "line-join": "round" },
             paint: { "line-color": "#0066CC", "line-width": 2 },
+          },
+          {
+            id: "draw-polygon-stroke-import-mismatch",
+            type: "line",
+            filter: [
+              "all",
+              ["==", "$type", "Polygon"],
+              ["==", ["get", "import_mismatch"], true],
+              ["!=", ["get", "overlap_warning"], true],
+            ],
+            layout: { "line-cap": "round", "line-join": "round" },
+            paint: { "line-color": "#b45309", "line-width": 3 },
           },
           {
             id: "draw-polygon-stroke-active",

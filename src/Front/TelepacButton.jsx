@@ -170,6 +170,7 @@ function mergeTelepacFeatures(draw, incomingFeatures) {
   const matchedExistingIds = new Set();
   const existingToRemove = new Set();
   const mismatches = [];
+  const mismatchIncomingIndexes = new Map();
 
   overlapsByIncoming.forEach((overlaps, incomingIndex) => {
     if (overlaps.length) {
@@ -179,6 +180,7 @@ function mergeTelepacFeatures(draw, incomingFeatures) {
           label: getFeatureLabel(incomingEntries[incomingIndex]?.feature, incomingIndex),
           maxSimilarity,
         });
+        mismatchIncomingIndexes.set(incomingIndex, maxSimilarity);
       }
     }
     overlaps.forEach(({ existingIndex, similarity }) => {
@@ -213,6 +215,18 @@ function mergeTelepacFeatures(draw, incomingFeatures) {
         matchedExistingIds.has(existingEntries[existingIndex]?.id)
     );
     if (hasSimilarityMatch) return;
+    if (mismatchIncomingIndexes.has(incomingIndex)) {
+      const mismatchSimilarity = mismatchIncomingIndexes.get(incomingIndex);
+      toAdd.push({
+        ...incomingEntry.feature,
+        properties: {
+          ...(incomingEntry.feature.properties || {}),
+          import_mismatch: true,
+          import_mismatch_similarity: mismatchSimilarity,
+        },
+      });
+      return;
+    }
 
     const splitOverlap = overlaps
       .map(({ existingIndex, interArea }) => ({
@@ -411,6 +425,7 @@ export default function ImportTelepacButton({
         alert(
           "Certaines parcelles se chevauchent mais ne correspondent pas au seuil attendu (95%).\n" +
             `Parcelles concernées: ${mismatches.length}.\n` +
+            "Elles sont surlignées en orange sur la carte : sélectionne-les pour décider si c'est la même parcelle ou deux parcelles distinctes.\n" +
             details +
             (mismatches.length > topMismatches.length ? "\n..." : "")
         );
