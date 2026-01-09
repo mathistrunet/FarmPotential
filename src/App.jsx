@@ -183,6 +183,7 @@ export default function App() {
     codeExploitation: defaultCsvCode,
   });
   const [parcelleYearFilter, setParcelleYearFilter] = useState("all");
+  const [parcelleGroupFilter, setParcelleGroupFilter] = useState("all");
   const [matchViewOpen, setMatchViewOpen] = useState(false);
   const [matchYears, setMatchYears] = useState({ left: null, right: null });
   const [validatedMatches, setValidatedMatches] = useState([]);
@@ -206,6 +207,23 @@ export default function App() {
     };
   }, [features]);
 
+  const groupOptions = useMemo(() => {
+    const groups = new Set();
+    let hasUngrouped = false;
+    features.forEach((feature) => {
+      const value = feature?.properties?.layerType;
+      if (value == null || String(value).trim() === "") {
+        hasUngrouped = true;
+        return;
+      }
+      groups.add(String(value).trim());
+    });
+    return {
+      groups: Array.from(groups).sort((a, b) => a.localeCompare(b)),
+      hasUngrouped,
+    };
+  }, [features]);
+
   useEffect(() => {
     if (!sideOpen) {
       setSideExpanded(false);
@@ -220,6 +238,15 @@ export default function App() {
       setParcelleYearFilter("all");
     }
   }, [parcelleYearFilter, yearOptions.years]);
+
+  useEffect(() => {
+    if (parcelleGroupFilter === "all" || parcelleGroupFilter === "ungrouped") {
+      return;
+    }
+    if (!groupOptions.groups.includes(parcelleGroupFilter)) {
+      setParcelleGroupFilter("all");
+    }
+  }, [parcelleGroupFilter, groupOptions.groups]);
 
   useEffect(() => {
     if (parcelleViewMode === "table" && sideOpen) {
@@ -246,6 +273,17 @@ export default function App() {
         }
       }
 
+      let groupFilter = null;
+      if (parcelleGroupFilter === "ungrouped") {
+        groupFilter = [
+          "any",
+          ["!", ["has", "layerType"]],
+          ["==", ["get", "layerType"], ""],
+        ];
+      } else if (parcelleGroupFilter !== "all") {
+        groupFilter = ["==", ["get", "layerType"], parcelleGroupFilter];
+      }
+
       const layerIds = DRAW_LAYER_IDS.flatMap((layerId) =>
         DRAW_LAYER_VARIANTS.map((suffix) => `${layerId}${suffix}`)
       );
@@ -256,11 +294,12 @@ export default function App() {
         if (!stored) {
           drawLayerFiltersRef.current.set(layerId, baseFilter);
         }
-        const nextFilter = yearFilter
-          ? baseFilter
-            ? ["all", baseFilter, yearFilter]
-            : yearFilter
-          : baseFilter;
+        const filters = [baseFilter, yearFilter, groupFilter].filter(Boolean);
+        const nextFilter = filters.length
+          ? filters.length === 1
+            ? filters[0]
+            : ["all", ...filters]
+          : null;
         map.setFilter(layerId, nextFilter);
       });
     };
@@ -270,7 +309,29 @@ export default function App() {
     return () => {
       map.off("idle", applyFilter);
     };
-  }, [mapRef, parcelleYearFilter]);
+  }, [mapRef, parcelleYearFilter, parcelleGroupFilter]);
+
+  const visibleFeatures = useMemo(() => {
+    const yearFilter = parcelleYearFilter;
+    const groupFilter = parcelleGroupFilter;
+    return features.filter((feature) => {
+      const yearValue = normalizeYearValue(feature?.properties?.annee);
+      if (yearFilter === "unknown") {
+        if (yearValue != null) return false;
+      } else if (yearFilter !== "all") {
+        const parsed = normalizeYearValue(yearFilter);
+        if (parsed != null && yearValue !== parsed) return false;
+      }
+
+      const groupValue = String(feature?.properties?.layerType ?? "").trim();
+      if (groupFilter === "ungrouped") {
+        if (groupValue) return false;
+      } else if (groupFilter !== "all") {
+        if (groupValue !== groupFilter) return false;
+      }
+      return true;
+    });
+  }, [features, parcelleYearFilter, parcelleGroupFilter]);
 
   // ✅ expose maplibregl pour les popups utilisés par le hook local
   useEffect(() => {
@@ -947,6 +1008,26 @@ export default function App() {
                     <option value="unknown">Sans année</option>
                   )}
                 </select>
+                <select
+                  value={parcelleGroupFilter}
+                  onChange={(e) => setParcelleGroupFilter(e.target.value)}
+                  style={{
+                    padding: "6px 10px",
+                    borderRadius: 6,
+                    border: "1px solid #d1d5db",
+                    background: "#fff",
+                  }}
+                >
+                  <option value="all">Tous les groupes</option>
+                  {groupOptions.groups.map((group) => (
+                    <option key={group} value={group}>
+                      {group}
+                    </option>
+                  ))}
+                  {groupOptions.hasUngrouped && (
+                    <option value="ungrouped">Sans groupe</option>
+                  )}
+                </select>
                 <button
                   type="button"
                   onClick={handleOpenParcelleMatch}
@@ -977,7 +1058,7 @@ export default function App() {
             </div>
 
             <ParcelleEditor
-              features={features}
+              features={visibleFeatures}
               setFeatures={setFeatures}
               selectedId={selectedId}
               onSelect={(id) => selectFeatureOnMap(id, true)}
