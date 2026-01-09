@@ -1,11 +1,14 @@
 // src/components/ParcelleEditor.jsx
 import React, { useEffect, useRef, useState } from "react";
+import centroid from "@turf/centroid";
+import booleanPointInPolygon from "@turf/boolean-point-in-polygon";
 import {
   entriesCodebook,
   labelFromCode,
   codeFromLabel,
 } from "../utils/cultureLabels";
 import { featureAreaM2 } from "../utils/geometry";
+import { fetchRpgGeoJSON, getCultureLabel } from "../services/rpg";
 
 const DEFAULT_POLYGON_FILL = "#18A0FB";
 const DEFAULT_POLYGON_LINE = "#0066CC";
@@ -18,42 +21,49 @@ const CULTURE_FIELDS = [
     propKey: "cultureN",
     placeholders: ["cultureN", "code", "CULTURE"],
     syncCode: true,
+    rpgOffset: 0,
   },
   {
     field: "cultureN_1",
     label: "Culture N1",
     propKey: "cultureN_1",
     placeholders: ["cultureN_1", "cultureN1", "culture_prec"],
+    rpgOffset: 1,
   },
   {
     field: "cultureN_2",
     label: "Culture N2",
     propKey: "cultureN_2",
     placeholders: ["cultureN_2", "cultureN2"],
+    rpgOffset: 2,
   },
   {
     field: "cultureN_3",
     label: "Culture N3",
     propKey: "cultureN_3",
     placeholders: ["cultureN_3", "cultureN3"],
+    rpgOffset: 3,
   },
   {
     field: "cultureN_4",
     label: "Culture N4",
     propKey: "cultureN_4",
     placeholders: ["cultureN_4", "cultureN4"],
+    rpgOffset: 4,
   },
   {
     field: "cultureN_5",
     label: "Culture N5",
     propKey: "cultureN_5",
     placeholders: ["cultureN_5", "cultureN5"],
+    rpgOffset: 5,
   },
   {
     field: "cultureN_6",
     label: "Culture N6",
     propKey: "cultureN_6",
     placeholders: ["cultureN_6", "cultureN6"],
+    rpgOffset: 6,
   },
 ];
 
@@ -122,6 +132,51 @@ function getCultureWarning(value) {
   return null;
 }
 
+function parseYearValue(raw) {
+  if (raw == null) return null;
+  const year = Number.parseInt(String(raw).trim(), 10);
+  if (!Number.isFinite(year) || year < 1990 || year > 2100) return null;
+  return year;
+}
+
+function updateBounds(bounds, position) {
+  if (!Array.isArray(position) || position.length < 2) return bounds;
+  const [lon, lat] = position;
+  if (!Number.isFinite(lon) || !Number.isFinite(lat)) return bounds;
+  const next = bounds || [lon, lat, lon, lat];
+  next[0] = Math.min(next[0], lon);
+  next[1] = Math.min(next[1], lat);
+  next[2] = Math.max(next[2], lon);
+  next[3] = Math.max(next[3], lat);
+  return next;
+}
+
+function bboxFromGeometry(geometry) {
+  if (!geometry?.coordinates) return null;
+  let bounds = null;
+  const visit = (coords) => {
+    if (!Array.isArray(coords)) return;
+    if (typeof coords[0] === "number") {
+      bounds = updateBounds(bounds, coords);
+      return;
+    }
+    coords.forEach((entry) => visit(entry));
+  };
+  visit(geometry.coordinates);
+  return bounds;
+}
+
+function mergeBbox(a, b) {
+  if (!a) return b;
+  if (!b) return a;
+  return [
+    Math.min(a[0], b[0]),
+    Math.min(a[1], b[1]),
+    Math.max(a[2], b[2]),
+    Math.max(a[3], b[3]),
+  ];
+}
+
 function pickFirstValue(props, keys) {
   if (!props) return "";
   for (const key of keys) {
@@ -162,6 +217,8 @@ export default function ParcelleEditor({
   const parcelleInputRefs = useRef(new Map());
   const [typed, setTyped] = useState({});
   const [editingParcelleId, setEditingParcelleId] = useState(null);
+  const [rpgLoadingField, setRpgLoadingField] = useState(null);
+  const baseCultureYearRef = useRef(null);
 
   useEffect(() => {
     if (!selectedId) return;
@@ -415,6 +472,129 @@ export default function ParcelleEditor({
     );
   };
 
+  const getBaseCultureYear = () => {
+    if (baseCultureYearRef.current != null) return baseCultureYearRef.current;
+    const input = window.prompt(
+      "Indique l'année de référence de Culture N (ex: 2024)."
+    );
+    const year = parseYearValue(input);
+    if (year != null) baseCultureYearRef.current = year;
+    return year;
+  };
+
+  const handleFillRpgColumn = async (fieldConfig) => {
+    if (!fieldConfig || !Number.isFinite(fieldConfig.rpgOffset)) return;
+    if (rpgLoadingField) return;
+    setRpgLoadingField(fieldConfig.field);
+
+    try {
+      const updates = new Map();
+      const yearGroups = new Map();
+      let baseYear = baseCultureYearRef.current;
+
+      features.forEach((feature, index) => {
+        const featureYear = parseYearValue(feature.properties?.annee);
+        if (featureYear != null) {
+          const targetYear = featureYear - fieldConfig.rpgOffset;
+          if (Number.isFinite(targetYear)) {
+            if (!yearGroups.has(targetYear)) yearGroups.set(targetYear, []);
+            yearGroups.get(targetYear).push({ feature, index });
+          }
+          return;
+        }
+
+        if (baseYear == null) baseYear = getBaseCultureYear();
+        if (baseYear == null) return;
+
+        const targetYear = baseYear - fieldConfig.rpgOffset;
+        if (Number.isFinite(targetYear)) {
+          if (!yearGroups.has(targetYear)) yearGroups.set(targetYear, []);
+          yearGroups.get(targetYear).push({ feature, index });
+        }
+      });
+
+      if (!yearGroups.size) {
+        alert(
+          "Aucune parcelle n'a d'année de référence pour remplir cette colonne."
+        );
+        return;
+      }
+
+      for (const [targetYear, group] of yearGroups.entries()) {
+        let combinedBbox = null;
+        group.forEach(({ feature }) => {
+          const bbox = bboxFromGeometry(feature.geometry);
+          combinedBbox = mergeBbox(combinedBbox, bbox);
+        });
+        if (!combinedBbox) continue;
+
+        let rpgData = null;
+        try {
+          rpgData = await fetchRpgGeoJSON(targetYear, combinedBbox);
+        } catch (error) {
+          console.error("Erreur RPG", error);
+          alert(
+            `Impossible de charger le RPG ${targetYear}. Vérifie la connexion et réessaie.`
+          );
+          return;
+        }
+
+        const rpgFeatures = Array.isArray(rpgData?.features)
+          ? rpgData.features
+          : [];
+        if (!rpgFeatures.length) continue;
+
+        group.forEach(({ feature, index }) => {
+          const point = centroid(feature);
+          const match = rpgFeatures.find((rpgFeature) =>
+            booleanPointInPolygon(point, rpgFeature)
+          );
+          if (!match) return;
+          const { label, code } = getCultureLabel(match.properties || {});
+          const rawValue = code || label || "";
+          if (!rawValue) return;
+          updates.set(index, rawValue);
+        });
+      }
+
+      if (!updates.size) {
+        alert("Aucun précédent RPG détecté pour cette colonne.");
+        return;
+      }
+
+      const nextFeatures = [...features];
+      let nextTyped = { ...typed };
+      updates.forEach((rawValue, index) => {
+        const feature = nextFeatures[index];
+        if (!feature) return;
+        const id = feature.id || index;
+        const nextProps = { ...(feature.properties || {}) };
+        nextProps[fieldConfig.propKey] = rawValue;
+        if (fieldConfig.syncCode) nextProps.code = rawValue;
+        nextFeatures[index] = { ...feature, properties: nextProps };
+        nextTyped = {
+          ...nextTyped,
+          [id]: {
+            ...(nextTyped[id] || {}),
+            [fieldConfig.field]: normalizeDisplayValue(rawValue),
+          },
+        };
+        const draw = drawRef?.current;
+        if (draw && feature.id) {
+          draw.setFeatureProperty(feature.id, fieldConfig.propKey, rawValue);
+          if (fieldConfig.syncCode) {
+            draw.setFeatureProperty(feature.id, "code", rawValue);
+          }
+        }
+      });
+
+      setFeatures(nextFeatures);
+      setTyped(nextTyped);
+    } finally {
+      setRpgLoadingField(null);
+    }
+  };
+
   if (viewMode === "table") {
     return (
       <div style={{ marginTop: 12 }}>
@@ -591,6 +771,51 @@ export default function ParcelleEditor({
                 >
                   Groupe
                 </th>
+              </tr>
+              <tr>
+                <th style={{ padding: TABLE_CELL_PADDING }} />
+                <th style={{ padding: TABLE_CELL_PADDING }} />
+                <th style={{ padding: TABLE_CELL_PADDING }} />
+                <th style={{ padding: TABLE_CELL_PADDING }} />
+                {CULTURE_FIELDS.map((field) => {
+                  const isRpgFillable = field.rpgOffset >= 2;
+                  return (
+                    <th
+                      key={`${field.field}-fill`}
+                      style={{
+                        padding: TABLE_CELL_PADDING,
+                        textAlign: "left",
+                      }}
+                    >
+                      {isRpgFillable ? (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleFillRpgColumn(field);
+                          }}
+                          disabled={rpgLoadingField != null}
+                          style={{
+                            padding: "3px 8px",
+                            borderRadius: 6,
+                            border: "1px solid #d1d5db",
+                            background: "#fff",
+                            fontSize: 11,
+                            cursor: rpgLoadingField ? "not-allowed" : "pointer",
+                            opacity: rpgLoadingField ? 0.6 : 1,
+                          }}
+                        >
+                          {rpgLoadingField === field.field
+                            ? "Chargement..."
+                            : "Remplir (RPG)"}
+                        </button>
+                      ) : null}
+                    </th>
+                  );
+                })}
+                <th style={{ padding: TABLE_CELL_PADDING }} />
+                <th style={{ padding: TABLE_CELL_PADDING }} />
+                <th style={{ padding: TABLE_CELL_PADDING }} />
               </tr>
             </thead>
             <tbody>
