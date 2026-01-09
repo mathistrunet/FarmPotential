@@ -192,6 +192,7 @@ export default function App() {
   const [matchViewOpen, setMatchViewOpen] = useState(false);
   const [matchYears, setMatchYears] = useState({ left: null, right: null });
   const [validatedMatches, setValidatedMatches] = useState([]);
+  const [validatedMatchesAt, setValidatedMatchesAt] = useState(null);
   const drawLayerFiltersRef = useRef(new Map());
   const toolbarScrollRef = useRef(null);
   const [backendReady, setBackendReady] = useState(false);
@@ -702,6 +703,12 @@ export default function App() {
     setMatchViewOpen(true);
   };
 
+  const handleValidateParcelleMatch = (rows) => {
+    setValidatedMatches(rows);
+    setValidatedMatchesAt(new Date());
+    setMatchViewOpen(false);
+  };
+
   // ---- Styles de la barre d’outils bas
   const bottomBarHeight = compact ? 56 : 64;
   const barBase = {
@@ -1105,7 +1112,11 @@ export default function App() {
                 <p style={{ margin: "6px 0 0", fontSize: 12, color: "#334155" }}>
                   Dernière validation : {validatedMatches.length} correspondance
                   {validatedMatches.length > 1 ? "s" : ""} enregistrée
-                  {validatedMatches.length > 1 ? "s" : ""}.
+                  {validatedMatches.length > 1 ? "s" : ""}
+                  {validatedMatchesAt
+                    ? ` à ${validatedMatchesAt.toLocaleTimeString("fr-FR")}`
+                    : ""}
+                  .
                 </p>
               )}
             </div>
@@ -1486,7 +1497,7 @@ export default function App() {
         yearOptions={yearOptions.years}
         initialYears={matchYears}
         onClose={() => setMatchViewOpen(false)}
-        onValidate={(rows) => setValidatedMatches(rows)}
+        onValidate={handleValidateParcelleMatch}
       />
     </div>
   );
