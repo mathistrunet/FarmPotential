@@ -191,6 +191,15 @@ export async function parseTelepacXmlToFeatures(file, options = {}) {
   const parcelles = xml.getElementsByTagNameNS
     ? xml.getElementsByTagNameNS(NS, "parcelle")
     : xml.querySelectorAll("parcelle");
+  const producteurs = xml.getElementsByTagNameNS
+    ? xml.getElementsByTagNameNS(NS, "producteur")
+    : xml.getElementsByTagName("producteur");
+  const producteurNode = producteurs?.[0] || null;
+  const pacage =
+    (producteurNode &&
+      producteurNode.getAttribute &&
+      producteurNode.getAttribute("numero-pacage")) ||
+    "";
 
   const features = [];
   for (let i = 0; i < parcelles.length; i++) {
@@ -259,6 +268,7 @@ export async function parseTelepacXmlToFeatures(file, options = {}) {
         ilot_numero,
         nom_affiche,
         ...cultureProps,
+        ...(pacage ? { code_exploitation: pacage } : {}),
         ...(surfaceA !== undefined ? { surface_admissible: surfaceA } : {}),
       },
       geometry: { type: "Polygon", coordinates: [ringWgs] },
