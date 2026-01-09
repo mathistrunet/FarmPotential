@@ -57,7 +57,7 @@ function ensureLayer(map, color) {
 }
 
 function updateMapFeatures(map, features, color) {
-  if (!map || !map.isStyleLoaded()) return;
+  if (!map) return;
   ensureLayer(map, color);
   const source = map.getSource(SOURCE_ID);
   if (source) {
@@ -66,6 +66,13 @@ function updateMapFeatures(map, features, color) {
       features,
     });
   }
+}
+
+function syncMapView(map, features, color) {
+  if (!map) return;
+  updateMapFeatures(map, features, color);
+  fitMapToFeatures(map, features);
+  map.resize();
 }
 
 function collectCoordinates(coords, acc) {
@@ -144,15 +151,21 @@ export default function ParcelleMatchView({
     rightMap.addControl(new maplibregl.NavigationControl(), "top-left");
 
     const handleLeftLoad = () => {
-      updateMapFeatures(leftMap, leftFeaturesRef.current, "#15803d");
-      fitMapToFeatures(leftMap, leftFeaturesRef.current);
+      syncMapView(leftMap, leftFeaturesRef.current, "#15803d");
     };
     const handleRightLoad = () => {
-      updateMapFeatures(rightMap, rightFeaturesRef.current, "#2563eb");
-      fitMapToFeatures(rightMap, rightFeaturesRef.current);
+      syncMapView(rightMap, rightFeaturesRef.current, "#2563eb");
     };
-    leftMap.on("load", handleLeftLoad);
-    rightMap.on("load", handleRightLoad);
+    if (leftMap.isStyleLoaded()) {
+      handleLeftLoad();
+    } else {
+      leftMap.once("load", handleLeftLoad);
+    }
+    if (rightMap.isStyleLoaded()) {
+      handleRightLoad();
+    } else {
+      rightMap.once("load", handleRightLoad);
+    }
 
     return () => {
       leftMap.off("load", handleLeftLoad);
@@ -219,10 +232,20 @@ export default function ParcelleMatchView({
     const leftMap = leftMapRef.current;
     const rightMap = rightMapRef.current;
     if (!leftMap || !rightMap) return;
-    updateMapFeatures(leftMap, leftFeaturesRef.current, "#15803d");
-    updateMapFeatures(rightMap, rightFeaturesRef.current, "#2563eb");
-    fitMapToFeatures(leftMap, leftFeaturesRef.current);
-    fitMapToFeatures(rightMap, rightFeaturesRef.current);
+    const applyLeft = () =>
+      syncMapView(leftMap, leftFeaturesRef.current, "#15803d");
+    const applyRight = () =>
+      syncMapView(rightMap, rightFeaturesRef.current, "#2563eb");
+    if (leftMap.isStyleLoaded()) {
+      applyLeft();
+    } else {
+      leftMap.once("load", applyLeft);
+    }
+    if (rightMap.isStyleLoaded()) {
+      applyRight();
+    } else {
+      rightMap.once("load", applyRight);
+    }
   }, [leftEntries, rightEntries]);
 
   const baseByKey = useMemo(() => {
