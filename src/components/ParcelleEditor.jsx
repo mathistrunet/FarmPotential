@@ -340,6 +340,27 @@ export default function ParcelleEditor({
     setFeatures(nextFeatures);
   };
 
+  const updateFeatureProperty = (index, propKey, rawValue, { trim = false } = {}) => {
+    const nextFeatures = [...features];
+    const feature = nextFeatures[index];
+    if (!feature) return;
+
+    const nextProps = { ...(feature.properties || {}) };
+    const nextValue = trim ? String(rawValue ?? "").trim() : rawValue;
+    if (nextValue) nextProps[propKey] = nextValue;
+    else delete nextProps[propKey];
+
+    if (feature.properties?.[propKey] === nextProps[propKey]) return;
+
+    nextFeatures[index] = { ...feature, properties: nextProps };
+    setFeatures(nextFeatures);
+
+    const draw = drawRef?.current;
+    if (draw && feature.id) {
+      draw.setFeatureProperty(feature.id, propKey, nextProps[propKey] || undefined);
+    }
+  };
+
   const updateFeatureColor = (index, propKey, rawValue) => {
     const nextFeatures = [...features];
     const feature = nextFeatures[index];
@@ -558,6 +579,17 @@ export default function ParcelleEditor({
                   }}
                 >
                   Couleurs
+                </th>
+                <th
+                  style={{
+                    textAlign: "left",
+                    padding: TABLE_CELL_PADDING,
+                    fontSize: 12,
+                    width: 140,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  Groupe
                 </th>
               </tr>
             </thead>
@@ -785,6 +817,32 @@ export default function ParcelleEditor({
                         Réinitialiser
                       </button>
                     </td>
+                    <td
+                      style={{
+                        padding: TABLE_CELL_PADDING,
+                        minWidth: 130,
+                        width: 140,
+                      }}
+                    >
+                      <input
+                        value={f.properties?.layerType ?? ""}
+                        onChange={(e) =>
+                          updateFeatureProperty(idx, "layerType", e.target.value)
+                        }
+                        onBlur={(e) =>
+                          updateFeatureProperty(idx, "layerType", e.target.value, { trim: true })
+                        }
+                        onClick={(e) => e.stopPropagation()}
+                        placeholder="Ex: télépac"
+                        style={{
+                          width: "100%",
+                          padding: "2px 4px",
+                          borderRadius: 4,
+                          border: "1px solid #d1d5db",
+                          fontSize: 12,
+                        }}
+                      />
+                    </td>
                   </tr>
                 );
               })}
@@ -810,6 +868,7 @@ export default function ParcelleEditor({
         const displayPrevious = typedRow.cultureN_1 ?? "";
         const listId = datalistId;
         const selected = selectedId === id;
+        const groupValue = f.properties?.layerType ?? "";
 
         const ilot = normalizePart(f.properties?.ilot_numero);
         const num = normalizePart(f.properties?.numero);
@@ -851,11 +910,11 @@ export default function ParcelleEditor({
               transition: "box-shadow .15s ease, border-color .15s ease",
             }}
             title="Cliquer pour sélectionner la parcelle sur la carte"
-          >
-            <div
-              style={{
-                fontWeight: 600,
-                marginBottom: 6,
+            >
+              <div
+                style={{
+                  fontWeight: 600,
+                  marginBottom: 6,
                 display: "flex",
                 flexWrap: "wrap",
                 gap: 6,
@@ -1032,6 +1091,26 @@ export default function ParcelleEditor({
                 Les couleurs sont appliquées immédiatement sur la carte.
               </div>
             </div>
+            <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <span style={{ fontSize: 12, color: "#555" }}>Groupe (filtre)</span>
+              <input
+                value={groupValue}
+                onClick={(e) => e.stopPropagation()}
+                onChange={(e) =>
+                  updateFeatureProperty(idx, "layerType", e.target.value)
+                }
+                onBlur={(e) =>
+                  updateFeatureProperty(idx, "layerType", e.target.value, { trim: true })
+                }
+                placeholder="Ex: télépac, manuel"
+                style={{
+                  padding: "6px 8px",
+                  borderRadius: 6,
+                  border: "1px solid #d1d5db",
+                  fontSize: 12,
+                }}
+              />
+            </label>
           </div>
         );
       })}
