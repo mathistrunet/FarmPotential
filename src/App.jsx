@@ -176,6 +176,7 @@ export default function App() {
   });
   const [parcelleYearFilter, setParcelleYearFilter] = useState("all");
   const drawLayerFiltersRef = useRef(new Map());
+  const toolbarScrollRef = useRef(null);
 
   const yearOptions = useMemo(() => {
     const years = new Set();
@@ -645,6 +646,7 @@ export default function App() {
   };
 
   // ---- Styles de la barre d’outils bas
+  const bottomBarHeight = compact ? 56 : 64;
   const barBase = {
     position: "fixed",
     left: 0,
@@ -658,6 +660,32 @@ export default function App() {
     gap: 12,
     padding: compact ? "6px 10px" : "10px 14px",
     zIndex: 20,
+    minHeight: bottomBarHeight,
+  };
+  const toolbarScrollWrap = {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+    minWidth: 0,
+  };
+  const toolbarScrollArea = {
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    overflowX: "auto",
+    paddingBottom: 4,
+    marginBottom: -4,
+    scrollbarWidth: "thin",
+  };
+  const navButtonStyle = {
+    padding: "6px 8px",
+    borderRadius: 6,
+    border: "1px solid #d1d5db",
+    background: "#fff",
+    cursor: "pointer",
+    fontSize: 14,
+    lineHeight: 1,
   };
   const groupStyle = {
     display: "flex",
@@ -711,6 +739,12 @@ export default function App() {
     paddingBottom: 12,
     zIndex: 1,
     borderBottom: "1px solid #eee",
+  };
+  const scrollToolbar = (direction) => {
+    const el = toolbarScrollRef.current;
+    if (!el) return;
+    const delta = Math.round(el.clientWidth * 0.7) * direction;
+    el.scrollBy({ left: delta, behavior: "smooth" });
   };
 
   return (
@@ -773,6 +807,7 @@ export default function App() {
       <div
         style={{
           padding: sideOpen ? 16 : 0,
+          paddingBottom: sideOpen ? bottomBarHeight + 24 : 0,
           borderLeft: sideOpen ? "1px solid #eee" : "none",
           overflowY: "auto",
           display: sideOpen ? "block" : "none",
@@ -1277,42 +1312,66 @@ export default function App() {
 
       {/* Barre d’outils bas */}
       <div style={barBase}>
-        {/* Import / Export Télépac */}
-        <div style={groupStyle}>
-          <ImportTelepacButton
-            mapRef={mapRef}
-            drawRef={drawRef}
-            setFeatures={setFeatures}
-            selectFeatureOnMap={selectFeatureOnMap}
-            compact={compact}
-            buttonStyle={btn}
-            onImportMeta={(meta) => {
-              if (!meta?.pacage) return;
-              setCsvValues((prev) => ({
-                ...prev,
-                codeExploitation: meta.pacage,
-              }));
-            }}
-          />
-          <ExportMenuButton
-            features={features}
-            compact={compact}
-            buttonStyle={{ ...btn, background: "#111", color: "#fff", border: "none" }}
-            csvValues={csvValues}
-            onCsvValuesChange={setCsvValues}
-          />
-        </div>
+        <div style={toolbarScrollWrap}>
+          {compact && (
+            <button
+              type="button"
+              onClick={() => scrollToolbar(-1)}
+              style={navButtonStyle}
+              title="Faire défiler les actions vers la gauche"
+            >
+              ◀
+            </button>
+          )}
+          <div style={toolbarScrollArea} ref={toolbarScrollRef}>
+            {/* Import / Export Télépac */}
+            <div style={groupStyle}>
+              <ImportTelepacButton
+                mapRef={mapRef}
+                drawRef={drawRef}
+                setFeatures={setFeatures}
+                selectFeatureOnMap={selectFeatureOnMap}
+                compact={compact}
+                buttonStyle={btn}
+                onImportMeta={(meta) => {
+                  if (!meta?.pacage) return;
+                  setCsvValues((prev) => ({
+                    ...prev,
+                    codeExploitation: meta.pacage,
+                  }));
+                }}
+              />
+              <ExportMenuButton
+                features={features}
+                compact={compact}
+                buttonStyle={{ ...btn, background: "#111", color: "#fff", border: "none" }}
+                csvValues={csvValues}
+                onCsvValuesChange={setCsvValues}
+              />
+            </div>
 
-        {/* Dessin */}
-        <div style={{ ...groupStyle, borderRight: "none" }}>
-          <DrawToolbar
-            mapRef={mapRef}
-            drawRef={drawRef}
-            features={features}
-            setFeatures={setFeatures}
-            selectFeatureOnMap={selectFeatureOnMap}
-            compact={compact}
-          />
+            {/* Dessin */}
+            <div style={{ ...groupStyle, borderRight: "none" }}>
+              <DrawToolbar
+                mapRef={mapRef}
+                drawRef={drawRef}
+                features={features}
+                setFeatures={setFeatures}
+                selectFeatureOnMap={selectFeatureOnMap}
+                compact={compact}
+              />
+            </div>
+          </div>
+          {compact && (
+            <button
+              type="button"
+              onClick={() => scrollToolbar(1)}
+              style={navButtonStyle}
+              title="Faire défiler les actions vers la droite"
+            >
+              ▶
+            </button>
+          )}
         </div>
 
         <div style={{ marginLeft: "auto" }}>
