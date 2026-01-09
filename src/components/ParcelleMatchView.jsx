@@ -120,6 +120,8 @@ export default function ParcelleMatchView({
   const rightContainerRef = useRef(null);
   const leftMapRef = useRef(null);
   const rightMapRef = useRef(null);
+  const leftFeaturesRef = useRef([]);
+  const rightFeaturesRef = useRef([]);
   const [leftYear, setLeftYear] = useState(initialYears?.left ?? null);
   const [rightYear, setRightYear] = useState(initialYears?.right ?? null);
   const [matchRows, setMatchRows] = useState([]);
@@ -141,8 +143,14 @@ export default function ParcelleMatchView({
     leftMap.addControl(new maplibregl.NavigationControl(), "top-left");
     rightMap.addControl(new maplibregl.NavigationControl(), "top-left");
 
-    const handleLeftLoad = () => updateMapFeatures(leftMap, [], "#15803d");
-    const handleRightLoad = () => updateMapFeatures(rightMap, [], "#2563eb");
+    const handleLeftLoad = () => {
+      updateMapFeatures(leftMap, leftFeaturesRef.current, "#15803d");
+      fitMapToFeatures(leftMap, leftFeaturesRef.current);
+    };
+    const handleRightLoad = () => {
+      updateMapFeatures(rightMap, rightFeaturesRef.current, "#2563eb");
+      fitMapToFeatures(rightMap, rightFeaturesRef.current);
+    };
     leftMap.on("load", handleLeftLoad);
     rightMap.on("load", handleRightLoad);
 
@@ -206,21 +214,15 @@ export default function ParcelleMatchView({
   }, [suggestions, leftEntries, rightEntries]);
 
   useEffect(() => {
+    leftFeaturesRef.current = leftEntries.map((entry) => entry.feature);
+    rightFeaturesRef.current = rightEntries.map((entry) => entry.feature);
     const leftMap = leftMapRef.current;
     const rightMap = rightMapRef.current;
     if (!leftMap || !rightMap) return;
-    updateMapFeatures(
-      leftMap,
-      leftEntries.map((entry) => entry.feature),
-      "#15803d"
-    );
-    updateMapFeatures(
-      rightMap,
-      rightEntries.map((entry) => entry.feature),
-      "#2563eb"
-    );
-    fitMapToFeatures(leftMap, leftEntries.map((entry) => entry.feature));
-    fitMapToFeatures(rightMap, rightEntries.map((entry) => entry.feature));
+    updateMapFeatures(leftMap, leftFeaturesRef.current, "#15803d");
+    updateMapFeatures(rightMap, rightFeaturesRef.current, "#2563eb");
+    fitMapToFeatures(leftMap, leftFeaturesRef.current);
+    fitMapToFeatures(rightMap, rightFeaturesRef.current);
   }, [leftEntries, rightEntries]);
 
   const baseByKey = useMemo(() => {
