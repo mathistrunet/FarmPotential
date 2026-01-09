@@ -48,6 +48,21 @@ function resolveCsvYear(file) {
   return parseYearInput(input);
 }
 
+function resolveXmlYear(file, metaYear) {
+  if (Number.isFinite(metaYear)) return metaYear;
+  const detected = extractYearFromFilename(file?.name || "");
+  if (detected != null) {
+    const confirmed = window.confirm(
+      `Le fichier "${file.name}" correspond-il à l'année ${detected} ?`
+    );
+    if (confirmed) return detected;
+  }
+  const input = window.prompt(
+    "Indique l'année du fichier XML importé (ex: 2023)."
+  );
+  return parseYearInput(input);
+}
+
 function detectTelepacMeta(text) {
   const pacageMatch = text.match(/numero-pacage="([^"]+)"/i);
   const pacage = pacageMatch?.[1]?.trim() || null;
@@ -169,7 +184,11 @@ export default function ImportTelepacButton({
           return;
         }
         cultureYearOffset = offset;
-        importYear = meta?.year ?? null;
+        importYear = resolveXmlYear(file, meta?.year ?? null);
+        if (!Number.isFinite(importYear)) {
+          alert("Année invalide. Import Télépac annulé.");
+          return;
+        }
         onImportMeta?.(meta);
       } else {
         const fileYear = resolveCsvYear(file);
