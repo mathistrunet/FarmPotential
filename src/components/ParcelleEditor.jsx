@@ -7,6 +7,10 @@ import {
 } from "../utils/cultureLabels";
 import { featureAreaM2 } from "../utils/geometry";
 
+const DEFAULT_POLYGON_FILL = "#18A0FB";
+const DEFAULT_POLYGON_LINE = "#0066CC";
+const HEX_COLOR_RE = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+
 const CULTURE_FIELDS = [
   {
     field: "cultureN",
@@ -54,6 +58,19 @@ const CULTURE_FIELDS = [
 ];
 
 const TABLE_CELL_PADDING = "4px 6px";
+
+function expandShortHex(value) {
+  if (value.length !== 4) return value;
+  const [, r, g, b] = value;
+  return `#${r}${r}${g}${g}${b}${b}`;
+}
+
+function normalizeHexColor(value, fallback) {
+  if (typeof value !== "string") return fallback;
+  const trimmed = value.trim();
+  if (!HEX_COLOR_RE.test(trimmed)) return fallback;
+  return trimmed.length === 4 ? expandShortHex(trimmed) : trimmed;
+}
 
 function normalizePart(raw) {
   if (raw == null) return "";
@@ -135,6 +152,7 @@ export default function ParcelleEditor({
   setFeatures,
   selectedId,
   onSelect,
+  drawRef,
   viewMode = "cards",
   csvValues,
   onCsvValuesChange,
@@ -322,6 +340,52 @@ export default function ParcelleEditor({
     setFeatures(nextFeatures);
   };
 
+  const updateFeatureColor = (index, propKey, rawValue) => {
+    const nextFeatures = [...features];
+    const feature = nextFeatures[index];
+    if (!feature) return;
+
+    const nextProps = { ...(feature.properties || {}) };
+    if (rawValue) nextProps[propKey] = rawValue;
+    else delete nextProps[propKey];
+
+    if (feature.properties?.[propKey] === nextProps[propKey]) return;
+
+    nextFeatures[index] = { ...feature, properties: nextProps };
+    setFeatures(nextFeatures);
+
+    const draw = drawRef?.current;
+    if (draw && feature.id) {
+      draw.setFeatureProperty(feature.id, propKey, nextProps[propKey] || undefined);
+    }
+  };
+
+  const resetFeatureColors = (index) => {
+    const nextFeatures = [...features];
+    const feature = nextFeatures[index];
+    if (!feature) return;
+
+    const nextProps = { ...(feature.properties || {}) };
+    delete nextProps.color;
+    delete nextProps.outlineColor;
+
+    if (
+      feature.properties?.color === nextProps.color
+      && feature.properties?.outlineColor === nextProps.outlineColor
+    ) {
+      return;
+    }
+
+    nextFeatures[index] = { ...feature, properties: nextProps };
+    setFeatures(nextFeatures);
+
+    const draw = drawRef?.current;
+    if (draw && feature.id) {
+      draw.setFeatureProperty(feature.id, "color", undefined);
+      draw.setFeatureProperty(feature.id, "outlineColor", undefined);
+    }
+  };
+
   const renderWarning = (value) => {
     const message = getCultureWarning(value);
     if (!message) return null;
@@ -484,6 +548,17 @@ export default function ParcelleEditor({
                 >
                   Type de sol
                 </th>
+                <th
+                  style={{
+                    textAlign: "left",
+                    padding: TABLE_CELL_PADDING,
+                    fontSize: 12,
+                    width: 170,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  Couleurs
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -504,6 +579,14 @@ export default function ParcelleEditor({
                 const area = featureAreaM2(f);
                 const surfaceHa = area != null ? area / 10000 : null;
                 const selected = selectedId === id;
+                const fillColor = normalizeHexColor(
+                  f.properties?.color,
+                  DEFAULT_POLYGON_FILL
+                );
+                const outlineColor = normalizeHexColor(
+                  f.properties?.outlineColor ?? f.properties?.color,
+                  DEFAULT_POLYGON_LINE
+                );
 
                 return (
                   <tr
@@ -650,6 +733,58 @@ export default function ParcelleEditor({
                         }}
                       />
                     </td>
+                    <td
+                      style={{
+                        padding: TABLE_CELL_PADDING,
+                        minWidth: 170,
+                        width: 170,
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                          <input
+                            type="color"
+                            value={fillColor}
+                            onChange={(e) =>
+                              updateFeatureColor(idx, "color", e.target.value)
+                            }
+                            onClick={(e) => e.stopPropagation()}
+                            aria-label="Couleur de remplissage"
+                          />
+                          <span style={{ fontSize: 11, color: "#374151" }}>Rempl.</span>
+                        </label>
+                        <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                          <input
+                            type="color"
+                            value={outlineColor}
+                            onChange={(e) =>
+                              updateFeatureColor(idx, "outlineColor", e.target.value)
+                            }
+                            onClick={(e) => e.stopPropagation()}
+                            aria-label="Couleur du contour"
+                          />
+                          <span style={{ fontSize: 11, color: "#374151" }}>Contour</span>
+                        </label>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          resetFeatureColors(idx);
+                        }}
+                        style={{
+                          marginTop: 4,
+                          padding: "2px 6px",
+                          borderRadius: 6,
+                          border: "1px solid #d1d5db",
+                          background: "#fff",
+                          fontSize: 11,
+                          cursor: "pointer",
+                        }}
+                      >
+                        Réinitialiser
+                      </button>
+                    </td>
                   </tr>
                 );
               })}
@@ -689,6 +824,14 @@ export default function ParcelleEditor({
 
         const area = featureAreaM2(f);
         const surfaceHa = area != null ? area / 10000 : null;
+        const fillColor = normalizeHexColor(
+          f.properties?.color,
+          DEFAULT_POLYGON_FILL
+        );
+        const outlineColor = normalizeHexColor(
+          f.properties?.outlineColor ?? f.properties?.color,
+          DEFAULT_POLYGON_LINE
+        );
 
         return (
           <div
@@ -835,6 +978,60 @@ export default function ParcelleEditor({
               />
               {renderWarning(displayPrevious)}
             </label>
+
+            <div
+              style={{
+                marginTop: 10,
+                paddingTop: 10,
+                borderTop: "1px dashed #e5e7eb",
+              }}
+            >
+              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>
+                Couleurs de la parcelle
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+                <label style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 6 }}>
+                  Remplissage
+                  <input
+                    type="color"
+                    value={fillColor}
+                    onChange={(e) => updateFeatureColor(idx, "color", e.target.value)}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                </label>
+                <label style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 6 }}>
+                  Contour
+                  <input
+                    type="color"
+                    value={outlineColor}
+                    onChange={(e) =>
+                      updateFeatureColor(idx, "outlineColor", e.target.value)
+                    }
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    resetFeatureColors(idx);
+                  }}
+                  style={{
+                    padding: "4px 8px",
+                    borderRadius: 6,
+                    border: "1px solid #d1d5db",
+                    background: "#fff",
+                    fontSize: 12,
+                    cursor: "pointer",
+                  }}
+                >
+                  Réinitialiser
+                </button>
+              </div>
+              <div style={{ fontSize: 11, color: "#6b7280", marginTop: 4 }}>
+                Les couleurs sont appliquées immédiatement sur la carte.
+              </div>
+            </div>
           </div>
         );
       })}
