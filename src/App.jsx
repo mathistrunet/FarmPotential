@@ -194,7 +194,11 @@ export default function App() {
               Réinitialiser les filtres
             </button>
           </div>
-          <ParcellesViewerMap filters={viewerFilters} colorBy={colorBy} />
+          <ParcellesViewerMap
+            filters={viewerFilters}
+            colorBy={colorBy}
+            isActive={mapMode === "viewer"}
+          />
         </>
       ) : (
         <Suspense fallback={<div style={{ padding: 24 }}>Chargement de l'éditeur…</div>}>
