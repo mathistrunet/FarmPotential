@@ -150,9 +150,14 @@ export default function ParcellesEditorMap() {
     selectFeatureOnMap,
     setDrawFeatures,
     mapInitError,
+    drawReady,
   } = useMapInitialization();
-  const { parcellesCollection, setParcellesCollection, loading: parcellesLoading } =
-    useParcelles();
+  const {
+    parcellesCollection,
+    setFeatureCollection,
+    reset: resetParcellesStore,
+    loading: parcellesLoading,
+  } = useParcelles();
 
   useToponymieAutoNaming(features, setFeatures);
 
@@ -205,6 +210,9 @@ export default function ParcellesEditorMap() {
   const lastSyncedPayloadRef = useRef("");
   const hasHydratedRef = useRef(false);
   const isUnmountingRef = useRef(false);
+  const drawSyncRef = useRef(false);
+  const drawSyncEventRef = useRef(null);
+  const suppressDrawSyncRef = useRef(false);
   const emptyParcellesCollection = useMemo(
     () => ({ type: "FeatureCollection", features: [] }),
     []
@@ -588,6 +596,8 @@ export default function ParcellesEditorMap() {
   const handleResetParcelles = useCallback(async () => {
     setDrawFeatures(emptyParcellesCollection);
     lastSavedPayloadRef.current = JSON.stringify(emptyParcellesCollection);
+    lastSyncedPayloadRef.current = JSON.stringify(emptyParcellesCollection);
+    resetParcellesStore();
     try {
       await clearParcellesGeojson();
     } catch (error) {
@@ -596,7 +606,12 @@ export default function ParcellesEditorMap() {
         error
       );
     }
-  }, [clearParcellesGeojson, emptyParcellesCollection, setDrawFeatures]);
+  }, [
+    clearParcellesGeojson,
+    emptyParcellesCollection,
+    resetParcellesStore,
+    setDrawFeatures,
+  ]);
 
   useEffect(() => {
     if (!backendReady) return;
@@ -626,7 +641,7 @@ export default function ParcellesEditorMap() {
       controller.abort();
       clearTimeout(timeout);
     };
-  }, [backendReady, features, setParcellesCollection]);
+  }, [backendReady, features]);
 
   useEffect(() => {
     if (!hasHydratedRef.current) return;
@@ -634,9 +649,33 @@ export default function ParcellesEditorMap() {
     const payload = buildCollectionFromFeatures(features);
     const serialized = JSON.stringify(payload);
     if (serialized === lastSyncedPayloadRef.current) return;
+    const hasFeatures = payload.features.length > 0;
+    const storeHasFeatures = (parcellesCollection?.features?.length ?? 0) > 0;
+    const isFromDraw = drawSyncRef.current;
+    const lastDrawEvent = drawSyncEventRef.current;
+    drawSyncRef.current = false;
+    drawSyncEventRef.current = null;
+    if (!hasFeatures && storeHasFeatures && !isFromDraw && lastDrawEvent !== "draw.delete") {
+      return;
+    }
     lastSyncedPayloadRef.current = serialized;
-    setParcellesCollection(payload);
-  }, [buildCollectionFromFeatures, features, setParcellesCollection]);
+    setFeatureCollection(payload);
+
+    if (!isFromDraw && drawReady) {
+      const draw = drawRef.current;
+      if (draw && typeof draw.set === "function") {
+        suppressDrawSyncRef.current = true;
+        draw.set(payload);
+      }
+    }
+  }, [
+    buildCollectionFromFeatures,
+    drawReady,
+    drawRef,
+    features,
+    parcellesCollection,
+    setFeatureCollection,
+  ]);
 
   useEffect(() => () => {
     isUnmountingRef.current = true;
@@ -652,8 +691,29 @@ export default function ParcellesEditorMap() {
     if (!data) return;
     const payload = buildCollectionFromFeatures(data?.features || []);
     lastSyncedPayloadRef.current = JSON.stringify(payload);
-    setParcellesCollection(payload);
-  }, [buildCollectionFromFeatures, setParcellesCollection]);
+    setFeatureCollection(payload);
+  }, [buildCollectionFromFeatures, setFeatureCollection]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const markDrawSync = (event) => {
+      if (suppressDrawSyncRef.current) {
+        suppressDrawSyncRef.current = false;
+        return;
+      }
+      drawSyncRef.current = true;
+      drawSyncEventRef.current = event?.type || "draw.update";
+    };
+    map.on("draw.create", markDrawSync);
+    map.on("draw.update", markDrawSync);
+    map.on("draw.delete", markDrawSync);
+    return () => {
+      map.off("draw.create", markDrawSync);
+      map.off("draw.update", markDrawSync);
+      map.off("draw.delete", markDrawSync);
+    };
+  }, [mapRef]);
 
   // ✅ Charge la couche RRP France depuis un fichier MBTiles local (placer le fichier dans /public/data/)
   //    Exemple : public/data/rrp_france_wgs84_shp.mbtiles

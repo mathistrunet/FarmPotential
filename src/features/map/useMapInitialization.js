@@ -49,13 +49,22 @@ export function useMapInitialization() {
   const mapRef = useRef(null);
   const drawRef = useRef(null);
   const pendingFeaturesRef = useRef(null);
+  const drawListenersRef = useRef(null);
   const [features, setFeatures] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [mapInitError, setMapInitError] = useState(null);
+  const [drawReady, setDrawReady] = useState(false);
   const ensureRaster = useRasterLayers();
 
   const syncFeaturesFromDraw = useCallback((draw) => {
-    const data = draw.getAll();
+    if (!draw || typeof draw.getAll !== "function") return;
+    let data;
+    try {
+      data = draw.getAll();
+    } catch (error) {
+      console.warn("Impossible de lire les parcelles depuis Mapbox Draw.", error);
+      return;
+    }
     const polys = (data && data.features ? data.features : [])
       .filter(
         (f) => f.geometry?.type === "Polygon" || f.geometry?.type === "MultiPolygon"
@@ -411,8 +420,9 @@ export function useMapInitialization() {
       });
       drawRef.current = draw;
       map.addControl(draw, "top-left");
+      setDrawReady(true);
 
-      const updateList = () => syncFeaturesFromDraw(draw);
+      const updateList = () => syncFeaturesFromDraw(drawRef.current);
       updateList();
 
       if (pendingFeaturesRef.current) {
@@ -421,13 +431,18 @@ export function useMapInitialization() {
         syncFeaturesFromDraw(draw);
       }
 
-      map.on("draw.selectionchange", (e) => {
+      const handleSelectionChange = (e) => {
         const ids = e?.features?.map((f) => f.id) || [];
         setSelectedId(ids[0] || null);
-      });
+      };
+      map.on("draw.selectionchange", handleSelectionChange);
       map.on("draw.create", updateList);
       map.on("draw.update", updateList);
       map.on("draw.delete", updateList);
+      drawListenersRef.current = {
+        updateList,
+        handleSelectionChange,
+      };
     });
 
     map.on("styledata", hydrateRaster);
@@ -453,7 +468,24 @@ export function useMapInitialization() {
     });
 
     return () => {
+      if (drawListenersRef.current) {
+        const { updateList, handleSelectionChange } = drawListenersRef.current;
+        map.off("draw.selectionchange", handleSelectionChange);
+        map.off("draw.create", updateList);
+        map.off("draw.update", updateList);
+        map.off("draw.delete", updateList);
+        drawListenersRef.current = null;
+      }
       map.off("styledata", hydrateRaster);
+      if (drawRef.current) {
+        try {
+          map.removeControl(drawRef.current);
+        } catch {
+          // ignore
+        }
+      }
+      drawRef.current = null;
+      setDrawReady(false);
       try {
         map.remove();
       } catch {
@@ -472,5 +504,6 @@ export function useMapInitialization() {
     selectFeatureOnMap,
     setDrawFeatures,
     mapInitError,
+    drawReady,
   };
 }
