@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
+import { useRasterLayers } from "../../features/map/useRasterLayers";
 import { fetchParcellesGeojson } from "../../services/parcellesBackend";
 import { normalizeParcellesCollection } from "./parcellesData";
 import {
@@ -15,6 +16,50 @@ import { applyFilters } from "./parcellesFilters";
 
 const DEFAULT_CENTER = [2.2137, 46.2276];
 const DEFAULT_ZOOM = 5;
+const DEBUG_MAP = import.meta.env.DEV;
+
+const computeCollectionBounds = (collection) => {
+  if (!collection?.features?.length) return null;
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+
+  const visitCoord = (coord) => {
+    if (!Array.isArray(coord) || coord.length < 2) return;
+    const [lng, lat] = coord;
+    if (typeof lng !== "number" || typeof lat !== "number") return;
+    minX = Math.min(minX, lng);
+    minY = Math.min(minY, lat);
+    maxX = Math.max(maxX, lng);
+    maxY = Math.max(maxY, lat);
+  };
+
+  const visitGeometry = (geometry) => {
+    if (!geometry) return;
+    const { type, coordinates } = geometry;
+    if (!coordinates) return;
+    if (type === "Point") {
+      visitCoord(coordinates);
+      return;
+    }
+    if (type === "MultiPoint" || type === "LineString") {
+      coordinates.forEach(visitCoord);
+      return;
+    }
+    if (type === "MultiLineString" || type === "Polygon") {
+      coordinates.flat().forEach(visitCoord);
+      return;
+    }
+    if (type === "MultiPolygon") {
+      coordinates.flat(2).forEach(visitCoord);
+    }
+  };
+
+  collection.features.forEach((feature) => visitGeometry(feature.geometry));
+  if (!Number.isFinite(minX) || !Number.isFinite(minY)) return null;
+  return [minX, minY, maxX, maxY];
+};
 
 export default function ParcellesViewerMap({
   data,
@@ -23,12 +68,14 @@ export default function ParcellesViewerMap({
   palette = {},
   center = DEFAULT_CENTER,
   zoom = DEFAULT_ZOOM,
+  isActive = true,
 }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const popupRef = useRef(null);
   const hoveredIdRef = useRef(null);
   const [collection, setCollection] = useState(null);
+  const ensureRaster = useRasterLayers();
 
   const resolvedCollection = useMemo(
     () => normalizeParcellesCollection(data || collection),
@@ -55,25 +102,33 @@ export default function ParcellesViewerMap({
 
   useEffect(() => {
     if (!containerRef.current) return undefined;
+    const style = {
+      version: 8,
+      glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
+      sources: {},
+      layers: [
+        {
+          id: "bg",
+          type: "background",
+          paint: { "background-color": "#eef2ff" },
+        },
+      ],
+    };
+    if (DEBUG_MAP) {
+      console.info("[ViewerMap] style", style);
+    }
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: {
-        version: 8,
-        glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
-        sources: {},
-        layers: [
-          {
-            id: "bg",
-            type: "background",
-            paint: { "background-color": "#eef2ff" },
-          },
-        ],
-      },
+      style,
       center,
       zoom,
     });
     mapRef.current = map;
     map.addControl(new maplibregl.NavigationControl(), "top-left");
+    map.on("error", (event) => {
+      // eslint-disable-next-line no-console
+      console.error("MAP ERROR", event.error || event);
+    });
 
     const ensureLayers = () => {
       if (!map.getSource(PARCELLES_VIEWER_SOURCE_ID)) {
@@ -125,8 +180,13 @@ export default function ParcellesViewerMap({
     };
 
     const onLoad = () => {
+      if (DEBUG_MAP) {
+        console.info("[ViewerMap] load event fired");
+      }
+      ensureRaster(map);
       ensureLayers();
       applyFilters(map, filters);
+      requestAnimationFrame(() => map.resize());
     };
 
     if (map.isStyleLoaded()) {
@@ -195,7 +255,7 @@ export default function ParcellesViewerMap({
       }
       map.remove();
     };
-  }, [center, zoom]);
+  }, [center, zoom, ensureRaster]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -224,11 +284,56 @@ export default function ParcellesViewerMap({
     applyFilters(map, filters);
   }, [filters]);
 
+  useEffect(() => {
+    if (!DEBUG_MAP) return;
+    const featureCount = resolvedCollection?.features?.length ?? 0;
+    const bounds = computeCollectionBounds(resolvedCollection);
+    console.info("[ViewerMap] parcelles", {
+      count: featureCount,
+      bounds,
+    });
+  }, [resolvedCollection]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !isActive) return;
+    requestAnimationFrame(() => map.resize());
+  }, [isActive]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return undefined;
+    const handleResize = () => map.resize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  const isLoading = !data && collection === null;
+  const hasFeatures = resolvedCollection?.features?.length > 0;
+
   return (
-    <div
-      ref={containerRef}
-      id="parcelles-viewer-map"
-      style={{ position: "absolute", inset: 0 }}
-    />
+    <div style={{ position: "absolute", inset: 0 }}>
+      <div
+        ref={containerRef}
+        id="parcelles-viewer-map"
+        style={{ position: "absolute", inset: 0 }}
+      />
+      {!isLoading && !hasFeatures ? (
+        <div
+          style={{
+            position: "absolute",
+            bottom: 16,
+            left: 16,
+            background: "rgba(15, 23, 42, 0.85)",
+            color: "#fff",
+            padding: "8px 12px",
+            borderRadius: 8,
+            fontSize: 12,
+          }}
+        >
+          Aucune parcelle chargée.
+        </div>
+      ) : null}
+    </div>
   );
 }
