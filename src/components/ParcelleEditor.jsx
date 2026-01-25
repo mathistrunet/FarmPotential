@@ -1,5 +1,5 @@
 // src/components/ParcelleEditor.jsx
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import centroid from "@turf/centroid";
 import booleanPointInPolygon from "@turf/boolean-point-in-polygon";
 import {
@@ -204,6 +204,7 @@ function formatParcelleBioValue(checked) {
 
 export default function ParcelleEditor({
   features,
+  visibleFeatures,
   setFeatures,
   selectedId,
   onSelect,
@@ -218,6 +219,10 @@ export default function ParcelleEditor({
   const [typed, setTyped] = useState({});
   const [editingParcelleId, setEditingParcelleId] = useState(null);
   const [rpgLoadingField, setRpgLoadingField] = useState(null);
+  const visibleFeatureSet = useMemo(() => {
+    if (!visibleFeatures) return null;
+    return new Set(visibleFeatures);
+  }, [visibleFeatures]);
   const baseCultureYearRef = useRef(null);
 
   useEffect(() => {
@@ -735,6 +740,17 @@ export default function ParcelleEditor({
                 >
                   Parcelle Bio
                 </th>
+                <th
+                  style={{
+                    textAlign: "center",
+                    padding: TABLE_CELL_PADDING,
+                    fontSize: 12,
+                    width: 150,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  Alertes import
+                </th>
                 {CULTURE_FIELDS.map((field) => (
                   <th
                     key={field.field}
@@ -784,6 +800,7 @@ export default function ParcelleEditor({
                 </th>
               </tr>
               <tr>
+                <th style={{ padding: TABLE_CELL_PADDING }} />
                 <th style={{ padding: TABLE_CELL_PADDING }} />
                 <th style={{ padding: TABLE_CELL_PADDING }} />
                 <th style={{ padding: TABLE_CELL_PADDING }} />
@@ -980,6 +997,52 @@ export default function ParcelleEditor({
                         aria-label="Parcelle bio"
                       />
                     </td>
+                    <td
+                      style={{
+                        padding: TABLE_CELL_PADDING,
+                        textAlign: "center",
+                        width: 150,
+                      }}
+                    >
+                      {f.properties?.overlap_warning ? (
+                        <span
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 4,
+                            padding: "2px 6px",
+                            borderRadius: 999,
+                            background: "#fee2e2",
+                            color: "#991b1b",
+                            fontSize: 11,
+                            fontWeight: 600,
+                          }}
+                        >
+                          ⚠️ Chevauchement
+                        </span>
+                      ) : null}
+                      {f.properties?.import_mismatch ? (
+                        <span
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 4,
+                            padding: "2px 6px",
+                            borderRadius: 999,
+                            background: "#ffedd5",
+                            color: "#9a3412",
+                            fontSize: 11,
+                            fontWeight: 600,
+                            marginLeft: f.properties?.overlap_warning ? 6 : 0,
+                          }}
+                        >
+                          ⚠️ Import
+                        </span>
+                      ) : null}
+                      {!f.properties?.overlap_warning && !f.properties?.import_mismatch
+                        ? "—"
+                        : null}
+                    </td>
                     {CULTURE_FIELDS.map((field) => (
                       <td
                         key={field.field}
@@ -1128,6 +1191,7 @@ export default function ParcelleEditor({
   return (
     <div style={{ marginTop: 12 }}>
       {features.map((f, idx) => {
+        if (visibleFeatureSet && !visibleFeatureSet.has(f)) return null;
         const id = f.id || idx;
         const typedRow = typed[id] || {};
         const knownLabel = typedRow.cultureN ?? "";
@@ -1247,6 +1311,44 @@ export default function ParcelleEditor({
             {surfaceHa != null && !Number.isNaN(surfaceHa) && (
               <div style={{ fontSize: 12, color: "#555", marginBottom: 6 }}>
                 Surface : {surfaceHa.toFixed(2)} ha
+              </div>
+            )}
+            {(f.properties?.overlap_warning || f.properties?.import_mismatch) && (
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
+                {f.properties?.overlap_warning && (
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 4,
+                      padding: "2px 8px",
+                      borderRadius: 999,
+                      background: "#fee2e2",
+                      color: "#991b1b",
+                      fontSize: 11,
+                      fontWeight: 600,
+                    }}
+                  >
+                    ⚠️ Chevauchement détecté
+                  </span>
+                )}
+                {f.properties?.import_mismatch && (
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 4,
+                      padding: "2px 8px",
+                      borderRadius: 999,
+                      background: "#ffedd5",
+                      color: "#9a3412",
+                      fontSize: 11,
+                      fontWeight: 600,
+                    }}
+                  >
+                    ⚠️ Import mismatch
+                  </span>
+                )}
               </div>
             )}
 
