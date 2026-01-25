@@ -220,8 +220,17 @@ export default function ParcellesEditorMap() {
   }), []);
   const buildDebugFeatureCollection = useCallback(() => {
     const draw = drawRef.current;
-    if (draw && typeof draw.getAll === "function") {
-      const data = draw.getAll();
+    if (!draw || typeof draw.getAll !== "function") {
+      return { type: "FeatureCollection", features: featuresRef.current };
+    }
+    let data = null;
+    try {
+      data = draw.getAll();
+    } catch (error) {
+      console.warn("Impossible de lire les parcelles depuis Mapbox Draw.", error);
+      return { type: "FeatureCollection", features: featuresRef.current };
+    }
+    if (data) {
       const safeFeatures = (data?.features || [])
         .filter(
           (feature) =>
@@ -633,7 +642,14 @@ export default function ParcellesEditorMap() {
     isUnmountingRef.current = true;
     const draw = drawRef.current;
     if (!draw || typeof draw.getAll !== "function") return;
-    const data = draw.getAll();
+    let data = null;
+    try {
+      data = draw.getAll();
+    } catch (error) {
+      console.warn("Impossible de lire les parcelles depuis Mapbox Draw.", error);
+      return;
+    }
+    if (!data) return;
     const payload = buildCollectionFromFeatures(data?.features || []);
     lastSyncedPayloadRef.current = JSON.stringify(payload);
     setParcellesCollection(payload);
