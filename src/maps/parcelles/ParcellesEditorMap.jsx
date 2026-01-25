@@ -29,7 +29,11 @@ import { useSoilLayerLocal } from "../../features/useSoilLayerLocal";
 import { useToponymieAutoNaming } from "../../features/useToponymieAutoNaming";
 import { withBasePath } from "../../utils/publicBase";
 import { ERROR_CODES } from "../../utils/errors";
-import { getFeatureKey } from "../../utils/parcelleMatching";
+import {
+  applyCorrespondencesAndMerge,
+  buildParcellesByYearFromFeatures,
+  getFeatureId,
+} from "../../domain/parcelles/fusion";
 import { clearParcellesGeojson, saveParcellesGeojson } from "../../services/parcellesBackend";
 import { useParcelles } from "./ParcellesStore";
 
@@ -60,25 +64,6 @@ const normalizeYearValue = (value) => {
   const trimmed = typeof value === "string" ? value.trim() : value;
   const parsed = Number(trimmed);
   return Number.isFinite(parsed) ? parsed : null;
-};
-const PRECEDENT_KEYS = [
-  "precedent",
-  "Precedent",
-  "PRECEDENT",
-  "precedent_culture",
-  "precedentCulture",
-  "culture_prec",
-  "culturePrec",
-];
-const resolvePrecedentValue = (properties) => {
-  if (!properties) return null;
-  for (const key of PRECEDENT_KEYS) {
-    const raw = properties[key];
-    if (raw == null) continue;
-    const value = typeof raw === "string" ? raw.trim() : String(raw).trim();
-    if (value) return value;
-  }
-  return null;
 };
 const DRAW_LAYER_VARIANTS = ["", ".cold", ".hot"];
 
@@ -851,50 +836,49 @@ export default function ParcellesEditorMap() {
     if (leftYearValue === rightYearValue) return;
 
     const olderYear = Math.min(leftYearValue, rightYearValue);
+    const newerYear = Math.max(leftYearValue, rightYearValue);
     const olderIsLeft = leftYearValue < rightYearValue;
 
     setFeatures((prev) => {
       const next = Array.isArray(prev) ? prev : [];
       if (!next.length) return next;
-      const featuresByKey = new Map();
-      next.forEach((feature, index) => {
-        featuresByKey.set(getFeatureKey(feature, index), feature);
-      });
-      const keysToRemove = new Set();
-      const updatedFeatures = new Map();
-
+      const correspondancesValidated = {};
       rows.forEach((row) => {
         if (!row?.baseKey || !row?.incomingKey) return;
         const olderKey = olderIsLeft ? row.baseKey : row.incomingKey;
         const newerKey = olderIsLeft ? row.incomingKey : row.baseKey;
-        const olderFeature = featuresByKey.get(olderKey);
-        const newerFeature = featuresByKey.get(newerKey);
-        if (!olderFeature || !newerFeature) return;
-        const olderFeatureYear = normalizeYearValue(olderFeature?.properties?.annee);
-        if (olderFeatureYear !== olderYear) return;
-        const precedentValue = resolvePrecedentValue(olderFeature.properties);
-        if (precedentValue != null) {
-          updatedFeatures.set(newerKey, {
-            ...newerFeature,
-            properties: {
-              ...(newerFeature.properties || {}),
-              precedent: precedentValue,
-            },
-          });
-        }
-        keysToRemove.add(olderKey);
+        correspondancesValidated[olderKey] = newerKey;
+      });
+
+      const parcellesByYear = buildParcellesByYearFromFeatures(next);
+      const { parcellesByYear: mergedParcellesByYear } =
+        applyCorrespondencesAndMerge({
+          parcellesByYear,
+          oldYear: olderYear,
+          newYear: newerYear,
+          correspondancesValidated,
+        });
+
+      const mergedById = new Map();
+      Object.values(mergedParcellesByYear || {}).forEach((collection) => {
+        (collection?.features || []).forEach((feature) => {
+          const id = getFeatureId(feature);
+          if (id != null) {
+            mergedById.set(String(id), feature);
+          }
+        });
       });
 
       return next
-        .map((feature, index) => {
-          const key = getFeatureKey(feature, index);
-          return updatedFeatures.get(key) ?? feature;
+        .map((feature) => {
+          const id = getFeatureId(feature);
+          if (id == null) return feature;
+          return mergedById.get(String(id)) ?? feature;
         })
-        .filter((feature, index) => {
-          const key = getFeatureKey(feature, index);
-          if (!keysToRemove.has(key)) return true;
-          const featureYear = normalizeYearValue(feature?.properties?.annee);
-          return featureYear !== olderYear;
+        .filter((feature) => {
+          const id = getFeatureId(feature);
+          if (id == null) return true;
+          return mergedById.has(String(id));
         });
     });
   };

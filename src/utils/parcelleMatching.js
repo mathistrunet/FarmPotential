@@ -10,6 +10,7 @@ export function getFeatureLabel(feature, index) {
 
 export function getFeatureKey(feature, fallback) {
   if (feature?.id != null) return String(feature.id);
+  if (feature?.properties?.__id != null) return String(feature.properties.__id);
   if (feature?.properties?.id != null) return String(feature.properties.id);
   return `feature-${fallback}`;
 }

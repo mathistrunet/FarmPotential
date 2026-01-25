@@ -6,6 +6,7 @@ import {
   getFeatureKey,
   getFeatureLabel,
 } from "../utils/parcelleMatching";
+import { resolvePreviousDisplayValue } from "../domain/parcelles/fusion";
 import { toWgs84 } from "../utils/proj";
 import { useRasterLayers } from "../features/map/useRasterLayers";
 import {
@@ -162,7 +163,8 @@ function attachViewerInteractions({
     const parcelleNo = props.parcelleNo ?? props.numero ?? props.id;
     const title = parcelleNo ? `Parcelle N° ${parcelleNo}` : "Parcelle";
     const culture = props.culture ? `Culture : ${props.culture}` : null;
-    const precedent = props.precedent ? `Précédent : ${props.precedent}` : null;
+    const precedentValue = resolvePreviousDisplayValue(props);
+    const precedent = precedentValue ? `Précédent : ${precedentValue}` : null;
     const content = [title, culture, precedent].filter(Boolean).join("<br />");
     if (!content) return;
     if (popupRef.current) {
