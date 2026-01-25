@@ -4,6 +4,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 
 import { useRasterLayers } from "../../features/map/useRasterLayers";
 import { fetchParcellesGeojson } from "../../services/parcellesBackend";
+import { resolvePreviousDisplayValue } from "../../domain/parcelles/fusion";
 import { normalizeParcellesCollection } from "./parcellesData";
 import {
   DEFAULT_PARCELLE_LINE,
@@ -215,7 +216,8 @@ export default function ParcellesViewerMap({
       const props = feature.properties || {};
       const title = props.nom || props.nom_affiche || "Parcelle";
       const culture = props.culture ? `Culture : ${props.culture}` : null;
-      const precedent = props.precedent ? `Précédent : ${props.precedent}` : null;
+      const precedentValue = resolvePreviousDisplayValue(props);
+      const precedent = precedentValue ? `Précédent : ${precedentValue}` : null;
       const content = [title, culture, precedent].filter(Boolean).join("<br />");
       if (!content) return;
       if (popupRef.current) {
