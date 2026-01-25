@@ -219,9 +219,8 @@ export default function ParcellesEditorMap() {
     })),
   }), []);
   const buildDebugFeatureCollection = useCallback(() => {
-    const draw = drawRef.current;
-    if (draw && typeof draw.getAll === "function") {
-      const data = draw.getAll();
+    const data = drawRef.current?.getAll?.();
+    if (data) {
       const safeFeatures = (data?.features || [])
         .filter(
           (feature) =>
@@ -631,9 +630,8 @@ export default function ParcellesEditorMap() {
 
   useEffect(() => () => {
     isUnmountingRef.current = true;
-    const draw = drawRef.current;
-    if (!draw || typeof draw.getAll !== "function") return;
-    const data = draw.getAll();
+    const data = drawRef.current?.getAll?.();
+    if (!data) return;
     const payload = buildCollectionFromFeatures(data?.features || []);
     lastSyncedPayloadRef.current = JSON.stringify(payload);
     setParcellesCollection(payload);
