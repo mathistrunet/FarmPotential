@@ -30,6 +30,7 @@ import { useToponymieAutoNaming } from "../../features/useToponymieAutoNaming";
 import { withBasePath } from "../../utils/publicBase";
 import { ERROR_CODES } from "../../utils/errors";
 import { clearParcellesGeojson, saveParcellesGeojson } from "../../services/parcellesBackend";
+import { useParcelles } from "./ParcellesStore";
 
 const EARTH_RADIUS = 6378137;
 const DRAW_LAYER_IDS = [
@@ -150,6 +151,8 @@ export default function ParcellesEditorMap() {
     setDrawFeatures,
     mapInitError,
   } = useMapInitialization();
+  const { parcellesCollection, setParcellesCollection, loading: parcellesLoading } =
+    useParcelles();
 
   useToponymieAutoNaming(features, setFeatures);
 
@@ -199,6 +202,8 @@ export default function ParcellesEditorMap() {
   const toolbarScrollRef = useRef(null);
   const [backendReady, setBackendReady] = useState(false);
   const lastSavedPayloadRef = useRef("");
+  const lastSyncedPayloadRef = useRef("");
+  const hasHydratedRef = useRef(false);
   const emptyParcellesCollection = useMemo(
     () => ({ type: "FeatureCollection", features: [] }),
     []
@@ -547,25 +552,19 @@ export default function ParcellesEditorMap() {
   }, []);
 
   useEffect(() => {
-    const controller = new AbortController();
-    clearParcellesGeojson(controller.signal)
-      .then((collection) => {
-        setDrawFeatures(collection);
-        setBackendReady(true);
-        lastSavedPayloadRef.current = JSON.stringify(collection);
-      })
-      .catch((error) => {
-        console.warn(
-          "Impossible de réinitialiser les parcelles dans le backend.",
-          error
-        );
-        setDrawFeatures(emptyParcellesCollection);
-        setBackendReady(true);
-        lastSavedPayloadRef.current = JSON.stringify(emptyParcellesCollection);
-      });
-
-    return () => controller.abort();
-  }, [clearParcellesGeojson, emptyParcellesCollection, setDrawFeatures]);
+    if (parcellesLoading) return;
+    const nextCollection = parcellesCollection || emptyParcellesCollection;
+    setDrawFeatures(nextCollection);
+    lastSavedPayloadRef.current = JSON.stringify(nextCollection);
+    lastSyncedPayloadRef.current = JSON.stringify(nextCollection);
+    hasHydratedRef.current = true;
+    setBackendReady(true);
+  }, [
+    parcellesCollection,
+    parcellesLoading,
+    emptyParcellesCollection,
+    setDrawFeatures,
+  ]);
 
   const handleResetParcelles = useCallback(async () => {
     setDrawFeatures(emptyParcellesCollection);
@@ -608,7 +607,24 @@ export default function ParcellesEditorMap() {
       controller.abort();
       clearTimeout(timeout);
     };
-  }, [backendReady, features]);
+  }, [backendReady, features, setParcellesCollection]);
+
+  useEffect(() => {
+    if (!hasHydratedRef.current) return;
+    const payload = {
+      type: "FeatureCollection",
+      features: features.map((feature) => ({
+        type: "Feature",
+        id: feature.id,
+        geometry: feature.geometry,
+        properties: feature.properties || {},
+      })),
+    };
+    const serialized = JSON.stringify(payload);
+    if (serialized === lastSyncedPayloadRef.current) return;
+    lastSyncedPayloadRef.current = serialized;
+    setParcellesCollection(payload);
+  }, [features, setParcellesCollection]);
 
   // ✅ Charge la couche RRP France depuis un fichier MBTiles local (placer le fichier dans /public/data/)
   //    Exemple : public/data/rrp_france_wgs84_shp.mbtiles
