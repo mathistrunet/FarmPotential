@@ -51,6 +51,8 @@ const DRAW_LAYER_IDS = [
   "draw-line-inactive",
   "draw-line-active",
 ];
+const DEFAULT_POLYGON_FILL = "#18A0FB";
+const DEFAULT_POLYGON_LINE = "#0066CC";
 const INVALID_YEAR = -9999;
 
 const normalizeYearValue = (value) => {
@@ -192,6 +194,8 @@ export default function App() {
   const [validatedMatches, setValidatedMatches] = useState([]);
   const [validatedMatchesAt, setValidatedMatchesAt] = useState(null);
   const drawLayerFiltersRef = useRef(new Map());
+  const drawLayerVisibilityRef = useRef(new Map());
+  const featuresRef = useRef(features);
   const toolbarScrollRef = useRef(null);
   const [backendReady, setBackendReady] = useState(false);
   const lastSavedPayloadRef = useRef("");
@@ -215,6 +219,10 @@ export default function App() {
       years: Array.from(years).sort((a, b) => b - a),
       hasUnknown,
     };
+  }, [features]);
+
+  useEffect(() => {
+    featuresRef.current = features;
   }, [features]);
 
   const groupOptions = useMemo(() => {
@@ -274,6 +282,123 @@ export default function App() {
     const nextMode = availableModes[desiredMode] ? desiredMode : "simple_select";
     draw.changeMode(nextMode);
   }, [debugView, features.length]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const sourceId = "debug-parcelles";
+    const fillId = "debug-parcelles-fill";
+    const lineId = "debug-parcelles-line";
+
+    const setDrawLayersVisibility = (visibility) => {
+      const layerIds = DRAW_LAYER_IDS.flatMap((layerId) =>
+        DRAW_LAYER_VARIANTS.map((suffix) => `${layerId}${suffix}`)
+      );
+      layerIds.forEach((layerId) => {
+        if (!map.getLayer(layerId)) return;
+        if (visibility === "none") {
+          if (!drawLayerVisibilityRef.current.has(layerId)) {
+            const current = map.getLayoutProperty(layerId, "visibility") ?? "visible";
+            drawLayerVisibilityRef.current.set(layerId, current);
+          }
+          map.setLayoutProperty(layerId, "visibility", "none");
+        } else {
+          const previous = drawLayerVisibilityRef.current.get(layerId) ?? "visible";
+          map.setLayoutProperty(layerId, "visibility", previous);
+          drawLayerVisibilityRef.current.delete(layerId);
+        }
+      });
+    };
+
+    const ensureDebugLayers = () => {
+      if (!map.getSource(sourceId)) {
+        map.addSource(sourceId, {
+          type: "geojson",
+          data: emptyParcellesCollection,
+        });
+      }
+      if (!map.getLayer(fillId)) {
+        map.addLayer({
+          id: fillId,
+          type: "fill",
+          source: sourceId,
+          filter: ["in", ["geometry-type"], "Polygon", "MultiPolygon"],
+          paint: {
+            "fill-color": [
+              "case",
+              ["has", "color"],
+              ["get", "color"],
+              DEFAULT_POLYGON_FILL,
+            ],
+            "fill-opacity": 0.25,
+          },
+        });
+      }
+      if (!map.getLayer(lineId)) {
+        map.addLayer({
+          id: lineId,
+          type: "line",
+          source: sourceId,
+          filter: ["in", ["geometry-type"], "Polygon", "MultiPolygon"],
+          layout: { "line-cap": "round", "line-join": "round" },
+          paint: {
+            "line-color": [
+              "case",
+              ["has", "outlineColor"],
+              ["get", "outlineColor"],
+              ["case", ["has", "color"], ["get", "color"], DEFAULT_POLYGON_LINE],
+            ],
+            "line-width": 2,
+          },
+        });
+      }
+    };
+
+    const applyDebugView = () => {
+      if (debugView) {
+        ensureDebugLayers();
+        const source = map.getSource(sourceId);
+        if (source && typeof source.setData === "function") {
+          source.setData({
+            type: "FeatureCollection",
+            features: featuresRef.current,
+          });
+        }
+        setDrawLayersVisibility("none");
+      } else {
+        setDrawLayersVisibility("visible");
+        if (map.getLayer(lineId)) map.removeLayer(lineId);
+        if (map.getLayer(fillId)) map.removeLayer(fillId);
+        if (map.getSource(sourceId)) map.removeSource(sourceId);
+      }
+    };
+
+    if (typeof map.isStyleLoaded === "function" && !map.isStyleLoaded()) {
+      map.once("load", applyDebugView);
+    } else {
+      applyDebugView();
+    }
+
+    return () => {
+      if (!map.getStyle()) return;
+      if (map.getLayer(lineId)) map.removeLayer(lineId);
+      if (map.getLayer(fillId)) map.removeLayer(fillId);
+      if (map.getSource(sourceId)) map.removeSource(sourceId);
+      setDrawLayersVisibility("visible");
+    };
+  }, [debugView, mapRef, emptyParcellesCollection]);
+
+  useEffect(() => {
+    if (!debugView) return;
+    const map = mapRef.current;
+    if (!map) return;
+    const source = map.getSource("debug-parcelles");
+    if (!source || typeof source.setData !== "function") return;
+    source.setData({
+      type: "FeatureCollection",
+      features,
+    });
+  }, [debugView, features, mapRef]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1147,13 +1272,13 @@ export default function App() {
                     checked={debugView}
                     onChange={(e) => setDebugView(e.target.checked)}
                   />
-                  Mode débug (lecture seule)
+                  Mode débug (géométries figées)
                 </label>
               </div>
               <p style={{ margin: "6px 0 0", fontSize: 12, color: "#666" }}>
-                Le mode débug affiche les parcelles sur la carte sans édition :
-                filtres et couleurs restent disponibles, mais les polygones ne
-                sont plus modifiables.
+                Le mode débug affiche les parcelles sur la carte sans édition
+                de géométrie : filtres et couleurs restent disponibles, mais les
+                contours ne sont plus modifiables.
               </p>
               <p style={{ margin: "8px 0 0", fontSize: 12, color: "#666" }}>
                 Ouvre une vue dédiée pour comparer deux années côte à côte et
@@ -1182,7 +1307,6 @@ export default function App() {
               viewMode={parcelleViewMode}
               csvValues={csvValues}
               onCsvValuesChange={setCsvValues}
-              readOnly={debugView}
             />
 
             <p style={{ fontSize: 12, color: "#777", marginTop: 10 }}>
