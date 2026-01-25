@@ -228,7 +228,7 @@ export default function ImportTelepacButton({
       const mismatches = [];
       for (const ft of toAdd) draw.add(ft);
 
-      resolveOverlappingParcels(draw);
+      resolveOverlappingParcels(draw, { mode: "warn" });
 
       // Zoom sur l’emprise (MultiPolygon pris en charge)
       const importedFeatures = draw.getAll()?.features ?? [];

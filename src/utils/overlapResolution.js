@@ -83,7 +83,7 @@ function filterClippingResult(result, minWidthMeters = 0.5) {
   });
 }
 
-export function resolveOverlappingParcels(draw) {
+export function resolveOverlappingParcels(draw, { mode = "clip" } = {}) {
   const features = draw.getAll()?.features ?? [];
   const entries = features
     .filter((f) => f.geometry?.type === "Polygon" || f.geometry?.type === "MultiPolygon")
@@ -97,7 +97,7 @@ export function resolveOverlappingParcels(draw) {
     }));
 
   const warnings = new Set();
-  if (!clipIntersection || !clipDifference) {
+  if (!clipIntersection || !clipDifference || mode === "warn") {
     entries.forEach((entryA, indexA) => {
       entries.slice(indexA + 1).forEach((entryB) => {
         const interArea = intersectionArea(entryA.feature, entryB.feature);
