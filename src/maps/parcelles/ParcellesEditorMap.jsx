@@ -29,6 +29,7 @@ import { useSoilLayerLocal } from "../../features/useSoilLayerLocal";
 import { useToponymieAutoNaming } from "../../features/useToponymieAutoNaming";
 import { withBasePath } from "../../utils/publicBase";
 import { ERROR_CODES } from "../../utils/errors";
+import { getFeatureKey } from "../../utils/parcelleMatching";
 import { clearParcellesGeojson, saveParcellesGeojson } from "../../services/parcellesBackend";
 import { useParcelles } from "./ParcellesStore";
 
@@ -59,6 +60,25 @@ const normalizeYearValue = (value) => {
   const trimmed = typeof value === "string" ? value.trim() : value;
   const parsed = Number(trimmed);
   return Number.isFinite(parsed) ? parsed : null;
+};
+const PRECEDENT_KEYS = [
+  "precedent",
+  "Precedent",
+  "PRECEDENT",
+  "precedent_culture",
+  "precedentCulture",
+  "culture_prec",
+  "culturePrec",
+];
+const resolvePrecedentValue = (properties) => {
+  if (!properties) return null;
+  for (const key of PRECEDENT_KEYS) {
+    const raw = properties[key];
+    if (raw == null) continue;
+    const value = typeof raw === "string" ? raw.trim() : String(raw).trim();
+    if (value) return value;
+  }
+  return null;
 };
 const DRAW_LAYER_VARIANTS = ["", ".cold", ".hot"];
 
@@ -817,10 +837,66 @@ export default function ParcellesEditorMap() {
     setMatchViewOpen(true);
   };
 
-  const handleValidateParcelleMatch = (rows) => {
+  const handleValidateParcelleMatch = (payload) => {
+    const rows = Array.isArray(payload) ? payload : payload?.rows ?? [];
+    const leftYear = Array.isArray(payload) ? null : payload?.leftYear ?? null;
+    const rightYear = Array.isArray(payload) ? null : payload?.rightYear ?? null;
     setValidatedMatches(rows);
     setValidatedMatchesAt(new Date());
     setMatchViewOpen(false);
+
+    const leftYearValue = normalizeYearValue(leftYear);
+    const rightYearValue = normalizeYearValue(rightYear);
+    if (!rows.length || leftYearValue == null || rightYearValue == null) return;
+    if (leftYearValue === rightYearValue) return;
+
+    const olderYear = Math.min(leftYearValue, rightYearValue);
+    const olderIsLeft = leftYearValue < rightYearValue;
+
+    setFeatures((prev) => {
+      const next = Array.isArray(prev) ? prev : [];
+      if (!next.length) return next;
+      const featuresByKey = new Map();
+      next.forEach((feature, index) => {
+        featuresByKey.set(getFeatureKey(feature, index), feature);
+      });
+      const keysToRemove = new Set();
+      const updatedFeatures = new Map();
+
+      rows.forEach((row) => {
+        if (!row?.baseKey || !row?.incomingKey) return;
+        const olderKey = olderIsLeft ? row.baseKey : row.incomingKey;
+        const newerKey = olderIsLeft ? row.incomingKey : row.baseKey;
+        const olderFeature = featuresByKey.get(olderKey);
+        const newerFeature = featuresByKey.get(newerKey);
+        if (!olderFeature || !newerFeature) return;
+        const olderFeatureYear = normalizeYearValue(olderFeature?.properties?.annee);
+        if (olderFeatureYear !== olderYear) return;
+        const precedentValue = resolvePrecedentValue(olderFeature.properties);
+        if (precedentValue != null) {
+          updatedFeatures.set(newerKey, {
+            ...newerFeature,
+            properties: {
+              ...(newerFeature.properties || {}),
+              precedent: precedentValue,
+            },
+          });
+        }
+        keysToRemove.add(olderKey);
+      });
+
+      return next
+        .map((feature, index) => {
+          const key = getFeatureKey(feature, index);
+          return updatedFeatures.get(key) ?? feature;
+        })
+        .filter((feature, index) => {
+          const key = getFeatureKey(feature, index);
+          if (!keysToRemove.has(key)) return true;
+          const featureYear = normalizeYearValue(feature?.properties?.annee);
+          return featureYear !== olderYear;
+        });
+    });
   };
 
   // ---- Styles de la barre d’outils bas

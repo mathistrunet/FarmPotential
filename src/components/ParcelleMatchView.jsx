@@ -622,7 +622,11 @@ function ParcelleMatchViewContent({
   const handleValidate = () => {
     setValidatedAt(new Date());
     if (typeof onValidate === "function") {
-      onValidate(matchRows);
+      onValidate({
+        rows: matchRows,
+        leftYear,
+        rightYear,
+      });
     }
   };
 
