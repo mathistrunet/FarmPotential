@@ -6,6 +6,7 @@ import {
   getFeatureKey,
   getFeatureLabel,
 } from "../utils/parcelleMatching";
+import { toWgs84 } from "../utils/proj";
 
 const baseStyle = {
   version: 8,
@@ -115,6 +116,53 @@ function fitMapToFeatures(map, features) {
   );
 }
 
+function flattenCoords(coords, acc) {
+  if (!Array.isArray(coords)) return;
+  coords.forEach((coord) => {
+    if (Array.isArray(coord) && typeof coord[0] === "number") {
+      acc.push(coord);
+    } else {
+      flattenCoords(coord, acc);
+    }
+  });
+}
+
+function looksProjected(coord) {
+  const [x, y] = coord;
+  return Math.abs(x) > 180 || Math.abs(y) > 90;
+}
+
+function countProjectedCoords(feature) {
+  const coords = [];
+  if (!feature?.geometry?.coordinates) return 0;
+  flattenCoords(feature.geometry.coordinates, coords);
+  return coords.reduce((count, coord) => (looksProjected(coord) ? count + 1 : count), 0);
+}
+
+function transformCoordsToWgs84(coords) {
+  if (!Array.isArray(coords)) return coords;
+  return coords.map((coord) => {
+    if (Array.isArray(coord) && typeof coord[0] === "number") {
+      return looksProjected(coord) ? toWgs84(coord) : coord;
+    }
+    return transformCoordsToWgs84(coord);
+  });
+}
+
+function ensureWgs84ForDisplay(feature) {
+  if (!feature?.geometry?.coordinates) return feature;
+  const projectedCount = countProjectedCoords(feature);
+  if (projectedCount === 0) return feature;
+  return {
+    ...feature,
+    geometry: {
+      ...feature.geometry,
+      coordinates: transformCoordsToWgs84(feature.geometry.coordinates),
+    },
+    properties: { ...(feature.properties || {}), _displayReprojected: true },
+  };
+}
+
 export default function ParcelleMatchView({
   open,
   features,
@@ -199,6 +247,25 @@ export default function ParcelleMatchView({
       }));
   }, [features, rightYear]);
 
+  const leftDisplayFeatures = useMemo(
+    () => leftEntries.map((entry) => ensureWgs84ForDisplay(entry.feature)),
+    [leftEntries]
+  );
+
+  const rightDisplayFeatures = useMemo(
+    () => rightEntries.map((entry) => ensureWgs84ForDisplay(entry.feature)),
+    [rightEntries]
+  );
+
+  const displayDiagnostics = useMemo(() => {
+    const reprojected =
+      leftDisplayFeatures.filter((feature) => feature?.properties?._displayReprojected)
+        .length +
+      rightDisplayFeatures.filter((feature) => feature?.properties?._displayReprojected)
+        .length;
+    return { reprojected };
+  }, [leftDisplayFeatures, rightDisplayFeatures]);
+
   const suggestions = useMemo(
     () =>
       buildMatchSuggestions(
@@ -227,8 +294,8 @@ export default function ParcelleMatchView({
   }, [suggestions, leftEntries, rightEntries]);
 
   useEffect(() => {
-    leftFeaturesRef.current = leftEntries.map((entry) => entry.feature);
-    rightFeaturesRef.current = rightEntries.map((entry) => entry.feature);
+    leftFeaturesRef.current = leftDisplayFeatures;
+    rightFeaturesRef.current = rightDisplayFeatures;
     const leftMap = leftMapRef.current;
     const rightMap = rightMapRef.current;
     if (!leftMap || !rightMap) return;
@@ -246,7 +313,7 @@ export default function ParcelleMatchView({
     } else {
       rightMap.once("load", applyRight);
     }
-  }, [leftEntries, rightEntries]);
+  }, [leftDisplayFeatures, rightDisplayFeatures]);
 
   const baseByKey = useMemo(() => {
     const map = new Map();
@@ -387,6 +454,25 @@ export default function ParcelleMatchView({
             </select>
           </label>
         </div>
+        {displayDiagnostics.reprojected > 0 && (
+          <div
+            style={{
+              marginTop: 8,
+              fontSize: 12,
+              color: "#b45309",
+              background: "#fffbeb",
+              border: "1px solid #fcd34d",
+              padding: "6px 10px",
+              borderRadius: 8,
+            }}
+          >
+            {displayDiagnostics.reprojected} parcelle
+            {displayDiagnostics.reprojected > 1 ? "s" : ""}{" "}
+            {displayDiagnostics.reprojected > 1 ? "ont" : "a"} été reprojetée
+            {displayDiagnostics.reprojected > 1 ? "s" : ""} en WGS84 pour
+            l’affichage (coordonnées Lambert-93 détectées).
+          </div>
+        )}
       </div>
 
       <div
