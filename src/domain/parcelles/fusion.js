@@ -23,6 +23,19 @@ export const PRECEDENT_N2_FIELDS = [
 ];
 
 export const DEFAULT_PRECEDENT_N2_FIELD = "precedent_N2";
+export const DEFAULT_PRECEDENT_N1_FIELD = "precedent";
+
+const CULTURE_FIELDS = [
+  "culture",
+  "Culture",
+  "CULTURE",
+  "cultureN",
+  "cultureN_0",
+  "cultureN0",
+  "code_culture",
+  "codeCulture",
+  "code",
+];
 
 const normalizeValue = (value) => {
   if (value == null) return null;
@@ -64,6 +77,26 @@ const findFirstValue = (properties, fields) => {
   return null;
 };
 
+const isEmptyValue = (value) => {
+  if (value == null) return true;
+  if (typeof value === "string") return value.trim() === "";
+  return false;
+};
+
+const mergeParcelleProperties = (newProps, oldProps) => {
+  const merged = { ...(oldProps || {}) };
+  Object.entries(newProps || {}).forEach(([key, value]) => {
+    if (isEmptyValue(value)) {
+      if (!Object.prototype.hasOwnProperty.call(merged, key)) {
+        merged[key] = value;
+      }
+      return;
+    }
+    merged[key] = value;
+  });
+  return merged;
+};
+
 const defaultWarn = (message, meta) => {
   if (typeof import.meta !== "undefined" && import.meta?.env?.DEV) {
     // eslint-disable-next-line no-console
@@ -96,11 +129,25 @@ export const getOldYearPrevious = (oldFeature, oldYear, newYear) => {
   );
 };
 
+export const getOldYearCulture = (oldFeature) => {
+  const properties = oldFeature?.properties || null;
+  if (!properties) return null;
+  return findFirstValue(properties, CULTURE_FIELDS);
+};
+
 export const getTargetPreviousField = (newFeature, oldYear, newYear) => {
   const properties = newFeature?.properties || null;
   return (
     findExistingPropertyKey(properties, PRECEDENT_N2_FIELDS) ||
     DEFAULT_PRECEDENT_N2_FIELD
+  );
+};
+
+export const getTargetPreviousFieldN1 = (newFeature) => {
+  const properties = newFeature?.properties || null;
+  return (
+    findExistingPropertyKey(properties, PRECEDENT_N1_FIELDS) ||
+    DEFAULT_PRECEDENT_N1_FIELD
   );
 };
 
@@ -156,18 +203,32 @@ export const applyCorrespondencesAndMerge = ({
     }
     newKeySources.set(newKey, oldKey);
 
-    const valueToTransfer = getOldYearPrevious(oldFeature, oldYear, newYear);
-    if (valueToTransfer != null) {
-      const targetField = getTargetPreviousField(newFeature, oldYear, newYear);
-      updatedNew.set(String(newKey), {
-        ...newFeature,
-        properties: {
-          ...(newFeature.properties || {}),
-          [targetField]: valueToTransfer,
-          matchMergedFromYear: oldYear,
-        },
-      });
+    const oldCulture = getOldYearCulture(oldFeature);
+    const oldPrevious = getOldYearPrevious(oldFeature, oldYear, newYear);
+    const mergedProperties = mergeParcelleProperties(
+      newFeature.properties || {},
+      oldFeature.properties || {}
+    );
+    if (oldCulture != null) {
+      const targetField = getTargetPreviousFieldN1(newFeature);
+      if (resolvePropertyKey(mergedProperties, targetField) == null) {
+        mergedProperties[targetField] = oldCulture;
+      }
     }
+    if (oldPrevious != null) {
+      const targetField = getTargetPreviousField(newFeature, oldYear, newYear);
+      if (resolvePropertyKey(mergedProperties, targetField) == null) {
+        mergedProperties[targetField] = oldPrevious;
+      }
+    }
+
+    updatedNew.set(String(newKey), {
+      ...newFeature,
+      properties: {
+        ...mergedProperties,
+        matchMergedFromYear: oldYear,
+      },
+    });
     removedOldKeys.add(String(oldKey));
   });
 
@@ -186,5 +247,7 @@ export const applyCorrespondencesAndMerge = ({
       [oldYear]: { ...oldCollection, features: nextOldFeatures },
       [newYear]: { ...newCollection, features: nextNewFeatures },
     },
+    removedOldKeys,
+    updatedNewByKey: updatedNew,
   };
 };

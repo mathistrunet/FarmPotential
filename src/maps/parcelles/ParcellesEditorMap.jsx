@@ -34,6 +34,7 @@ import {
   buildParcellesByYearFromFeatures,
   getFeatureId,
 } from "../../domain/parcelles/fusion";
+import { getFeatureKey } from "../../utils/parcelleMatching";
 import { clearParcellesGeojson, saveParcellesGeojson } from "../../services/parcellesBackend";
 import { useParcelles } from "./ParcellesStore";
 
@@ -851,7 +852,11 @@ export default function ParcellesEditorMap() {
       });
 
       const parcellesByYear = buildParcellesByYearFromFeatures(next);
-      const { parcellesByYear: mergedParcellesByYear } =
+      const {
+        parcellesByYear: mergedParcellesByYear,
+        removedOldKeys,
+        updatedNewByKey,
+      } =
         applyCorrespondencesAndMerge({
           parcellesByYear,
           oldYear: olderYear,
@@ -860,6 +865,7 @@ export default function ParcellesEditorMap() {
         });
 
       const mergedById = new Map();
+      const removedOldKeySet = removedOldKeys ?? new Set();
       Object.values(mergedParcellesByYear || {}).forEach((collection) => {
         (collection?.features || []).forEach((feature) => {
           const id = getFeatureId(feature);
@@ -870,16 +876,21 @@ export default function ParcellesEditorMap() {
       });
 
       return next
-        .map((feature) => {
+        .map((feature, index) => {
+          const featureKey = getFeatureKey(feature, index);
+          if (removedOldKeySet.has(String(featureKey))) {
+            return null;
+          }
           const id = getFeatureId(feature);
-          if (id == null) return feature;
-          return mergedById.get(String(id)) ?? feature;
+          if (id == null) {
+            return updatedNewByKey?.get(String(featureKey)) ?? feature;
+          }
+          if (mergedById.has(String(id))) {
+            return mergedById.get(String(id));
+          }
+          return updatedNewByKey?.get(String(featureKey)) ?? feature;
         })
-        .filter((feature) => {
-          const id = getFeatureId(feature);
-          if (id == null) return true;
-          return mergedById.has(String(id));
-        });
+        .filter(Boolean);
     });
   };
 
