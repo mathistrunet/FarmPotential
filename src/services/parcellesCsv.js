@@ -10,8 +10,8 @@ import { buildError, ERROR_CODES } from "../utils/errors";
 
 const CSV_HEADERS = [
   "Secteur",
-  "Exploitations",
-  "Code exploitation",
+  "Exploitation",
+  "Numero pacage",
   "Parcelles",
   "Surface parcelle",
   "Parcelle Bio",
@@ -227,7 +227,8 @@ export async function parseParcellesCsvToFeatures(file, options = {}) {
     const secteur = map.get("secteur") ?? "";
     const exploitation =
       map.get("exploitations") ?? map.get("exploitation") ?? "";
-    const codeExploitation = map.get("codeexploitation") ?? "";
+    const codeExploitation =
+      map.get("codeexploitation") ?? map.get("numeropacage") ?? "";
     const parcelles = map.get("parcelles") ?? "";
     const surfaceParcelle = parseSurfaceValue(map.get("surfaceparcelle"));
     const parcelleBio = map.get("parcellebio") ?? "";
