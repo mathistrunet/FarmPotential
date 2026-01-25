@@ -226,7 +226,6 @@ function ParcelleMatchViewContent({
   const ensureRaster = useRasterLayers();
   const rowRefs = useRef(new Map());
   const matchRowsRef = useRef(matchRows);
-  const selectedIncomingKeyRef = useRef(selectedIncomingKey);
   const handleMatchChangeRef = useRef(null);
   const {
     parcellesByYear,
@@ -236,6 +235,7 @@ function ParcelleMatchViewContent({
     selectedBaseKey,
     setSelectedBaseKey,
   } = useParcellesMatchStore();
+  const selectedIncomingKeyRef = useRef(selectedIncomingKey);
 
   useEffect(() => {
     if (!open) return;
