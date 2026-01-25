@@ -1141,7 +1141,8 @@ export default function App() {
             </div>
 
             <ParcelleEditor
-              features={visibleFeatures}
+              features={features}
+              visibleFeatures={visibleFeatures}
               setFeatures={setFeatures}
               selectedId={selectedId}
               onSelect={(id) => selectFeatureOnMap(id, true)}

@@ -1,5 +1,5 @@
 // src/components/ParcelleEditor.jsx
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import centroid from "@turf/centroid";
 import booleanPointInPolygon from "@turf/boolean-point-in-polygon";
 import {
@@ -204,6 +204,7 @@ function formatParcelleBioValue(checked) {
 
 export default function ParcelleEditor({
   features,
+  visibleFeatures,
   setFeatures,
   selectedId,
   onSelect,
@@ -218,6 +219,10 @@ export default function ParcelleEditor({
   const [typed, setTyped] = useState({});
   const [editingParcelleId, setEditingParcelleId] = useState(null);
   const [rpgLoadingField, setRpgLoadingField] = useState(null);
+  const visibleFeatureSet = useMemo(() => {
+    if (!visibleFeatures) return null;
+    return new Set(visibleFeatures);
+  }, [visibleFeatures]);
   const baseCultureYearRef = useRef(null);
 
   useEffect(() => {
@@ -1128,6 +1133,7 @@ export default function ParcelleEditor({
   return (
     <div style={{ marginTop: 12 }}>
       {features.map((f, idx) => {
+        if (visibleFeatureSet && !visibleFeatureSet.has(f)) return null;
         const id = f.id || idx;
         const typedRow = typed[id] || {};
         const knownLabel = typedRow.cultureN ?? "";
