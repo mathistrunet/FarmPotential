@@ -269,7 +269,10 @@ export default function App() {
   useEffect(() => {
     const draw = drawRef.current;
     if (!draw) return;
-    draw.changeMode(debugView ? "static" : "simple_select");
+    const desiredMode = debugView ? "static" : "simple_select";
+    const availableModes = draw.modes ?? draw._modes ?? {};
+    const nextMode = availableModes[desiredMode] ? desiredMode : "simple_select";
+    draw.changeMode(nextMode);
   }, [debugView, features.length]);
 
   useEffect(() => {
