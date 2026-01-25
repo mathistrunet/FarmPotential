@@ -219,7 +219,17 @@ export default function ParcellesEditorMap() {
     })),
   }), []);
   const buildDebugFeatureCollection = useCallback(() => {
-    const data = drawRef.current?.getAll?.();
+    const draw = drawRef.current;
+    if (!draw || typeof draw.getAll !== "function") {
+      return { type: "FeatureCollection", features: featuresRef.current };
+    }
+    let data = null;
+    try {
+      data = draw.getAll();
+    } catch (error) {
+      console.warn("Impossible de lire les parcelles depuis Mapbox Draw.", error);
+      return { type: "FeatureCollection", features: featuresRef.current };
+    }
     if (data) {
       const safeFeatures = (data?.features || [])
         .filter(
@@ -630,7 +640,15 @@ export default function ParcellesEditorMap() {
 
   useEffect(() => () => {
     isUnmountingRef.current = true;
-    const data = drawRef.current?.getAll?.();
+    const draw = drawRef.current;
+    if (!draw || typeof draw.getAll !== "function") return;
+    let data = null;
+    try {
+      data = draw.getAll();
+    } catch (error) {
+      console.warn("Impossible de lire les parcelles depuis Mapbox Draw.", error);
+      return;
+    }
     if (!data) return;
     const payload = buildCollectionFromFeatures(data?.features || []);
     lastSyncedPayloadRef.current = JSON.stringify(payload);
