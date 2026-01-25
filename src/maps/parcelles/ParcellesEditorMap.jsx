@@ -204,10 +204,20 @@ export default function ParcellesEditorMap() {
   const lastSavedPayloadRef = useRef("");
   const lastSyncedPayloadRef = useRef("");
   const hasHydratedRef = useRef(false);
+  const isUnmountingRef = useRef(false);
   const emptyParcellesCollection = useMemo(
     () => ({ type: "FeatureCollection", features: [] }),
     []
   );
+  const buildCollectionFromFeatures = useCallback((inputFeatures) => ({
+    type: "FeatureCollection",
+    features: (inputFeatures || []).map((feature) => ({
+      type: "Feature",
+      id: feature.id,
+      geometry: feature.geometry,
+      properties: feature.properties || {},
+    })),
+  }), []);
   const buildDebugFeatureCollection = useCallback(() => {
     const draw = drawRef.current;
     if (draw && typeof draw.getAll === "function") {
@@ -611,20 +621,23 @@ export default function ParcellesEditorMap() {
 
   useEffect(() => {
     if (!hasHydratedRef.current) return;
-    const payload = {
-      type: "FeatureCollection",
-      features: features.map((feature) => ({
-        type: "Feature",
-        id: feature.id,
-        geometry: feature.geometry,
-        properties: feature.properties || {},
-      })),
-    };
+    if (isUnmountingRef.current) return;
+    const payload = buildCollectionFromFeatures(features);
     const serialized = JSON.stringify(payload);
     if (serialized === lastSyncedPayloadRef.current) return;
     lastSyncedPayloadRef.current = serialized;
     setParcellesCollection(payload);
-  }, [features, setParcellesCollection]);
+  }, [buildCollectionFromFeatures, features, setParcellesCollection]);
+
+  useEffect(() => () => {
+    isUnmountingRef.current = true;
+    const draw = drawRef.current;
+    if (!draw || typeof draw.getAll !== "function") return;
+    const data = draw.getAll();
+    const payload = buildCollectionFromFeatures(data?.features || []);
+    lastSyncedPayloadRef.current = JSON.stringify(payload);
+    setParcellesCollection(payload);
+  }, [buildCollectionFromFeatures, setParcellesCollection]);
 
   // ✅ Charge la couche RRP France depuis un fichier MBTiles local (placer le fichier dans /public/data/)
   //    Exemple : public/data/rrp_france_wgs84_shp.mbtiles
