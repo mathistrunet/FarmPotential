@@ -186,6 +186,7 @@ export default function App() {
   });
   const [parcelleYearFilter, setParcelleYearFilter] = useState("all");
   const [parcelleGroupFilter, setParcelleGroupFilter] = useState("all");
+  const [debugView, setDebugView] = useState(false);
   const [matchViewOpen, setMatchViewOpen] = useState(false);
   const [matchYears, setMatchYears] = useState({ left: null, right: null });
   const [validatedMatches, setValidatedMatches] = useState([]);
@@ -264,6 +265,12 @@ export default function App() {
       setSideExpanded(false);
     }
   }, [parcelleViewMode, sideOpen]);
+
+  useEffect(() => {
+    const draw = drawRef.current;
+    if (!draw) return;
+    draw.changeMode(debugView ? "static" : "simple_select");
+  }, [debugView, features.length]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1122,7 +1129,29 @@ export default function App() {
                 >
                   Comparer les parcelles
                 </button>
+                <label
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    marginLeft: "auto",
+                    fontSize: 12,
+                    color: "#444",
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={debugView}
+                    onChange={(e) => setDebugView(e.target.checked)}
+                  />
+                  Mode débug (lecture seule)
+                </label>
               </div>
+              <p style={{ margin: "6px 0 0", fontSize: 12, color: "#666" }}>
+                Le mode débug affiche les parcelles sur la carte sans édition :
+                filtres et couleurs restent disponibles, mais les polygones ne
+                sont plus modifiables.
+              </p>
               <p style={{ margin: "8px 0 0", fontSize: 12, color: "#666" }}>
                 Ouvre une vue dédiée pour comparer deux années côte à côte et
                 valider les correspondances proposées.
@@ -1150,6 +1179,7 @@ export default function App() {
               viewMode={parcelleViewMode}
               csvValues={csvValues}
               onCsvValuesChange={setCsvValues}
+              readOnly={debugView}
             />
 
             <p style={{ fontSize: 12, color: "#777", marginTop: 10 }}>
@@ -1476,15 +1506,30 @@ export default function App() {
 
             {/* Dessin */}
             <div style={{ ...groupStyle, borderRight: "none" }}>
-              <DrawToolbar
-                mapRef={mapRef}
-                drawRef={drawRef}
-                features={features}
-                setFeatures={setFeatures}
-                selectFeatureOnMap={selectFeatureOnMap}
-                onReset={handleResetParcelles}
-                compact={compact}
-              />
+              {debugView ? (
+                <div
+                  style={{
+                    padding: "6px 10px",
+                    borderRadius: 8,
+                    border: "1px dashed #d1d5db",
+                    color: "#6b7280",
+                    fontSize: 12,
+                    background: "#f9fafb",
+                  }}
+                >
+                  Mode débug activé : édition des polygones désactivée.
+                </div>
+              ) : (
+                <DrawToolbar
+                  mapRef={mapRef}
+                  drawRef={drawRef}
+                  features={features}
+                  setFeatures={setFeatures}
+                  selectFeatureOnMap={selectFeatureOnMap}
+                  onReset={handleResetParcelles}
+                  compact={compact}
+                />
+              )}
             </div>
           </div>
           {compact && (

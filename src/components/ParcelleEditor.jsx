@@ -212,6 +212,7 @@ export default function ParcelleEditor({
   viewMode = "cards",
   csvValues,
   onCsvValuesChange,
+  readOnly = false,
 }) {
   const options = entriesCodebook();
   const rowsRef = useRef(new Map());
@@ -224,6 +225,7 @@ export default function ParcelleEditor({
     return new Set(visibleFeatures);
   }, [visibleFeatures]);
   const baseCultureYearRef = useRef(null);
+  const isReadOnly = Boolean(readOnly);
 
   useEffect(() => {
     if (!selectedId) return;
@@ -251,6 +253,12 @@ export default function ParcelleEditor({
   }, [viewMode]);
 
   useEffect(() => {
+    if (isReadOnly) {
+      setEditingParcelleId(null);
+    }
+  }, [isReadOnly]);
+
+  useEffect(() => {
     setTyped((prev) => {
       const next = {};
       features.forEach((f, idx) => {
@@ -274,6 +282,7 @@ export default function ParcelleEditor({
   const datalistId = "cultures-master-list";
 
   const updateParcelleParts = (index, rawValue, { enforceNumero = false } = {}) => {
+    if (isReadOnly) return;
     const { ilot, numero } = parseParcelleInput(rawValue);
     const nextIlot = normalizePart(ilot);
     let nextNumero = normalizePart(numero);
@@ -304,6 +313,7 @@ export default function ParcelleEditor({
   };
 
   const updateNomValue = (index, rawValue, { trim = false } = {}) => {
+    if (isReadOnly) return;
     const nextFeatures = [...features];
     const feature = nextFeatures[index];
     if (!feature) return;
@@ -321,6 +331,7 @@ export default function ParcelleEditor({
   };
 
   const handleCultureChange = (id, index, field, rawValue) => {
+    if (isReadOnly) return;
     const config = CULTURE_FIELDS.find((item) => item.field === field);
     if (!config) return;
     const trimmed = rawValue.trim();
@@ -372,6 +383,7 @@ export default function ParcelleEditor({
   };
 
   const updateTypeSol = (index, rawValue, { trim = false } = {}) => {
+    if (isReadOnly) return;
     const nextFeatures = [...features];
     const feature = nextFeatures[index];
     if (!feature) return;
@@ -389,6 +401,7 @@ export default function ParcelleEditor({
   };
 
   const updateParcelleBio = (index, checked) => {
+    if (isReadOnly) return;
     const nextFeatures = [...features];
     const feature = nextFeatures[index];
     if (!feature) return;
@@ -403,6 +416,7 @@ export default function ParcelleEditor({
   };
 
   const updateFeatureProperty = (index, propKey, rawValue, { trim = false } = {}) => {
+    if (isReadOnly) return;
     const nextFeatures = [...features];
     const feature = nextFeatures[index];
     if (!feature) return;
@@ -488,6 +502,7 @@ export default function ParcelleEditor({
   };
 
   const handleFillRpgColumn = async (fieldConfig) => {
+    if (isReadOnly) return;
     if (!fieldConfig || !Number.isFinite(fieldConfig.rpgOffset)) return;
     if (rpgLoadingField) return;
     setRpgLoadingField(fieldConfig.field);
@@ -822,15 +837,16 @@ export default function ParcelleEditor({
                             e.stopPropagation();
                             handleFillRpgColumn(field);
                           }}
-                          disabled={rpgLoadingField != null}
+                          disabled={rpgLoadingField != null || isReadOnly}
                           style={{
                             padding: "3px 8px",
                             borderRadius: 6,
                             border: "1px solid #d1d5db",
                             background: "#fff",
                             fontSize: 11,
-                            cursor: rpgLoadingField ? "not-allowed" : "pointer",
-                            opacity: rpgLoadingField ? 0.6 : 1,
+                            cursor:
+                              rpgLoadingField || isReadOnly ? "not-allowed" : "pointer",
+                            opacity: rpgLoadingField || isReadOnly ? 0.6 : 1,
                           }}
                         >
                           {rpgLoadingField === field.field
@@ -907,6 +923,7 @@ export default function ParcelleEditor({
                         onBlur={(e) => updateParcelleParts(idx, e.target.value, { enforceNumero: true })}
                         onClick={(e) => e.stopPropagation()}
                         placeholder="Îlot.Numéro"
+                        disabled={isReadOnly}
                         style={{
                           width: "100%",
                           padding: "2px 4px",
@@ -915,6 +932,7 @@ export default function ParcelleEditor({
                           fontSize: 12,
                           fontWeight: 600,
                           textAlign: "center",
+                          background: isReadOnly ? "#f3f4f6" : "#fff",
                         }}
                       />
                     </td>
@@ -933,12 +951,14 @@ export default function ParcelleEditor({
                         onBlur={(e) => updateNomValue(idx, e.target.value, { trim: true })}
                         onClick={(e) => e.stopPropagation()}
                         placeholder="Nom personnalisé"
+                        disabled={isReadOnly}
                         style={{
                           width: "100%",
                           padding: "3px 6px",
                           borderRadius: 4,
                           border: "1px solid #d1d5db",
                           fontSize: 12,
+                          background: isReadOnly ? "#f3f4f6" : "#fff",
                         }}
                       />
                     </td>
@@ -972,6 +992,7 @@ export default function ParcelleEditor({
                         }
                         onClick={(e) => e.stopPropagation()}
                         placeholder="Année"
+                        disabled={isReadOnly}
                         style={{
                           width: "100%",
                           padding: "2px 4px",
@@ -979,6 +1000,7 @@ export default function ParcelleEditor({
                           border: "1px solid #d1d5db",
                           fontSize: 12,
                           textAlign: "center",
+                          background: isReadOnly ? "#f3f4f6" : "#fff",
                         }}
                       />
                     </td>
@@ -995,6 +1017,7 @@ export default function ParcelleEditor({
                         onChange={(e) => updateParcelleBio(idx, e.target.checked)}
                         onClick={(e) => e.stopPropagation()}
                         aria-label="Parcelle bio"
+                        disabled={isReadOnly}
                       />
                     </td>
                     <td
@@ -1060,12 +1083,14 @@ export default function ParcelleEditor({
                             onChange={(e) => handleCultureChange(id, idx, field.field, e.target.value)}
                             onClick={(e) => e.stopPropagation()}
                             placeholder="Nom ou code…"
+                            disabled={isReadOnly}
                             style={{
                               width: "100%",
                               padding: "3px 6px",
                               borderRadius: 4,
                               border: "1px solid #d1d5db",
                               fontSize: 12,
+                              background: isReadOnly ? "#f3f4f6" : "#fff",
                             }}
                           />
                           {renderWarning(typedRow[field.field])}
@@ -1086,12 +1111,14 @@ export default function ParcelleEditor({
                         onBlur={(e) => updateTypeSol(idx, e.target.value, { trim: true })}
                         onClick={(e) => e.stopPropagation()}
                         placeholder="Type de sol"
+                        disabled={isReadOnly}
                         style={{
                           width: "100%",
                           padding: "3px 6px",
                           borderRadius: 4,
                           border: "1px solid #d1d5db",
                           fontSize: 12,
+                          background: isReadOnly ? "#f3f4f6" : "#fff",
                         }}
                       />
                     </td>
@@ -1164,12 +1191,14 @@ export default function ParcelleEditor({
                         }
                         onClick={(e) => e.stopPropagation()}
                         placeholder="Ex: télépac"
+                        disabled={isReadOnly}
                         style={{
                           width: "100%",
                           padding: "2px 4px",
                           borderRadius: 4,
                           border: "1px solid #d1d5db",
                           fontSize: 12,
+                          background: isReadOnly ? "#f3f4f6" : "#fff",
                         }}
                       />
                     </td>
@@ -1275,12 +1304,14 @@ export default function ParcelleEditor({
                       setEditingParcelleId(null);
                     }
                   }}
+                  disabled={isReadOnly}
                   style={{
                     minWidth: 80,
                     padding: "2px 6px",
                     borderRadius: 6,
                     border: "1px solid #ccc",
                     fontWeight: 600,
+                    background: isReadOnly ? "#f3f4f6" : "#fff",
                   }}
                 />
               ) : (
@@ -1290,13 +1321,15 @@ export default function ParcelleEditor({
                     e.stopPropagation();
                     setEditingParcelleId(id);
                   }}
+                  disabled={isReadOnly}
                   style={{
                     border: "none",
                     background: "transparent",
                     padding: "2px 6px",
                     borderRadius: 6,
-                    cursor: "text",
+                    cursor: isReadOnly ? "default" : "text",
                     fontWeight: 600,
+                    color: isReadOnly ? "#6b7280" : "inherit",
                   }}
                 >
                   {parcelleValue || id}
@@ -1361,11 +1394,13 @@ export default function ParcelleEditor({
                   onBlur={(e) => updateNomValue(idx, e.target.value, { trim: true })}
                   onClick={(e) => e.stopPropagation()}
                   placeholder="Nom personnalisé"
+                  disabled={isReadOnly}
                   style={{
                     width: "100%",
                     padding: "6px 8px",
                     border: "1px solid #ccc",
                     borderRadius: 6,
+                    background: isReadOnly ? "#f3f4f6" : "#fff",
                   }}
                 />
               </label>
@@ -1379,11 +1414,13 @@ export default function ParcelleEditor({
                 onChange={(e) => handleCultureChange(id, idx, "cultureN", e.target.value)}
                 onClick={(e) => e.stopPropagation()}
                 placeholder="Tapez le nom (ou le code)…"
+                disabled={isReadOnly}
                 style={{
                   width: "90%",
                   padding: "6px 8px",
                   border: "1px solid #ccc",
                   borderRadius: 6,
+                  background: isReadOnly ? "#f3f4f6" : "#fff",
                 }}
               />
               {renderWarning(displayValue)}
@@ -1397,11 +1434,13 @@ export default function ParcelleEditor({
                 onChange={(e) => handleCultureChange(id, idx, "cultureN_1", e.target.value)}
                 onClick={(e) => e.stopPropagation()}
                 placeholder="Tapez le nom (ou le code)…"
+                disabled={isReadOnly}
                 style={{
                   width: "90%",
                   padding: "6px 8px",
                   border: "1px solid #ccc",
                   borderRadius: 6,
+                  background: isReadOnly ? "#f3f4f6" : "#fff",
                 }}
               />
               {renderWarning(displayPrevious)}
@@ -1472,11 +1511,13 @@ export default function ParcelleEditor({
                   updateFeatureProperty(idx, "layerType", e.target.value, { trim: true })
                 }
                 placeholder="Ex: télépac, manuel"
+                disabled={isReadOnly}
                 style={{
                   padding: "6px 8px",
                   borderRadius: 6,
                   border: "1px solid #d1d5db",
                   fontSize: 12,
+                  background: isReadOnly ? "#f3f4f6" : "#fff",
                 }}
               />
             </label>

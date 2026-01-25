@@ -293,6 +293,20 @@ export function useMapInitialization() {
             },
           },
           {
+            id: "draw-polygon-fill-static",
+            type: "fill",
+            filter: ["all", ["==", "$type", "Polygon"], ["==", "mode", "static"]],
+            paint: {
+              "fill-color": [
+                "case",
+                ["has", "color"],
+                ["get", "color"],
+                DEFAULT_POLYGON_FILL,
+              ],
+              "fill-opacity": 0.2,
+            },
+          },
+          {
             id: "draw-polygon-fill-import-mismatch",
             type: "fill",
             filter: [
@@ -331,6 +345,28 @@ export function useMapInitialization() {
               ],
               "line-width": 2,
             },
+          },
+          {
+            id: "draw-polygon-stroke-static",
+            type: "line",
+            filter: ["all", ["==", "$type", "Polygon"], ["==", "mode", "static"]],
+            layout: { "line-cap": "round", "line-join": "round" },
+            paint: {
+              "line-color": [
+                "case",
+                ["has", "outlineColor"],
+                ["get", "outlineColor"],
+                ["case", ["has", "color"], ["get", "color"], DEFAULT_POLYGON_LINE],
+              ],
+              "line-width": 2,
+            },
+          },
+          {
+            id: "draw-line-static",
+            type: "line",
+            filter: ["all", ["==", "$type", "LineString"], ["==", "mode", "static"]],
+            layout: { "line-cap": "round", "line-join": "round" },
+            paint: { "line-color": "#1f2937", "line-width": 2 },
           },
           {
             id: "draw-polygon-stroke-import-mismatch",
@@ -377,6 +413,7 @@ export function useMapInitialization() {
       map.addControl(draw, "top-left");
 
       const updateList = () => syncFeaturesFromDraw(draw);
+      updateList();
 
       if (pendingFeaturesRef.current) {
         draw.set(pendingFeaturesRef.current);
