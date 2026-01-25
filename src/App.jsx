@@ -10,10 +10,8 @@ const ParcellesEditorMap = lazy(() => import("./maps/parcelles/ParcellesEditorMa
 
 const VIEWER_DEFAULT_FILTERS = {
   cultures: [],
-  cultureField: "current",
-  precedent: "",
+  cultureField: "cultureN",
   ilot: "",
-  exploitation: "",
 };
 
 function AppContent() {
@@ -21,7 +19,7 @@ function AppContent() {
   const [mapMode, setMapMode] = useState("editor");
   const [viewerFilters, setViewerFilters] = useState(VIEWER_DEFAULT_FILTERS);
   const [colorBy, setColorBy] = useState("culture");
-  const cultureYear = viewerFilters.cultureField === "previous" ? "previous" : "current";
+  const cultureYear = viewerFilters.cultureField || "cultureN";
   const viewerCollection = useMemo(
     () => projectCultureYear(parcellesCollection, cultureYear),
     [parcellesCollection, cultureYear]
@@ -61,6 +59,60 @@ function AppContent() {
     () => (colorBy === "culture" ? culturePalette : {}),
     [colorBy, culturePalette]
   );
+  const cultureYearOptions = useMemo(() => {
+    const entries = new Set();
+    const features = parcellesCollection?.features ?? [];
+    for (const feature of features) {
+      const properties = feature?.properties;
+      if (!properties) continue;
+      Object.keys(properties).forEach((key) => {
+        if (key === "culture") {
+          entries.add(key);
+          return;
+        }
+        if (/^cultureN(_?\d+)?$/i.test(key)) {
+          entries.add(key);
+        }
+      });
+      if (entries.size > 12) break;
+    }
+    const buildLabel = (key) => {
+      const normalized = key.toLowerCase();
+      if (normalized === "culture") return "Culture (champ générique)";
+      const match = normalized.match(/^culturen_?(\d+)?$/);
+      if (!match) return key;
+      const offset = match[1] ? Number(match[1]) : 0;
+      if (!Number.isFinite(offset) || offset <= 0) {
+        return "Culture N";
+      }
+      return `Culture N-${offset}`;
+    };
+    const options = Array.from(entries).map((key) => ({
+      value: key,
+      label: buildLabel(key),
+    }));
+    if (viewerFilters.cultureField && !entries.has(viewerFilters.cultureField)) {
+      options.push({
+        value: viewerFilters.cultureField,
+        label: buildLabel(viewerFilters.cultureField),
+      });
+    }
+    options.sort((a, b) => {
+      const extract = (value) => {
+        const match = value.toLowerCase().match(/^culturen_?(\d+)?$/);
+        if (!match) return Number.POSITIVE_INFINITY;
+        return match[1] ? Number(match[1]) : 0;
+      };
+      return extract(a.value) - extract(b.value);
+    });
+    if (!options.length) {
+      return [
+        { value: "cultureN", label: "Culture N" },
+        { value: "cultureN_1", label: "Culture N-1" },
+      ];
+    }
+    return options;
+  }, [parcellesCollection, viewerFilters.cultureField]);
 
   useEffect(() => {
     if (!import.meta.env.DEV) return;
@@ -143,7 +195,7 @@ function AppContent() {
               <select
                 value={cultureYear}
                 onChange={(event) => {
-                  const nextField = event.target.value === "previous" ? "previous" : "current";
+                  const nextField = event.target.value || "cultureN";
                   setViewerFilters((prev) => ({
                     ...prev,
                     cultureField: nextField,
@@ -157,8 +209,11 @@ function AppContent() {
                   fontSize: 12,
                 }}
               >
-                <option value="current">Année en cours</option>
-                <option value="previous">Année précédente</option>
+                {cultureYearOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
               </select>
               <input
                 type="text"
@@ -239,25 +294,6 @@ function AppContent() {
               </div>
             </label>
             <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <span style={{ fontSize: 12, color: "#475569" }}>Précédent</span>
-              <input
-                type="text"
-                value={viewerFilters.precedent}
-                onChange={(event) =>
-                  setViewerFilters((prev) => ({
-                    ...prev,
-                    precedent: event.target.value,
-                  }))
-                }
-                style={{
-                  border: "1px solid #d1d5db",
-                  borderRadius: 6,
-                  padding: "6px 8px",
-                  fontSize: 12,
-                }}
-              />
-            </label>
-            <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               <span style={{ fontSize: 12, color: "#475569" }}>Ilot</span>
               <input
                 type="text"
@@ -266,25 +302,6 @@ function AppContent() {
                   setViewerFilters((prev) => ({
                     ...prev,
                     ilot: event.target.value,
-                  }))
-                }
-                style={{
-                  border: "1px solid #d1d5db",
-                  borderRadius: 6,
-                  padding: "6px 8px",
-                  fontSize: 12,
-                }}
-              />
-            </label>
-            <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <span style={{ fontSize: 12, color: "#475569" }}>Exploitation</span>
-              <input
-                type="text"
-                value={viewerFilters.exploitation}
-                onChange={(event) =>
-                  setViewerFilters((prev) => ({
-                    ...prev,
-                    exploitation: event.target.value,
                   }))
                 }
                 style={{
