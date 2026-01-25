@@ -89,7 +89,11 @@ export default function ParcellesViewerMap({
           id: PARCELLES_VIEWER_FILL_ID,
           type: "fill",
           source: PARCELLES_VIEWER_SOURCE_ID,
-          filter: ["in", ["geometry-type"], "Polygon", "MultiPolygon"],
+          filter: [
+            "in",
+            ["geometry-type"],
+            ["literal", ["Polygon", "MultiPolygon"]],
+          ],
           paint: {
             "fill-color": getFillColorExpression(colorBy, palette),
             "fill-opacity": [
@@ -107,7 +111,11 @@ export default function ParcellesViewerMap({
           id: PARCELLES_VIEWER_LINE_ID,
           type: "line",
           source: PARCELLES_VIEWER_SOURCE_ID,
-          filter: ["in", ["geometry-type"], "Polygon", "MultiPolygon"],
+          filter: [
+            "in",
+            ["geometry-type"],
+            ["literal", ["Polygon", "MultiPolygon"]],
+          ],
           paint: {
             "line-color": DEFAULT_PARCELLE_LINE,
             "line-width": 1.5,
