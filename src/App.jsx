@@ -1,5 +1,5 @@
 // src/App.jsx
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 
 import RasterToggles from "./components/RasterToggles";
@@ -29,10 +29,7 @@ import { useSoilLayerLocal } from "./features/useSoilLayerLocal";
 import { useToponymieAutoNaming } from "./features/useToponymieAutoNaming";
 import { withBasePath } from "./utils/publicBase";
 import { ERROR_CODES } from "./utils/errors";
-import {
-  fetchParcellesGeojson,
-  saveParcellesGeojson,
-} from "./services/parcellesBackend";
+import { clearParcellesGeojson, saveParcellesGeojson } from "./services/parcellesBackend";
 
 const EARTH_RADIUS = 6378137;
 const DRAW_LAYER_IDS = [
@@ -197,6 +194,10 @@ export default function App() {
   const toolbarScrollRef = useRef(null);
   const [backendReady, setBackendReady] = useState(false);
   const lastSavedPayloadRef = useRef("");
+  const emptyParcellesCollection = useMemo(
+    () => ({ type: "FeatureCollection", features: [] }),
+    []
+  );
 
   const yearOptions = useMemo(() => {
     const years = new Set();
@@ -376,19 +377,37 @@ export default function App() {
 
   useEffect(() => {
     const controller = new AbortController();
-    fetchParcellesGeojson(controller.signal)
+    clearParcellesGeojson(controller.signal)
       .then((collection) => {
         setDrawFeatures(collection);
         setBackendReady(true);
         lastSavedPayloadRef.current = JSON.stringify(collection);
       })
       .catch((error) => {
-        console.warn("Impossible de charger les parcelles depuis le backend.", error);
+        console.warn(
+          "Impossible de réinitialiser les parcelles dans le backend.",
+          error
+        );
+        setDrawFeatures(emptyParcellesCollection);
         setBackendReady(true);
+        lastSavedPayloadRef.current = JSON.stringify(emptyParcellesCollection);
       });
 
     return () => controller.abort();
-  }, [setDrawFeatures]);
+  }, [clearParcellesGeojson, emptyParcellesCollection, setDrawFeatures]);
+
+  const handleResetParcelles = useCallback(async () => {
+    setDrawFeatures(emptyParcellesCollection);
+    lastSavedPayloadRef.current = JSON.stringify(emptyParcellesCollection);
+    try {
+      await clearParcellesGeojson();
+    } catch (error) {
+      console.warn(
+        "Impossible de réinitialiser les parcelles dans le backend.",
+        error
+      );
+    }
+  }, [clearParcellesGeojson, emptyParcellesCollection, setDrawFeatures]);
 
   useEffect(() => {
     if (!backendReady) return;
@@ -1462,6 +1481,7 @@ export default function App() {
                 features={features}
                 setFeatures={setFeatures}
                 selectFeatureOnMap={selectFeatureOnMap}
+                onReset={handleResetParcelles}
                 compact={compact}
               />
             </div>

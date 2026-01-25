@@ -34,6 +34,15 @@ const persistLocalCollection = (collection) => {
   }
 };
 
+const clearLocalCollection = () => {
+  if (!canUseLocalStorage()) return;
+  try {
+    window.localStorage.removeItem(LOCAL_STORAGE_KEY);
+  } catch {
+    // ignore storage failures
+  }
+};
+
 export async function fetchParcellesGeojson(signal) {
   try {
     const response = await fetch(PARCELLES_ENDPOINT, { signal });
@@ -49,6 +58,26 @@ export async function fetchParcellesGeojson(signal) {
     if (local) return local;
     throw error;
   }
+}
+
+export async function clearParcellesGeojson(signal) {
+  const collection = normalizeFeatureCollection({
+    type: "FeatureCollection",
+    features: [],
+  });
+  clearLocalCollection();
+  const response = await fetch(PARCELLES_ENDPOINT, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(collection),
+    signal,
+  });
+
+  if (!response.ok) {
+    throw new Error(`Backend error: ${response.status}`);
+  }
+
+  return collection;
 }
 
 export async function saveParcellesGeojson(features, signal) {
