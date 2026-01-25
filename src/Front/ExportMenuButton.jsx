@@ -79,7 +79,7 @@ function CsvModal({ values, onChange, onCancel, onConfirm, disabled }) {
             />
           </label>
           <label style={labelStyle}>
-            Code exploitation
+            Numero pacage
             <input
               type="text"
               value={values.codeExploitation}

@@ -627,7 +627,7 @@ export default function ParcelleEditor({
             />
           </label>
           <label style={{ fontSize: 12, display: "flex", flexDirection: "column", gap: 4 }}>
-            Exploitations (nom)
+            Exploitation (nom)
             <input
               type="text"
               value={csvValues?.exploitation ?? ""}
@@ -647,7 +647,7 @@ export default function ParcelleEditor({
             />
           </label>
           <label style={{ fontSize: 12, display: "flex", flexDirection: "column", gap: 4 }}>
-            Code exploitation
+            Numero pacage
             <input
               type="text"
               value={csvValues?.codeExploitation ?? ""}
@@ -657,7 +657,7 @@ export default function ParcelleEditor({
                   codeExploitation: e.target.value,
                 })
               }
-              placeholder="Code exploitation"
+              placeholder="Numero pacage"
               style={{
                 padding: "6px 8px",
                 borderRadius: 6,
