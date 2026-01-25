@@ -15,7 +15,7 @@ import {
   updateGeojsonSource,
 } from "../maps/parcelles/parcellesMapLayers";
 import { applyFilters } from "../maps/parcelles/parcellesFilters";
-import { normalizeParcellesCollection } from "../maps/parcelles/parcellesData";
+import { assignUniqueParcelNumbers, normalizeParcellesCollection } from "../maps/parcelles/parcellesData";
 import { ParcellesMatchProvider, useParcellesMatchStore } from "../maps/parcelles/ParcellesMatchStore";
 import {
   cacheYearFeatures,
@@ -80,6 +80,51 @@ function updateSelectedFilter(map, layerId, selectedId) {
   map.setFilter(layerId, ["==", ["to-string", ["id"]], String(selectedId)]);
 }
 
+function getFeatureById(collection, featureId) {
+  if (!collection?.features || featureId == null) return null;
+  const target = String(featureId);
+  return (
+    collection.features.find((feature) => {
+      const id = feature?.id ?? feature?.properties?.__id ?? feature?.properties?.id;
+      return id != null && String(id) === target;
+    }) || null
+  );
+}
+
+function getFeatureBounds(feature) {
+  if (!feature?.geometry?.coordinates) return null;
+  const coords = [];
+  flattenCoords(feature.geometry.coordinates, coords);
+  if (!coords.length) return null;
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  coords.forEach(([lon, lat]) => {
+    minX = Math.min(minX, lon);
+    minY = Math.min(minY, lat);
+    maxX = Math.max(maxX, lon);
+    maxY = Math.max(maxY, lat);
+  });
+  if (!Number.isFinite(minX) || !Number.isFinite(minY)) return null;
+  return [
+    [minX, minY],
+    [maxX, maxY],
+  ];
+}
+
+function easeToFeature(map, feature) {
+  if (!map || !feature) return;
+  const bounds = getFeatureBounds(feature);
+  if (!bounds) return;
+  const mapBounds = typeof map.getBounds === "function" ? map.getBounds() : null;
+  if (mapBounds && typeof mapBounds.contains === "function") {
+    const [sw, ne] = bounds;
+    if (mapBounds.contains(sw) && mapBounds.contains(ne)) return;
+  }
+  map.fitBounds(bounds, { padding: 60, duration: 500 });
+}
+
 function attachViewerInteractions({
   map,
   sourceId,
@@ -114,7 +159,8 @@ function attachViewerInteractions({
       onClickFeature(feature, event);
     }
     const props = feature.properties || {};
-    const title = props.nom || props.nom_affiche || "Parcelle";
+    const parcelleNo = props.parcelleNo ?? props.numero ?? props.id;
+    const title = parcelleNo ? `Parcelle N° ${parcelleNo}` : "Parcelle";
     const culture = props.culture ? `Culture : ${props.culture}` : null;
     const precedent = props.precedent ? `Précédent : ${props.precedent}` : null;
     const content = [title, culture, precedent].filter(Boolean).join("<br />");
@@ -370,7 +416,8 @@ function ParcelleMatchViewContent({
       collection?.features?.length
         ? collection
         : normalizeParcellesCollection(leftEntries.map((entry) => entry.feature));
-    return sourceCollection.features.map((feature) => ensureWgs84ForDisplay(feature));
+    const numberedCollection = assignUniqueParcelNumbers(sourceCollection);
+    return numberedCollection.features.map((feature) => ensureWgs84ForDisplay(feature));
   }, [leftEntries, leftYear]);
 
   const rightDisplayFeatures = useMemo(() => {
@@ -380,7 +427,8 @@ function ParcelleMatchViewContent({
       collection?.features?.length
         ? collection
         : normalizeParcellesCollection(rightEntries.map((entry) => entry.feature));
-    return sourceCollection.features.map((feature) => ensureWgs84ForDisplay(feature));
+    const numberedCollection = assignUniqueParcelNumbers(sourceCollection);
+    return numberedCollection.features.map((feature) => ensureWgs84ForDisplay(feature));
   }, [rightEntries, rightYear]);
 
   const leftCollection = useMemo(
@@ -439,11 +487,25 @@ function ParcelleMatchViewContent({
       const incomingEntry = rightEntries[index];
       const baseEntry =
         suggestion.baseIndex != null ? leftEntries[suggestion.baseIndex] : null;
+      const incomingFeature = incomingEntry?.feature;
+      const baseFeature = baseEntry?.feature;
+      const incomingNo =
+        incomingFeature?.properties?.parcelleNo ??
+        incomingFeature?.properties?.numero ??
+        incomingFeature?.properties?.id ??
+        "";
+      const baseNo =
+        baseFeature?.properties?.parcelleNo ??
+        baseFeature?.properties?.numero ??
+        baseFeature?.properties?.id ??
+        "";
       return {
         incomingKey: incomingEntry?.key ?? `incoming-${index}`,
         incomingLabel: incomingEntry?.label ?? `Parcelle ${index + 1}`,
+        incomingNo,
         baseKey: baseEntry?.key ?? "",
         baseLabel: baseEntry?.label ?? "",
+        baseNo,
         similarity: suggestion.similarity ?? 0,
         status: suggestion.isMatch ? "auto" : "unmatched",
       };
@@ -524,6 +586,7 @@ function ParcelleMatchViewContent({
             ...row,
             baseKey: "",
             baseLabel: "",
+            baseNo: "",
             similarity: 0,
             status: "manual",
           };
@@ -533,10 +596,16 @@ function ParcelleMatchViewContent({
         const similarity = computeFeatureSimilarity(baseFeature, incomingFeature);
         const baseLabel =
           leftEntries.find((entry) => entry.key === nextBaseKey)?.label ?? "";
+        const baseNo =
+          baseFeature?.properties?.parcelleNo ??
+          baseFeature?.properties?.numero ??
+          baseFeature?.properties?.id ??
+          "";
         return {
           ...row,
           baseKey: nextBaseKey,
           baseLabel,
+          baseNo,
           similarity,
           status: "manual",
         };
@@ -627,6 +696,23 @@ function ParcelleMatchViewContent({
     const rightMap = rightMapRef.current;
     updateSelectedFilter(leftMap, LEFT_SELECTED_ID, selectedBaseKey);
     updateSelectedFilter(rightMap, RIGHT_SELECTED_ID, selectedIncomingKey);
+  }, [selectedBaseKey, selectedIncomingKey]);
+
+  useEffect(() => {
+    const leftMap = leftMapRef.current;
+    const rightMap = rightMapRef.current;
+    if (selectedBaseKey && leftMap) {
+      const feature = getFeatureById(leftCollectionRef.current, selectedBaseKey);
+      if (feature) {
+        easeToFeature(leftMap, feature);
+      }
+    }
+    if (selectedIncomingKey && rightMap) {
+      const feature = getFeatureById(rightCollectionRef.current, selectedIncomingKey);
+      if (feature) {
+        easeToFeature(rightMap, feature);
+      }
+    }
   }, [selectedBaseKey, selectedIncomingKey]);
 
   if (!open) return null;
@@ -825,9 +911,11 @@ function ParcelleMatchViewContent({
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr style={{ textAlign: "left", fontSize: 12, color: "#64748b" }}>
+                  <th style={{ padding: "6px 8px" }}>N° {rightYear ?? "—"}</th>
                   <th style={{ padding: "6px 8px" }}>
                     Parcelle {rightYear ?? "—"}
                   </th>
+                  <th style={{ padding: "6px 8px" }}>N° {leftYear ?? "—"}</th>
                   <th style={{ padding: "6px 8px" }}>
                     Correspondance {leftYear ?? "—"}
                   </th>
@@ -855,7 +943,13 @@ function ParcelleMatchViewContent({
                     }}
                   >
                     <td style={{ padding: "6px 8px", fontSize: 13 }}>
+                      {row.incomingNo || "—"}
+                    </td>
+                    <td style={{ padding: "6px 8px", fontSize: 13 }}>
                       {row.incomingLabel}
+                    </td>
+                    <td style={{ padding: "6px 8px", fontSize: 13 }}>
+                      {row.baseKey ? row.baseNo || "—" : "—"}
                     </td>
                     <td style={{ padding: "6px 8px" }}>
                       <select
