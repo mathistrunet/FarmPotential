@@ -740,6 +740,17 @@ export default function ParcelleEditor({
                 >
                   Parcelle Bio
                 </th>
+                <th
+                  style={{
+                    textAlign: "center",
+                    padding: TABLE_CELL_PADDING,
+                    fontSize: 12,
+                    width: 150,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  Alertes import
+                </th>
                 {CULTURE_FIELDS.map((field) => (
                   <th
                     key={field.field}
@@ -789,6 +800,7 @@ export default function ParcelleEditor({
                 </th>
               </tr>
               <tr>
+                <th style={{ padding: TABLE_CELL_PADDING }} />
                 <th style={{ padding: TABLE_CELL_PADDING }} />
                 <th style={{ padding: TABLE_CELL_PADDING }} />
                 <th style={{ padding: TABLE_CELL_PADDING }} />
@@ -984,6 +996,52 @@ export default function ParcelleEditor({
                         onClick={(e) => e.stopPropagation()}
                         aria-label="Parcelle bio"
                       />
+                    </td>
+                    <td
+                      style={{
+                        padding: TABLE_CELL_PADDING,
+                        textAlign: "center",
+                        width: 150,
+                      }}
+                    >
+                      {f.properties?.overlap_warning ? (
+                        <span
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 4,
+                            padding: "2px 6px",
+                            borderRadius: 999,
+                            background: "#fee2e2",
+                            color: "#991b1b",
+                            fontSize: 11,
+                            fontWeight: 600,
+                          }}
+                        >
+                          ⚠️ Chevauchement
+                        </span>
+                      ) : null}
+                      {f.properties?.import_mismatch ? (
+                        <span
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 4,
+                            padding: "2px 6px",
+                            borderRadius: 999,
+                            background: "#ffedd5",
+                            color: "#9a3412",
+                            fontSize: 11,
+                            fontWeight: 600,
+                            marginLeft: f.properties?.overlap_warning ? 6 : 0,
+                          }}
+                        >
+                          ⚠️ Import
+                        </span>
+                      ) : null}
+                      {!f.properties?.overlap_warning && !f.properties?.import_mismatch
+                        ? "—"
+                        : null}
                     </td>
                     {CULTURE_FIELDS.map((field) => (
                       <td
@@ -1253,6 +1311,44 @@ export default function ParcelleEditor({
             {surfaceHa != null && !Number.isNaN(surfaceHa) && (
               <div style={{ fontSize: 12, color: "#555", marginBottom: 6 }}>
                 Surface : {surfaceHa.toFixed(2)} ha
+              </div>
+            )}
+            {(f.properties?.overlap_warning || f.properties?.import_mismatch) && (
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
+                {f.properties?.overlap_warning && (
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 4,
+                      padding: "2px 8px",
+                      borderRadius: 999,
+                      background: "#fee2e2",
+                      color: "#991b1b",
+                      fontSize: 11,
+                      fontWeight: 600,
+                    }}
+                  >
+                    ⚠️ Chevauchement détecté
+                  </span>
+                )}
+                {f.properties?.import_mismatch && (
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 4,
+                      padding: "2px 8px",
+                      borderRadius: 999,
+                      background: "#ffedd5",
+                      color: "#9a3412",
+                      fontSize: 11,
+                      fontWeight: 600,
+                    }}
+                  >
+                    ⚠️ Import mismatch
+                  </span>
+                )}
               </div>
             )}
 
