@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import {
   buildMatchSuggestions,
@@ -7,6 +7,16 @@ import {
   getFeatureLabel,
 } from "../utils/parcelleMatching";
 import { toWgs84 } from "../utils/proj";
+import { useRasterLayers } from "../features/map/useRasterLayers";
+import {
+  addParcellesSourceAndLayers,
+  fitToGeojson,
+  setColorBy,
+  updateGeojsonSource,
+} from "../maps/parcelles/parcellesMapLayers";
+import { applyFilters } from "../maps/parcelles/parcellesFilters";
+import { normalizeParcellesCollection } from "../maps/parcelles/parcellesData";
+import { ParcellesMatchProvider, useParcellesMatchStore } from "../maps/parcelles/ParcellesMatchStore";
 import {
   cacheYearFeatures,
   getCachedYearEntry,
@@ -20,12 +30,20 @@ const baseStyle = {
     {
       id: "bg",
       type: "background",
-      paint: { "background-color": "#e5eef7" },
+      paint: { "background-color": "#eef2ff" },
     },
   ],
 };
 
-const SOURCE_ID = "parcelles";
+const LEFT_SOURCE_ID = "parcelles-left";
+const LEFT_FILL_ID = "parcelles-fill-left";
+const LEFT_LINE_ID = "parcelles-line-left";
+const LEFT_SELECTED_ID = "selected-left";
+const RIGHT_SOURCE_ID = "parcelles-right";
+const RIGHT_FILL_ID = "parcelles-fill-right";
+const RIGHT_LINE_ID = "parcelles-line-right";
+const RIGHT_SELECTED_ID = "selected-right";
+const SELECTED_LINE_COLOR = "#f97316";
 const DEFAULT_LEFT_COLOR = "#15803d";
 const DEFAULT_RIGHT_COLOR = "#2563eb";
 
@@ -38,98 +56,53 @@ function createMap(container) {
   });
 }
 
-function ensureLayer(map, color) {
-  if (!map.getSource(SOURCE_ID)) {
-    map.addSource(SOURCE_ID, {
-      type: "geojson",
-      data: { type: "FeatureCollection", features: [] },
-      promoteId: "id",
-    });
-  }
-  if (map.getLayer(`${SOURCE_ID}-fill`)) {
-    map.setPaintProperty(`${SOURCE_ID}-fill`, "fill-color", color);
-    map.setPaintProperty(`${SOURCE_ID}-fill`, "fill-opacity", [
-      "case",
-      ["boolean", ["feature-state", "hover"], false],
-      0.6,
-      0.35,
-    ]);
-  }
-  if (!map.getLayer(`${SOURCE_ID}-fill`)) {
+function ensureSelectedLayer(map, sourceId, layerId) {
+  if (!map.getLayer(layerId)) {
     map.addLayer({
-      id: `${SOURCE_ID}-fill`,
-      type: "fill",
-      source: SOURCE_ID,
-      filter: ["in", ["geometry-type"], ["literal", ["Polygon", "MultiPolygon"]]],
+      id: layerId,
+      type: "line",
+      source: sourceId,
+      filter: ["==", ["to-string", ["id"]], ""],
       paint: {
-        "fill-color": color,
-        "fill-opacity": [
-          "case",
-          ["boolean", ["feature-state", "hover"], false],
-          0.6,
-          0.35,
-        ],
+        "line-color": SELECTED_LINE_COLOR,
+        "line-width": 3,
       },
     });
   }
-  if (map.getLayer(`${SOURCE_ID}-line`)) {
-    map.setPaintProperty(`${SOURCE_ID}-line`, "line-color", color);
+}
+
+function updateSelectedFilter(map, layerId, selectedId) {
+  if (!map || !map.getLayer(layerId)) return;
+  if (!selectedId) {
+    map.setFilter(layerId, ["==", ["to-string", ["id"]], ""]);
+    return;
   }
-  if (!map.getLayer(`${SOURCE_ID}-line`)) {
-    map.addLayer({
-      id: `${SOURCE_ID}-line`,
-      type: "line",
-      source: SOURCE_ID,
-      filter: ["in", ["geometry-type"], ["literal", ["Polygon", "MultiPolygon"]]],
-      paint: { "line-color": color, "line-width": 2 },
-    });
-  }
+  map.setFilter(layerId, ["==", ["to-string", ["id"]], String(selectedId)]);
 }
 
-function normalizeDisplayFeatures(features) {
-  return (features || []).map((feature, index) => ({
-    ...feature,
-    id: feature.id ?? feature.properties?.id ?? `${SOURCE_ID}-${index}`,
-    properties: feature.properties || {},
-  }));
-}
-
-function updateMapFeatures(map, features, color) {
-  if (!map) return;
-  ensureLayer(map, color);
-  const source = map.getSource(SOURCE_ID);
-  if (source) {
-    source.setData({
-      type: "FeatureCollection",
-      features: normalizeDisplayFeatures(features),
-    });
-  }
-}
-
-function syncMapView(map, features, color) {
-  if (!map) return;
-  updateMapFeatures(map, features, color);
-  fitMapToFeatures(map, features);
-  map.resize();
-}
-
-function attachViewerInteractions(map, popupRef, hoveredIdRef) {
-  const fillId = `${SOURCE_ID}-fill`;
+function attachViewerInteractions({
+  map,
+  sourceId,
+  fillLayerId,
+  popupRef,
+  hoveredIdRef,
+  onClickFeature,
+}) {
   const handleMove = (event) => {
     const feature = event.features && event.features[0];
     if (!feature) return;
     const id = feature.id ?? feature.properties?.id;
     if (id == null) return;
     if (hoveredIdRef.current && hoveredIdRef.current !== id) {
-      map.setFeatureState({ source: SOURCE_ID, id: hoveredIdRef.current }, { hover: false });
+      map.setFeatureState({ source: sourceId, id: hoveredIdRef.current }, { hover: false });
     }
     hoveredIdRef.current = id;
-    map.setFeatureState({ source: SOURCE_ID, id }, { hover: true });
+    map.setFeatureState({ source: sourceId, id }, { hover: true });
   };
 
   const handleLeave = () => {
     if (hoveredIdRef.current) {
-      map.setFeatureState({ source: SOURCE_ID, id: hoveredIdRef.current }, { hover: false });
+      map.setFeatureState({ source: sourceId, id: hoveredIdRef.current }, { hover: false });
     }
     hoveredIdRef.current = null;
   };
@@ -137,6 +110,9 @@ function attachViewerInteractions(map, popupRef, hoveredIdRef) {
   const handleClick = (event) => {
     const feature = event.features && event.features[0];
     if (!feature) return;
+    if (typeof onClickFeature === "function") {
+      onClickFeature(feature, event);
+    }
     const props = feature.properties || {};
     const title = props.nom || props.nom_affiche || "Parcelle";
     const culture = props.culture ? `Culture : ${props.culture}` : null;
@@ -152,59 +128,19 @@ function attachViewerInteractions(map, popupRef, hoveredIdRef) {
       .addTo(map);
   };
 
-  map.on("mousemove", fillId, handleMove);
-  map.on("mouseleave", fillId, handleLeave);
-  map.on("click", fillId, handleClick);
+  map.on("mousemove", fillLayerId, handleMove);
+  map.on("mouseleave", fillLayerId, handleLeave);
+  map.on("click", fillLayerId, handleClick);
 
   return () => {
-    map.off("mousemove", fillId, handleMove);
-    map.off("mouseleave", fillId, handleLeave);
-    map.off("click", fillId, handleClick);
+    map.off("mousemove", fillLayerId, handleMove);
+    map.off("mouseleave", fillLayerId, handleLeave);
+    map.off("click", fillLayerId, handleClick);
     if (popupRef.current) {
       popupRef.current.remove();
       popupRef.current = null;
     }
   };
-}
-
-function collectCoordinates(coords, acc) {
-  coords.forEach((coord) => {
-    if (!Array.isArray(coord)) return;
-    if (typeof coord[0] === "number" && typeof coord[1] === "number") {
-      acc.push(coord);
-    } else {
-      collectCoordinates(coord, acc);
-    }
-  });
-}
-
-function fitMapToFeatures(map, features) {
-  if (!map || !features.length) return;
-  const points = [];
-  features.forEach((feature) => {
-    const geometry = feature?.geometry;
-    if (!geometry?.coordinates) return;
-    collectCoordinates(geometry.coordinates, points);
-  });
-  if (!points.length) return;
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  points.forEach(([lon, lat]) => {
-    minX = Math.min(minX, lon);
-    minY = Math.min(minY, lat);
-    maxX = Math.max(maxX, lon);
-    maxY = Math.max(maxY, lat);
-  });
-  if (!Number.isFinite(minX) || !Number.isFinite(minY)) return;
-  map.fitBounds(
-    [
-      [minX, minY],
-      [maxX, maxY],
-    ],
-    { padding: 40, duration: 0 }
-  );
 }
 
 function flattenCoords(coords, acc) {
@@ -254,9 +190,18 @@ function ensureWgs84ForDisplay(feature) {
   };
 }
 
-export default function ParcelleMatchView({
+function applyMapUpdates(map, collection, { sourceId, fillLayerId, lineLayerId, selectedLayerId, color }) {
+  addParcellesSourceAndLayers(map, sourceId, fillLayerId, lineLayerId, collection);
+  ensureSelectedLayer(map, sourceId, selectedLayerId);
+  updateGeojsonSource(map, sourceId, collection);
+  setColorBy(map, fillLayerId, "fixed", { fixedColor: color });
+  applyFilters(map, null, [fillLayerId, lineLayerId]);
+  fitToGeojson(map, collection);
+  requestAnimationFrame(() => map.resize());
+}
+
+function ParcelleMatchViewContent({
   open,
-  features,
   yearOptions,
   initialYears,
   onClose,
@@ -270,14 +215,27 @@ export default function ParcelleMatchView({
   const rightPopupRef = useRef(null);
   const leftHoveredIdRef = useRef(null);
   const rightHoveredIdRef = useRef(null);
-  const leftFeaturesRef = useRef([]);
-  const rightFeaturesRef = useRef([]);
+  const leftCollectionRef = useRef({ type: "FeatureCollection", features: [] });
+  const rightCollectionRef = useRef({ type: "FeatureCollection", features: [] });
   const [leftYear, setLeftYear] = useState(initialYears?.left ?? null);
   const [rightYear, setRightYear] = useState(initialYears?.right ?? null);
   const [leftColor, setLeftColor] = useState(DEFAULT_LEFT_COLOR);
   const [rightColor, setRightColor] = useState(DEFAULT_RIGHT_COLOR);
   const [matchRows, setMatchRows] = useState([]);
   const [validatedAt, setValidatedAt] = useState(null);
+  const ensureRaster = useRasterLayers();
+  const rowRefs = useRef(new Map());
+  const matchRowsRef = useRef(matchRows);
+  const selectedIncomingKeyRef = useRef(selectedIncomingKey);
+  const handleMatchChangeRef = useRef(null);
+  const {
+    parcellesByYear,
+    setCorrespondances,
+    selectedIncomingKey,
+    setSelectedIncomingKey,
+    selectedBaseKey,
+    setSelectedBaseKey,
+  } = useParcellesMatchStore();
 
   useEffect(() => {
     if (!open) return;
@@ -300,12 +258,44 @@ export default function ParcelleMatchView({
     rightMapRef.current = rightMap;
     leftMap.addControl(new maplibregl.NavigationControl(), "top-left");
     rightMap.addControl(new maplibregl.NavigationControl(), "top-left");
+    leftMap.on("error", (event) => {
+      // eslint-disable-next-line no-console
+      console.error("MAP ERROR (left)", event.error || event);
+    });
+    rightMap.on("error", (event) => {
+      // eslint-disable-next-line no-console
+      console.error("MAP ERROR (right)", event.error || event);
+    });
 
     const handleLeftLoad = () => {
-      syncMapView(leftMap, leftFeaturesRef.current, leftColor);
+      ensureRaster(leftMap);
+      addParcellesSourceAndLayers(
+        leftMap,
+        LEFT_SOURCE_ID,
+        LEFT_FILL_ID,
+        LEFT_LINE_ID,
+        leftCollectionRef.current
+      );
+      ensureSelectedLayer(leftMap, LEFT_SOURCE_ID, LEFT_SELECTED_ID);
+      setColorBy(leftMap, LEFT_FILL_ID, "fixed", { fixedColor: leftColor });
+      applyFilters(leftMap, null, [LEFT_FILL_ID, LEFT_LINE_ID]);
+      fitToGeojson(leftMap, leftCollectionRef.current);
+      requestAnimationFrame(() => leftMap.resize());
     };
     const handleRightLoad = () => {
-      syncMapView(rightMap, rightFeaturesRef.current, rightColor);
+      ensureRaster(rightMap);
+      addParcellesSourceAndLayers(
+        rightMap,
+        RIGHT_SOURCE_ID,
+        RIGHT_FILL_ID,
+        RIGHT_LINE_ID,
+        rightCollectionRef.current
+      );
+      ensureSelectedLayer(rightMap, RIGHT_SOURCE_ID, RIGHT_SELECTED_ID);
+      setColorBy(rightMap, RIGHT_FILL_ID, "fixed", { fixedColor: rightColor });
+      applyFilters(rightMap, null, [RIGHT_FILL_ID, RIGHT_LINE_ID]);
+      fitToGeojson(rightMap, rightCollectionRef.current);
+      requestAnimationFrame(() => rightMap.resize());
     };
     if (leftMap.isStyleLoaded()) {
       handleLeftLoad();
@@ -319,14 +309,24 @@ export default function ParcelleMatchView({
     }
 
     const detachLeft = attachViewerInteractions(
-      leftMap,
-      leftPopupRef,
-      leftHoveredIdRef
+      {
+        map: leftMap,
+        sourceId: LEFT_SOURCE_ID,
+        fillLayerId: LEFT_FILL_ID,
+        popupRef: leftPopupRef,
+        hoveredIdRef: leftHoveredIdRef,
+        onClickFeature: (feature) => handleLeftFeatureClick(feature),
+      }
     );
     const detachRight = attachViewerInteractions(
-      rightMap,
-      rightPopupRef,
-      rightHoveredIdRef
+      {
+        map: rightMap,
+        sourceId: RIGHT_SOURCE_ID,
+        fillLayerId: RIGHT_FILL_ID,
+        popupRef: rightPopupRef,
+        hoveredIdRef: rightHoveredIdRef,
+        onClickFeature: (feature) => handleRightFeatureClick(feature),
+      }
     );
 
     return () => {
@@ -339,51 +339,72 @@ export default function ParcelleMatchView({
       leftMapRef.current = null;
       rightMapRef.current = null;
     };
-  }, [open, leftColor, rightColor]);
+  }, [open, ensureRaster]);
 
   const leftEntries = useMemo(() => {
     if (!leftYear) return [];
-    return features
-      .filter((feature) => Number(feature?.properties?.annee) === Number(leftYear))
-      .map((feature, index) => ({
-        feature,
-        key: getFeatureKey(feature, index),
-        label: getFeatureLabel(feature, index),
-      }));
-  }, [features, leftYear]);
+    const collection = parcellesByYear?.[leftYear];
+    if (!collection?.features?.length) return [];
+    return collection.features.map((feature, index) => ({
+      feature,
+      key: getFeatureKey(feature, index),
+      label: getFeatureLabel(feature, index),
+    }));
+  }, [parcellesByYear, leftYear]);
 
   const rightEntries = useMemo(() => {
     if (!rightYear) return [];
-    return features
-      .filter((feature) => Number(feature?.properties?.annee) === Number(rightYear))
-      .map((feature, index) => ({
-        feature,
-        key: getFeatureKey(feature, index),
-        label: getFeatureLabel(feature, index),
-      }));
-  }, [features, rightYear]);
+    const collection = parcellesByYear?.[rightYear];
+    if (!collection?.features?.length) return [];
+    return collection.features.map((feature, index) => ({
+      feature,
+      key: getFeatureKey(feature, index),
+      label: getFeatureLabel(feature, index),
+    }));
+  }, [parcellesByYear, rightYear]);
 
   const leftDisplayFeatures = useMemo(() => {
     if (!leftYear) return [];
-    const cache = getCachedYearEntry(leftYear);
-    if (cache?.collection?.features?.length) {
-      return cache.collection.features.map((feature) =>
-        ensureWgs84ForDisplay(feature)
-      );
-    }
-    return leftEntries.map((entry) => ensureWgs84ForDisplay(entry.feature));
+    const collection = parcellesByYear?.[leftYear];
+    const sourceCollection =
+      collection?.features?.length
+        ? collection
+        : normalizeParcellesCollection(leftEntries.map((entry) => entry.feature));
+    return sourceCollection.features.map((feature) => ensureWgs84ForDisplay(feature));
   }, [leftEntries, leftYear]);
 
   const rightDisplayFeatures = useMemo(() => {
     if (!rightYear) return [];
-    const cache = getCachedYearEntry(rightYear);
-    if (cache?.collection?.features?.length) {
-      return cache.collection.features.map((feature) =>
-        ensureWgs84ForDisplay(feature)
-      );
-    }
-    return rightEntries.map((entry) => ensureWgs84ForDisplay(entry.feature));
+    const collection = parcellesByYear?.[rightYear];
+    const sourceCollection =
+      collection?.features?.length
+        ? collection
+        : normalizeParcellesCollection(rightEntries.map((entry) => entry.feature));
+    return sourceCollection.features.map((feature) => ensureWgs84ForDisplay(feature));
   }, [rightEntries, rightYear]);
+
+  const leftCollection = useMemo(
+    () => ({
+      type: "FeatureCollection",
+      features: leftDisplayFeatures,
+    }),
+    [leftDisplayFeatures]
+  );
+  const rightCollection = useMemo(
+    () => ({
+      type: "FeatureCollection",
+      features: rightDisplayFeatures,
+    }),
+    [rightDisplayFeatures]
+  );
+
+  useEffect(() => {
+    leftCollectionRef.current = leftCollection;
+  }, [leftCollection]);
+
+  useEffect(() => {
+    rightCollectionRef.current = rightCollection;
+  }, [rightCollection]);
 
   useEffect(() => {
     if (!leftYear) return;
@@ -432,15 +453,25 @@ export default function ParcelleMatchView({
   }, [suggestions, leftEntries, rightEntries]);
 
   useEffect(() => {
-    leftFeaturesRef.current = leftDisplayFeatures;
-    rightFeaturesRef.current = rightDisplayFeatures;
     const leftMap = leftMapRef.current;
     const rightMap = rightMapRef.current;
     if (!leftMap || !rightMap) return;
     const applyLeft = () =>
-      syncMapView(leftMap, leftFeaturesRef.current, leftColor);
+      applyMapUpdates(leftMap, leftCollectionRef.current, {
+        sourceId: LEFT_SOURCE_ID,
+        fillLayerId: LEFT_FILL_ID,
+        lineLayerId: LEFT_LINE_ID,
+        selectedLayerId: LEFT_SELECTED_ID,
+        color: leftColor,
+      });
     const applyRight = () =>
-      syncMapView(rightMap, rightFeaturesRef.current, rightColor);
+      applyMapUpdates(rightMap, rightCollectionRef.current, {
+        sourceId: RIGHT_SOURCE_ID,
+        fillLayerId: RIGHT_FILL_ID,
+        lineLayerId: RIGHT_LINE_ID,
+        selectedLayerId: RIGHT_SELECTED_ID,
+        color: rightColor,
+      });
     if (leftMap.isStyleLoaded()) {
       applyLeft();
     } else {
@@ -482,7 +513,9 @@ export default function ParcelleMatchView({
     label: entry.label,
   }));
 
-  const handleMatchChange = (incomingKey, nextBaseKey) => {
+  const handleMatchChange = useCallback((incomingKey, nextBaseKey) => {
+    setSelectedIncomingKey(incomingKey);
+    setSelectedBaseKey(nextBaseKey || null);
     setMatchRows((prev) =>
       prev.map((row) => {
         if (row.incomingKey !== incomingKey) return row;
@@ -509,7 +542,13 @@ export default function ParcelleMatchView({
         };
       })
     );
-  };
+  }, [baseByKey, incomingByKey, leftEntries, setSelectedBaseKey, setSelectedIncomingKey]);
+
+  const handleRowSelect = useCallback((incomingKey) => {
+    setSelectedIncomingKey(incomingKey);
+    const row = matchRowsRef.current.find((entry) => entry.incomingKey === incomingKey);
+    setSelectedBaseKey(row?.baseKey || null);
+  }, [setSelectedBaseKey, setSelectedIncomingKey]);
 
   const handleValidate = () => {
     setValidatedAt(new Date());
@@ -517,6 +556,78 @@ export default function ParcelleMatchView({
       onValidate(matchRows);
     }
   };
+
+  function handleLeftFeatureClick(feature) {
+    const baseKey = String(feature.id ?? feature.properties?.id ?? "");
+    if (!baseKey) return;
+    setSelectedBaseKey(baseKey);
+    const incomingKey = selectedIncomingKeyRef.current;
+    if (!incomingKey) return;
+    if (handleMatchChangeRef.current) {
+      handleMatchChangeRef.current(incomingKey, baseKey);
+    }
+  }
+
+  function handleRightFeatureClick(feature) {
+    const incomingKey = String(feature.id ?? feature.properties?.id ?? "");
+    if (!incomingKey) return;
+    handleRowSelect(incomingKey);
+  }
+
+  useEffect(() => {
+    if (!selectedIncomingKey) return;
+    const row = matchRows.find((entry) => entry.incomingKey === selectedIncomingKey);
+    if (!row) return;
+    setSelectedBaseKey(row.baseKey || null);
+  }, [matchRows, selectedIncomingKey, setSelectedBaseKey]);
+
+  useEffect(() => {
+    matchRowsRef.current = matchRows;
+  }, [matchRows]);
+
+  useEffect(() => {
+    selectedIncomingKeyRef.current = selectedIncomingKey;
+  }, [selectedIncomingKey]);
+
+  useEffect(() => {
+    handleMatchChangeRef.current = handleMatchChange;
+  }, [handleMatchChange]);
+
+  useEffect(() => {
+    const next = {};
+    matchRows.forEach((row) => {
+      if (row.baseKey) {
+        next[row.incomingKey] = row.baseKey;
+      }
+    });
+    setCorrespondances(next);
+  }, [matchRows, setCorrespondances]);
+
+  useEffect(() => {
+    if (!selectedIncomingKey) return;
+    const node = rowRefs.current.get(selectedIncomingKey);
+    if (node && typeof node.scrollIntoView === "function") {
+      node.scrollIntoView({ block: "nearest" });
+    }
+  }, [selectedIncomingKey]);
+
+  useEffect(() => {
+    if (!open) return;
+    const leftMap = leftMapRef.current;
+    const rightMap = rightMapRef.current;
+    if (!leftMap || !rightMap) return;
+    requestAnimationFrame(() => {
+      leftMap.resize();
+      rightMap.resize();
+    });
+  }, [open]);
+
+  useEffect(() => {
+    const leftMap = leftMapRef.current;
+    const rightMap = rightMapRef.current;
+    updateSelectedFilter(leftMap, LEFT_SELECTED_ID, selectedBaseKey);
+    updateSelectedFilter(rightMap, RIGHT_SELECTED_ID, selectedIncomingKey);
+  }, [selectedBaseKey, selectedIncomingKey]);
 
   if (!open) return null;
 
@@ -726,7 +837,23 @@ export default function ParcelleMatchView({
               </thead>
               <tbody>
                 {matchRows.map((row) => (
-                  <tr key={row.incomingKey} style={{ borderTop: "1px solid #e2e8f0" }}>
+                  <tr
+                    key={row.incomingKey}
+                    ref={(node) => {
+                      if (node) {
+                        rowRefs.current.set(row.incomingKey, node);
+                      }
+                    }}
+                    onClick={() => handleRowSelect(row.incomingKey)}
+                    style={{
+                      borderTop: "1px solid #e2e8f0",
+                      background:
+                        selectedIncomingKey === row.incomingKey
+                          ? "rgba(59, 130, 246, 0.08)"
+                          : "transparent",
+                      cursor: "pointer",
+                    }}
+                  >
                     <td style={{ padding: "6px 8px", fontSize: 13 }}>
                       {row.incomingLabel}
                     </td>
@@ -796,5 +923,14 @@ export default function ParcelleMatchView({
         </div>
       </div>
     </div>
+  );
+}
+
+export default function ParcelleMatchView(props) {
+  if (!props.open) return null;
+  return (
+    <ParcellesMatchProvider features={props.features}>
+      <ParcelleMatchViewContent {...props} />
+    </ParcellesMatchProvider>
   );
 }
