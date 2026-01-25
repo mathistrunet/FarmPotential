@@ -7,6 +7,10 @@ import {
   getFeatureLabel,
 } from "../utils/parcelleMatching";
 import { toWgs84 } from "../utils/proj";
+import {
+  cacheYearFeatures,
+  getCachedYearEntry,
+} from "../services/parcelleMatchCache";
 
 const baseStyle = {
   version: 8,
@@ -22,6 +26,8 @@ const baseStyle = {
 };
 
 const SOURCE_ID = "parcelles";
+const DEFAULT_LEFT_COLOR = "#15803d";
+const DEFAULT_RIGHT_COLOR = "#2563eb";
 
 function createMap(container) {
   return new maplibregl.Map({
@@ -39,6 +45,9 @@ function ensureLayer(map, color) {
       data: { type: "FeatureCollection", features: [] },
     });
   }
+  if (map.getLayer(`${SOURCE_ID}-fill`)) {
+    map.setPaintProperty(`${SOURCE_ID}-fill`, "fill-color", color);
+  }
   if (!map.getLayer(`${SOURCE_ID}-fill`)) {
     map.addLayer({
       id: `${SOURCE_ID}-fill`,
@@ -46,6 +55,9 @@ function ensureLayer(map, color) {
       source: SOURCE_ID,
       paint: { "fill-color": color, "fill-opacity": 0.35 },
     });
+  }
+  if (map.getLayer(`${SOURCE_ID}-line`)) {
+    map.setPaintProperty(`${SOURCE_ID}-line`, "line-color", color);
   }
   if (!map.getLayer(`${SOURCE_ID}-line`)) {
     map.addLayer({
@@ -179,13 +191,21 @@ export default function ParcelleMatchView({
   const rightFeaturesRef = useRef([]);
   const [leftYear, setLeftYear] = useState(initialYears?.left ?? null);
   const [rightYear, setRightYear] = useState(initialYears?.right ?? null);
+  const [leftColor, setLeftColor] = useState(DEFAULT_LEFT_COLOR);
+  const [rightColor, setRightColor] = useState(DEFAULT_RIGHT_COLOR);
   const [matchRows, setMatchRows] = useState([]);
   const [validatedAt, setValidatedAt] = useState(null);
 
   useEffect(() => {
     if (!open) return;
-    setLeftYear(initialYears?.left ?? yearOptions?.[0] ?? null);
-    setRightYear(initialYears?.right ?? yearOptions?.[1] ?? null);
+    const nextLeft = initialYears?.left ?? yearOptions?.[0] ?? null;
+    const nextRight = initialYears?.right ?? yearOptions?.[1] ?? null;
+    setLeftYear(nextLeft);
+    setRightYear(nextRight);
+    const leftCache = getCachedYearEntry(nextLeft);
+    const rightCache = getCachedYearEntry(nextRight);
+    setLeftColor(leftCache?.color ?? DEFAULT_LEFT_COLOR);
+    setRightColor(rightCache?.color ?? DEFAULT_RIGHT_COLOR);
   }, [open, initialYears, yearOptions]);
 
   useEffect(() => {
@@ -199,10 +219,10 @@ export default function ParcelleMatchView({
     rightMap.addControl(new maplibregl.NavigationControl(), "top-left");
 
     const handleLeftLoad = () => {
-      syncMapView(leftMap, leftFeaturesRef.current, "#15803d");
+      syncMapView(leftMap, leftFeaturesRef.current, leftColor);
     };
     const handleRightLoad = () => {
-      syncMapView(rightMap, rightFeaturesRef.current, "#2563eb");
+      syncMapView(rightMap, rightFeaturesRef.current, rightColor);
     };
     if (leftMap.isStyleLoaded()) {
       handleLeftLoad();
@@ -223,7 +243,7 @@ export default function ParcelleMatchView({
       leftMapRef.current = null;
       rightMapRef.current = null;
     };
-  }, [open]);
+  }, [open, leftColor, rightColor]);
 
   const leftEntries = useMemo(() => {
     if (!leftYear) return [];
@@ -247,15 +267,37 @@ export default function ParcelleMatchView({
       }));
   }, [features, rightYear]);
 
-  const leftDisplayFeatures = useMemo(
-    () => leftEntries.map((entry) => ensureWgs84ForDisplay(entry.feature)),
-    [leftEntries]
-  );
+  const leftDisplayFeatures = useMemo(() => {
+    if (!leftYear) return [];
+    const cache = getCachedYearEntry(leftYear);
+    if (cache?.collection?.features?.length) {
+      return cache.collection.features.map((feature) =>
+        ensureWgs84ForDisplay(feature)
+      );
+    }
+    return leftEntries.map((entry) => ensureWgs84ForDisplay(entry.feature));
+  }, [leftEntries, leftYear]);
 
-  const rightDisplayFeatures = useMemo(
-    () => rightEntries.map((entry) => ensureWgs84ForDisplay(entry.feature)),
-    [rightEntries]
-  );
+  const rightDisplayFeatures = useMemo(() => {
+    if (!rightYear) return [];
+    const cache = getCachedYearEntry(rightYear);
+    if (cache?.collection?.features?.length) {
+      return cache.collection.features.map((feature) =>
+        ensureWgs84ForDisplay(feature)
+      );
+    }
+    return rightEntries.map((entry) => ensureWgs84ForDisplay(entry.feature));
+  }, [rightEntries, rightYear]);
+
+  useEffect(() => {
+    if (!leftYear) return;
+    cacheYearFeatures(leftYear, leftDisplayFeatures, leftColor);
+  }, [leftYear, leftDisplayFeatures, leftColor]);
+
+  useEffect(() => {
+    if (!rightYear) return;
+    cacheYearFeatures(rightYear, rightDisplayFeatures, rightColor);
+  }, [rightYear, rightDisplayFeatures, rightColor]);
 
   const displayDiagnostics = useMemo(() => {
     const reprojected =
@@ -300,9 +342,9 @@ export default function ParcelleMatchView({
     const rightMap = rightMapRef.current;
     if (!leftMap || !rightMap) return;
     const applyLeft = () =>
-      syncMapView(leftMap, leftFeaturesRef.current, "#15803d");
+      syncMapView(leftMap, leftFeaturesRef.current, leftColor);
     const applyRight = () =>
-      syncMapView(rightMap, rightFeaturesRef.current, "#2563eb");
+      syncMapView(rightMap, rightFeaturesRef.current, rightColor);
     if (leftMap.isStyleLoaded()) {
       applyLeft();
     } else {
@@ -313,7 +355,19 @@ export default function ParcelleMatchView({
     } else {
       rightMap.once("load", applyRight);
     }
-  }, [leftDisplayFeatures, rightDisplayFeatures]);
+  }, [leftDisplayFeatures, rightDisplayFeatures, leftColor, rightColor]);
+
+  useEffect(() => {
+    if (!leftYear) return;
+    const cache = getCachedYearEntry(leftYear);
+    setLeftColor(cache?.color ?? DEFAULT_LEFT_COLOR);
+  }, [leftYear]);
+
+  useEffect(() => {
+    if (!rightYear) return;
+    const cache = getCachedYearEntry(rightYear);
+    setRightColor(cache?.color ?? DEFAULT_RIGHT_COLOR);
+  }, [rightYear]);
 
   const baseByKey = useMemo(() => {
     const map = new Map();
@@ -435,6 +489,15 @@ export default function ParcelleMatchView({
             </select>
           </label>
           <label style={{ fontSize: 12, color: "#475569" }}>
+            Couleur gauche
+            <input
+              type="color"
+              value={leftColor}
+              onChange={(event) => setLeftColor(event.target.value)}
+              style={{ marginLeft: 8, width: 36, height: 28, padding: 0 }}
+            />
+          </label>
+          <label style={{ fontSize: 12, color: "#475569" }}>
             Année droite
             <select
               value={rightYear ?? ""}
@@ -452,6 +515,15 @@ export default function ParcelleMatchView({
                 </option>
               ))}
             </select>
+          </label>
+          <label style={{ fontSize: 12, color: "#475569" }}>
+            Couleur droite
+            <input
+              type="color"
+              value={rightColor}
+              onChange={(event) => setRightColor(event.target.value)}
+              style={{ marginLeft: 8, width: 36, height: 28, padding: 0 }}
+            />
           </label>
         </div>
         {displayDiagnostics.reprojected > 0 && (
