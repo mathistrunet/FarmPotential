@@ -1,14 +1,16 @@
-import { Suspense, lazy, useMemo, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useState } from "react";
 
 import ParcellesViewerMap from "./maps/parcelles/ParcellesViewerMap";
 import { ParcellesProvider, useParcelles } from "./maps/parcelles/ParcellesStore";
 import { buildDeterministicPalette } from "./maps/parcelles/parcellesLayers";
+import { projectCultureYear } from "./maps/parcelles/parcellesData";
+import { codeFromLabel, labelFromCode } from "./utils/cultureLabels";
 
 const ParcellesEditorMap = lazy(() => import("./maps/parcelles/ParcellesEditorMap"));
 
 const VIEWER_DEFAULT_FILTERS = {
   cultures: [],
-  cultureField: "culture",
+  cultureField: "current",
   precedent: "",
   ilot: "",
   exploitation: "",
@@ -19,24 +21,36 @@ function AppContent() {
   const [mapMode, setMapMode] = useState("editor");
   const [viewerFilters, setViewerFilters] = useState(VIEWER_DEFAULT_FILTERS);
   const [colorBy, setColorBy] = useState("culture");
+  const cultureYear = viewerFilters.cultureField === "previous" ? "previous" : "current";
+  const viewerCollection = useMemo(
+    () => projectCultureYear(parcellesCollection, cultureYear),
+    [parcellesCollection, cultureYear]
+  );
   const cultureValue = useMemo(
-    () => viewerFilters.cultures.join(", "),
+    () =>
+      viewerFilters.cultures
+        .map((code) => labelFromCode(code) || code)
+        .join(", "),
     [viewerFilters.cultures]
   );
-  const cultureField = viewerFilters.cultureField === "precedent" ? "precedent" : "culture";
   const availableCultures = useMemo(() => {
-    const values = new Set();
-    (parcellesCollection?.features ?? []).forEach((feature) => {
-      const raw = feature?.properties?.[cultureField];
+    const values = new Map();
+    (viewerCollection?.features ?? []).forEach((feature) => {
+      const raw = feature?.properties?.culture;
       if (raw == null) return;
-      const value = String(raw).trim();
-      if (!value) return;
-      values.add(value);
+      const code = String(raw).trim();
+      if (!code) return;
+      const label = labelFromCode(code) || code;
+      if (!values.has(code)) {
+        values.set(code, label);
+      }
     });
-    return Array.from(values).sort((a, b) => a.localeCompare(b, "fr"));
-  }, [parcellesCollection, cultureField]);
+    return Array.from(values.entries())
+      .map(([code, label]) => ({ code, label }))
+      .sort((a, b) => a.label.localeCompare(b.label, "fr"));
+  }, [viewerCollection]);
   const culturePalette = useMemo(
-    () => buildDeterministicPalette(availableCultures),
+    () => buildDeterministicPalette(availableCultures.map((entry) => entry.code)),
     [availableCultures]
   );
   const selectedCultures = useMemo(
@@ -44,9 +58,23 @@ function AppContent() {
     [viewerFilters.cultures]
   );
   const mapPalette = useMemo(
-    () => (colorBy === cultureField ? culturePalette : {}),
-    [colorBy, cultureField, culturePalette]
+    () => (colorBy === "culture" ? culturePalette : {}),
+    [colorBy, culturePalette]
   );
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const sample = viewerCollection?.features?.find((feature) => feature?.properties);
+    if (!sample) return;
+    const keys = Object.keys(sample.properties || {});
+    // eslint-disable-next-line no-console
+    console.info("[ViewerFilters] properties keys sample", keys);
+    // eslint-disable-next-line no-console
+    console.info("[ViewerFilters] culture year mapping", {
+      cultureYear,
+      cultureValue: sample.properties?.culture,
+    });
+  }, [viewerCollection, cultureYear]);
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100vh" }}>
@@ -113,9 +141,9 @@ function AppContent() {
             <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               <span style={{ fontSize: 12, color: "#475569" }}>Cultures</span>
               <select
-                value={cultureField}
+                value={cultureYear}
                 onChange={(event) => {
-                  const nextField = event.target.value === "precedent" ? "precedent" : "culture";
+                  const nextField = event.target.value === "previous" ? "previous" : "current";
                   setViewerFilters((prev) => ({
                     ...prev,
                     cultureField: nextField,
@@ -129,8 +157,8 @@ function AppContent() {
                   fontSize: 12,
                 }}
               >
-                <option value="culture">Année en cours</option>
-                <option value="precedent">Année précédente</option>
+                <option value="current">Année en cours</option>
+                <option value="previous">Année précédente</option>
               </select>
               <input
                 type="text"
@@ -140,7 +168,8 @@ function AppContent() {
                   const raw = event.target.value
                     .split(",")
                     .map((value) => value.trim())
-                    .filter(Boolean);
+                    .filter(Boolean)
+                    .map((value) => codeFromLabel(value) || value);
                   setViewerFilters((prev) => ({ ...prev, cultures: raw }));
                 }}
                 style={{
@@ -166,7 +195,7 @@ function AppContent() {
                 {availableCultures.length ? (
                   availableCultures.map((culture) => (
                     <label
-                      key={culture}
+                      key={culture.code}
                       style={{
                         display: "flex",
                         alignItems: "center",
@@ -177,14 +206,14 @@ function AppContent() {
                     >
                       <input
                         type="checkbox"
-                        checked={selectedCultures.has(culture)}
+                        checked={selectedCultures.has(culture.code)}
                         onChange={(event) => {
                           setViewerFilters((prev) => {
                             const next = new Set(prev.cultures);
                             if (event.target.checked) {
-                              next.add(culture);
+                              next.add(culture.code);
                             } else {
-                              next.delete(culture);
+                              next.delete(culture.code);
                             }
                             return { ...prev, cultures: Array.from(next) };
                           });
@@ -195,11 +224,11 @@ function AppContent() {
                           width: 10,
                           height: 10,
                           borderRadius: 999,
-                          background: culturePalette[culture] || "#94a3b8",
+                          background: culturePalette[culture.code] || "#94a3b8",
                           border: "1px solid rgba(15, 23, 42, 0.2)",
                         }}
                       />
-                      <span>{culture}</span>
+                      <span>{culture.label}</span>
                     </label>
                   ))
                 ) : (
@@ -305,7 +334,7 @@ function AppContent() {
             filters={viewerFilters}
             colorBy={colorBy}
             palette={mapPalette}
-            data={parcellesCollection}
+            data={viewerCollection}
             isActive={mapMode === "viewer"}
           />
         </>

@@ -8,13 +8,25 @@ export const buildStableHash = (value) => {
 };
 
 const PROPERTY_ALIASES = {
-  culture: ["culture", "Culture", "CULTURE", "code_culture", "codeCulture", "code"],
+  culture: [
+    "culture",
+    "Culture",
+    "CULTURE",
+    "cultureN",
+    "cultureN_0",
+    "cultureN0",
+    "code_culture",
+    "codeCulture",
+    "code",
+  ],
   precedent: [
     "precedent",
     "Precedent",
     "PRECEDENT",
     "precedent_culture",
     "precedentCulture",
+    "culture_prec",
+    "culturePrec",
   ],
   ilot: ["ilot", "Ilot", "ILOT", "ilot_numero", "numero_ilot", "numeroIlot"],
   exploitation: [
@@ -26,6 +38,11 @@ const PROPERTY_ALIASES = {
     "id_exploitation",
     "codeExploitation",
   ],
+};
+
+const CULTURE_YEAR_ALIASES = {
+  current: ["cultureN", "cultureN_0", "cultureN0", "culture", "Culture", "CULTURE"],
+  previous: ["cultureN_1", "cultureN1", "culture_prec", "culturePrec"],
 };
 
 const normalizeStringValue = (value) => {
@@ -63,6 +80,18 @@ const resolveSourceCollection = (payload) => {
   return null;
 };
 
+const resolveCultureYearValue = (properties, yearKey = "current") => {
+  const aliases = CULTURE_YEAR_ALIASES[yearKey];
+  if (Array.isArray(aliases)) {
+    const value = resolvePropertyAlias(properties, aliases);
+    if (value != null) return value;
+  }
+  if (yearKey === "previous") {
+    return resolvePropertyAlias(properties, PROPERTY_ALIASES.precedent);
+  }
+  return resolvePropertyAlias(properties, PROPERTY_ALIASES.culture);
+};
+
 export const normalizeParcellesCollection = (payload) => {
   const source = resolveSourceCollection(payload) || {
     type: "FeatureCollection",
@@ -73,8 +102,12 @@ export const normalizeParcellesCollection = (payload) => {
     if (!feature || feature.type !== "Feature") return null;
     const properties = feature.properties || {};
     const normalized = { ...properties };
-    const culture = resolvePropertyAlias(properties, PROPERTY_ALIASES.culture);
-    const precedent = resolvePropertyAlias(properties, PROPERTY_ALIASES.precedent);
+    const culture = Object.prototype.hasOwnProperty.call(properties, "culture")
+      ? normalizeStringValue(properties.culture)
+      : resolvePropertyAlias(properties, PROPERTY_ALIASES.culture);
+    const precedent = Object.prototype.hasOwnProperty.call(properties, "precedent")
+      ? normalizeStringValue(properties.precedent)
+      : resolvePropertyAlias(properties, PROPERTY_ALIASES.precedent);
     const ilot = resolvePropertyAlias(properties, PROPERTY_ALIASES.ilot);
     const exploitation = resolvePropertyAlias(properties, PROPERTY_ALIASES.exploitation);
     if (culture != null) normalized.culture = culture;
@@ -113,5 +146,28 @@ export const normalizeParcellesCollection = (payload) => {
   return {
     type: "FeatureCollection",
     features: source.features.map(normalizeFeature).filter(Boolean),
+  };
+};
+
+export const projectCultureYear = (payload, yearKey = "current") => {
+  const source = resolveSourceCollection(payload) || {
+    type: "FeatureCollection",
+    features: [],
+  };
+
+  return {
+    ...source,
+    features: source.features.map((feature) => {
+      if (!feature || feature.type !== "Feature") return feature;
+      const properties = feature.properties || {};
+      const cultureValue = resolveCultureYearValue(properties, yearKey);
+      return {
+        ...feature,
+        properties: {
+          ...properties,
+          culture: cultureValue ?? null,
+        },
+      };
+    }),
   };
 };
