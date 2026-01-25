@@ -26,7 +26,7 @@ const CSV_HEADERS = [
 
 function escapeCsvCell(value) {
   const str = value == null ? "" : String(value);
-  if (/["\t\n\r]/.test(str)) {
+  if (/[";\t\n\r]/.test(str)) {
     return `"${str.replace(/"/g, '""')}"`;
   }
   return str;
@@ -188,7 +188,7 @@ export function buildParcellesCsv(features, secteur, exploitation, codeExploitat
   });
 
   return [CSV_HEADERS, ...rows]
-    .map((row) => row.map(escapeCsvCell).join("\t"))
+    .map((row) => row.map(escapeCsvCell).join(";"))
     .join("\r\n");
 }
 
