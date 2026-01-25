@@ -7,6 +7,16 @@ export const buildStableHash = (value) => {
   return (hash >>> 0).toString(16);
 };
 
+const DEFAULT_PARCELLE_NUMBER_KEYS = [
+  "parcelleNo",
+  "displayNo",
+  "numero",
+  "nom_affiche",
+  "idlot_numero",
+  "__id",
+  "id",
+];
+
 const PROPERTY_ALIASES = {
   culture: [
     "culture",
@@ -70,6 +80,93 @@ const resolvePropertyKey = (properties, key) => {
   );
   if (!matched) return null;
   return normalizeStringValue(properties[matched]);
+};
+
+const findUniqueKey = (features, preferredKeys) => {
+  for (const key of preferredKeys) {
+    const seen = new Set();
+    let unique = true;
+    for (const feature of features) {
+      const value = resolvePropertyKey(feature?.properties, key);
+      if (value == null) {
+        unique = false;
+        break;
+      }
+      if (seen.has(value)) {
+        unique = false;
+        break;
+      }
+      seen.add(value);
+    }
+    if (unique && seen.size > 0) return key;
+  }
+  return null;
+};
+
+const getStableSortKey = (feature, fallback) =>
+  buildStableHash({
+    geometry: feature?.geometry,
+    id: feature?.id ?? feature?.properties?.id ?? fallback,
+  });
+
+export const assignUniqueParcelNumbers = (payload, { preferredKeys } = {}) => {
+  const source = resolveSourceCollection(payload) || {
+    type: "FeatureCollection",
+    features: [],
+  };
+  const features = source.features ?? [];
+  if (!features.length) return source;
+  const keys = Array.isArray(preferredKeys) && preferredKeys.length
+    ? preferredKeys
+    : DEFAULT_PARCELLE_NUMBER_KEYS;
+  const uniqueKey = findUniqueKey(features, keys);
+  const numbersByIndex = new Map();
+  if (uniqueKey) {
+    const used = new Set();
+    features.forEach((feature, index) => {
+      const rawValue = resolvePropertyKey(feature?.properties, uniqueKey);
+      let value = rawValue != null ? String(rawValue) : String(index + 1);
+      if (used.has(value)) {
+        let suffix = 2;
+        let candidate = `${value}-${suffix}`;
+        while (used.has(candidate)) {
+          suffix += 1;
+          candidate = `${value}-${suffix}`;
+        }
+        value = candidate;
+      }
+      used.add(value);
+      numbersByIndex.set(index, value);
+    });
+  } else {
+    const sorted = features
+      .map((feature, index) => ({
+        index,
+        sortKey: getStableSortKey(feature, index),
+      }))
+      .sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+    let counter = 1;
+    sorted.forEach(({ index }) => {
+      numbersByIndex.set(index, String(counter));
+      counter += 1;
+    });
+  }
+
+  return {
+    ...source,
+    features: features.map((feature, index) => {
+      if (!feature || feature.type !== "Feature") return feature;
+      const parcelleNo = numbersByIndex.get(index);
+      if (parcelleNo == null) return feature;
+      return {
+        ...feature,
+        properties: {
+          ...(feature.properties || {}),
+          parcelleNo,
+        },
+      };
+    }),
+  };
 };
 
 const resolveSourceCollection = (payload) => {
@@ -136,6 +233,7 @@ export const normalizeParcellesCollection = (payload) => {
     }
     const baseId =
       feature.id ??
+      normalized.__id ??
       normalized.id ??
       `parcelle-${buildStableHash({
         geometry: feature.geometry,
@@ -153,6 +251,7 @@ export const normalizeParcellesCollection = (payload) => {
       id: nextId,
       properties: {
         ...normalized,
+        __id: nextId,
         id: normalized.id ?? nextId,
       },
     };

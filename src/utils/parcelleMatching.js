@@ -3,7 +3,7 @@ import { intersectionArea } from "./overlapResolution";
 
 export function getFeatureLabel(feature, index) {
   const props = feature?.properties || {};
-  const label = props.nom_affiche || props.numero || props.id || null;
+  const label = props.nom_affiche || props.parcelleNo || props.numero || props.id || null;
   if (label != null && String(label).trim() !== "") return String(label);
   return `Parcelle ${index + 1}`;
 }

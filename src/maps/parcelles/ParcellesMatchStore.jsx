@@ -1,6 +1,6 @@
 import { createContext, useContext, useMemo, useState } from "react";
 
-import { normalizeParcellesCollection } from "./parcellesData";
+import { assignUniqueParcelNumbers, normalizeParcellesCollection } from "./parcellesData";
 
 const ParcellesMatchContext = createContext(null);
 
@@ -15,7 +15,7 @@ const buildParcellesByYear = (features) => {
     grouped[year].features.push(feature);
   });
   Object.entries(grouped).forEach(([year, collection]) => {
-    grouped[year] = normalizeParcellesCollection(collection);
+    grouped[year] = assignUniqueParcelNumbers(normalizeParcellesCollection(collection));
   });
   return grouped;
 };
