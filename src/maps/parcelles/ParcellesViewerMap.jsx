@@ -18,51 +18,6 @@ import { applyFilters } from "./parcellesFilters";
 
 const DEFAULT_CENTER = [2.2137, 46.2276];
 const DEFAULT_ZOOM = 5;
-const DEBUG_MAP = import.meta.env.DEV;
-
-const computeCollectionBounds = (collection) => {
-  if (!collection?.features?.length) return null;
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-
-  const visitCoord = (coord) => {
-    if (!Array.isArray(coord) || coord.length < 2) return;
-    const [lng, lat] = coord;
-    if (typeof lng !== "number" || typeof lat !== "number") return;
-    minX = Math.min(minX, lng);
-    minY = Math.min(minY, lat);
-    maxX = Math.max(maxX, lng);
-    maxY = Math.max(maxY, lat);
-  };
-
-  const visitGeometry = (geometry) => {
-    if (!geometry) return;
-    const { type, coordinates } = geometry;
-    if (!coordinates) return;
-    if (type === "Point") {
-      visitCoord(coordinates);
-      return;
-    }
-    if (type === "MultiPoint" || type === "LineString") {
-      coordinates.forEach(visitCoord);
-      return;
-    }
-    if (type === "MultiLineString" || type === "Polygon") {
-      coordinates.flat().forEach(visitCoord);
-      return;
-    }
-    if (type === "MultiPolygon") {
-      coordinates.flat(2).forEach(visitCoord);
-    }
-  };
-
-  collection.features.forEach((feature) => visitGeometry(feature.geometry));
-  if (!Number.isFinite(minX) || !Number.isFinite(minY)) return null;
-  return [minX, minY, maxX, maxY];
-};
-
 export default function ParcellesViewerMap({
   data,
   filters,
@@ -77,7 +32,6 @@ export default function ParcellesViewerMap({
   const popupRef = useRef(null);
   const hoveredIdRef = useRef(null);
   const [collection, setCollection] = useState(null);
-  const [debugStats, setDebugStats] = useState(null);
   const ensureRaster = useRasterLayers();
   const latestFiltersRef = useRef(filters);
   const latestPaletteRef = useRef(palette);
@@ -149,9 +103,6 @@ export default function ParcellesViewerMap({
         },
       ],
     };
-    if (DEBUG_MAP) {
-      console.info("[ViewerMap] style", style);
-    }
     const map = new maplibregl.Map({
       container: containerRef.current,
       style,
@@ -218,9 +169,6 @@ export default function ParcellesViewerMap({
     };
 
     const onLoad = () => {
-      if (DEBUG_MAP) {
-        console.info("[ViewerMap] load event fired");
-      }
       ensureRaster(map);
       ensureLayers();
       applyFilters(map, latestFiltersRef.current);
@@ -270,10 +218,6 @@ export default function ParcellesViewerMap({
       const precedent = props.precedent ? `Précédent : ${props.precedent}` : null;
       const content = [title, culture, precedent].filter(Boolean).join("<br />");
       if (!content) return;
-      if (DEBUG_MAP) {
-        // eslint-disable-next-line no-console
-        console.info("[ViewerMap] click properties", props);
-      }
       if (popupRef.current) {
         popupRef.current.remove();
       }
@@ -323,40 +267,8 @@ export default function ParcellesViewerMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    if (DEBUG_MAP) {
-      // eslint-disable-next-line no-console
-      console.info("[ViewerMap] filters", filters);
-    }
     applyFilters(map, filters);
   }, [filters]);
-
-  useEffect(() => {
-    if (!DEBUG_MAP) return;
-    const map = mapRef.current;
-    if (!map || !map.getLayer(PARCELLES_VIEWER_FILL_ID)) return;
-    const updateStats = () => {
-      const total = resolvedCollection?.features?.length ?? 0;
-      const visible = map.queryRenderedFeatures({
-        layers: [PARCELLES_VIEWER_FILL_ID],
-      }).length;
-      setDebugStats({ total, visible });
-    };
-    if (map.isStyleLoaded()) {
-      requestAnimationFrame(updateStats);
-    } else {
-      map.once("idle", updateStats);
-    }
-  }, [filters, resolvedCollection, colorBy]);
-
-  useEffect(() => {
-    if (!DEBUG_MAP) return;
-    const featureCount = resolvedCollection?.features?.length ?? 0;
-    const bounds = computeCollectionBounds(resolvedCollection);
-    console.info("[ViewerMap] parcelles", {
-      count: featureCount,
-      bounds,
-    });
-  }, [resolvedCollection]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -396,23 +308,6 @@ export default function ParcellesViewerMap({
           }}
         >
           Aucune parcelle chargée.
-        </div>
-      ) : null}
-      {DEBUG_MAP && debugStats ? (
-        <div
-          style={{
-            position: "absolute",
-            bottom: 16,
-            right: 16,
-            background: "rgba(15, 23, 42, 0.85)",
-            color: "#fff",
-            padding: "8px 12px",
-            borderRadius: 8,
-            fontSize: 12,
-          }}
-        >
-          <div>Total : {debugStats.total}</div>
-          <div>Visibles : {debugStats.visible}</div>
         </div>
       ) : null}
     </div>

@@ -43,17 +43,33 @@ function ensureLayer(map, color) {
     map.addSource(SOURCE_ID, {
       type: "geojson",
       data: { type: "FeatureCollection", features: [] },
+      promoteId: "id",
     });
   }
   if (map.getLayer(`${SOURCE_ID}-fill`)) {
     map.setPaintProperty(`${SOURCE_ID}-fill`, "fill-color", color);
+    map.setPaintProperty(`${SOURCE_ID}-fill`, "fill-opacity", [
+      "case",
+      ["boolean", ["feature-state", "hover"], false],
+      0.6,
+      0.35,
+    ]);
   }
   if (!map.getLayer(`${SOURCE_ID}-fill`)) {
     map.addLayer({
       id: `${SOURCE_ID}-fill`,
       type: "fill",
       source: SOURCE_ID,
-      paint: { "fill-color": color, "fill-opacity": 0.35 },
+      filter: ["in", ["geometry-type"], ["literal", ["Polygon", "MultiPolygon"]]],
+      paint: {
+        "fill-color": color,
+        "fill-opacity": [
+          "case",
+          ["boolean", ["feature-state", "hover"], false],
+          0.6,
+          0.35,
+        ],
+      },
     });
   }
   if (map.getLayer(`${SOURCE_ID}-line`)) {
@@ -64,9 +80,18 @@ function ensureLayer(map, color) {
       id: `${SOURCE_ID}-line`,
       type: "line",
       source: SOURCE_ID,
+      filter: ["in", ["geometry-type"], ["literal", ["Polygon", "MultiPolygon"]]],
       paint: { "line-color": color, "line-width": 2 },
     });
   }
+}
+
+function normalizeDisplayFeatures(features) {
+  return (features || []).map((feature, index) => ({
+    ...feature,
+    id: feature.id ?? feature.properties?.id ?? `${SOURCE_ID}-${index}`,
+    properties: feature.properties || {},
+  }));
 }
 
 function updateMapFeatures(map, features, color) {
@@ -76,7 +101,7 @@ function updateMapFeatures(map, features, color) {
   if (source) {
     source.setData({
       type: "FeatureCollection",
-      features,
+      features: normalizeDisplayFeatures(features),
     });
   }
 }
@@ -86,6 +111,60 @@ function syncMapView(map, features, color) {
   updateMapFeatures(map, features, color);
   fitMapToFeatures(map, features);
   map.resize();
+}
+
+function attachViewerInteractions(map, popupRef, hoveredIdRef) {
+  const fillId = `${SOURCE_ID}-fill`;
+  const handleMove = (event) => {
+    const feature = event.features && event.features[0];
+    if (!feature) return;
+    const id = feature.id ?? feature.properties?.id;
+    if (id == null) return;
+    if (hoveredIdRef.current && hoveredIdRef.current !== id) {
+      map.setFeatureState({ source: SOURCE_ID, id: hoveredIdRef.current }, { hover: false });
+    }
+    hoveredIdRef.current = id;
+    map.setFeatureState({ source: SOURCE_ID, id }, { hover: true });
+  };
+
+  const handleLeave = () => {
+    if (hoveredIdRef.current) {
+      map.setFeatureState({ source: SOURCE_ID, id: hoveredIdRef.current }, { hover: false });
+    }
+    hoveredIdRef.current = null;
+  };
+
+  const handleClick = (event) => {
+    const feature = event.features && event.features[0];
+    if (!feature) return;
+    const props = feature.properties || {};
+    const title = props.nom || props.nom_affiche || "Parcelle";
+    const culture = props.culture ? `Culture : ${props.culture}` : null;
+    const precedent = props.precedent ? `Précédent : ${props.precedent}` : null;
+    const content = [title, culture, precedent].filter(Boolean).join("<br />");
+    if (!content) return;
+    if (popupRef.current) {
+      popupRef.current.remove();
+    }
+    popupRef.current = new maplibregl.Popup({ closeButton: true })
+      .setLngLat(event.lngLat)
+      .setHTML(`<div style="font-size:12px;">${content}</div>`)
+      .addTo(map);
+  };
+
+  map.on("mousemove", fillId, handleMove);
+  map.on("mouseleave", fillId, handleLeave);
+  map.on("click", fillId, handleClick);
+
+  return () => {
+    map.off("mousemove", fillId, handleMove);
+    map.off("mouseleave", fillId, handleLeave);
+    map.off("click", fillId, handleClick);
+    if (popupRef.current) {
+      popupRef.current.remove();
+      popupRef.current = null;
+    }
+  };
 }
 
 function collectCoordinates(coords, acc) {
@@ -187,6 +266,10 @@ export default function ParcelleMatchView({
   const rightContainerRef = useRef(null);
   const leftMapRef = useRef(null);
   const rightMapRef = useRef(null);
+  const leftPopupRef = useRef(null);
+  const rightPopupRef = useRef(null);
+  const leftHoveredIdRef = useRef(null);
+  const rightHoveredIdRef = useRef(null);
   const leftFeaturesRef = useRef([]);
   const rightFeaturesRef = useRef([]);
   const [leftYear, setLeftYear] = useState(initialYears?.left ?? null);
@@ -235,9 +318,22 @@ export default function ParcelleMatchView({
       rightMap.once("load", handleRightLoad);
     }
 
+    const detachLeft = attachViewerInteractions(
+      leftMap,
+      leftPopupRef,
+      leftHoveredIdRef
+    );
+    const detachRight = attachViewerInteractions(
+      rightMap,
+      rightPopupRef,
+      rightHoveredIdRef
+    );
+
     return () => {
       leftMap.off("load", handleLeftLoad);
       rightMap.off("load", handleRightLoad);
+      detachLeft();
+      detachRight();
       leftMap.remove();
       rightMap.remove();
       leftMapRef.current = null;

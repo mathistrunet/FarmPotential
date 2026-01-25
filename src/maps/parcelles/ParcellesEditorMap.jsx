@@ -52,8 +52,6 @@ const DRAW_LAYER_IDS = [
   "draw-line-inactive",
   "draw-line-active",
 ];
-const DEFAULT_POLYGON_FILL = "#18A0FB";
-const DEFAULT_POLYGON_LINE = "#0066CC";
 const INVALID_YEAR = -9999;
 
 const normalizeYearValue = (value) => {
@@ -196,14 +194,11 @@ export default function ParcellesEditorMap() {
   });
   const [parcelleYearFilter, setParcelleYearFilter] = useState("all");
   const [parcelleGroupFilter, setParcelleGroupFilter] = useState("all");
-  const [debugView, setDebugView] = useState(false);
   const [matchViewOpen, setMatchViewOpen] = useState(false);
   const [matchYears, setMatchYears] = useState({ left: null, right: null });
   const [validatedMatches, setValidatedMatches] = useState([]);
   const [validatedMatchesAt, setValidatedMatchesAt] = useState(null);
   const drawLayerFiltersRef = useRef(new Map());
-  const drawLayerVisibilityRef = useRef(new Map());
-  const featuresRef = useRef(features);
   const toolbarScrollRef = useRef(null);
   const [backendReady, setBackendReady] = useState(false);
   const lastSavedPayloadRef = useRef("");
@@ -226,34 +221,6 @@ export default function ParcellesEditorMap() {
       properties: feature.properties || {},
     })),
   }), []);
-  const buildDebugFeatureCollection = useCallback(() => {
-    const draw = drawRef.current;
-    if (!draw || typeof draw.getAll !== "function") {
-      return { type: "FeatureCollection", features: featuresRef.current };
-    }
-    let data = null;
-    try {
-      data = draw.getAll();
-    } catch (error) {
-      console.warn("Impossible de lire les parcelles depuis Mapbox Draw.", error);
-      return { type: "FeatureCollection", features: featuresRef.current };
-    }
-    if (data) {
-      const safeFeatures = (data?.features || [])
-        .filter(
-          (feature) =>
-            feature.geometry?.type === "Polygon" ||
-            feature.geometry?.type === "MultiPolygon"
-        )
-        .map((feature) => ({
-          ...feature,
-          properties: feature.properties || {},
-        }));
-      return { type: "FeatureCollection", features: safeFeatures };
-    }
-    return { type: "FeatureCollection", features: featuresRef.current };
-  }, [drawRef]);
-
   const yearOptions = useMemo(() => {
     const years = new Set();
     let hasUnknown = false;
@@ -269,10 +236,6 @@ export default function ParcellesEditorMap() {
       years: Array.from(years).sort((a, b) => b - a),
       hasUnknown,
     };
-  }, [features]);
-
-  useEffect(() => {
-    featuresRef.current = features;
   }, [features]);
 
   const groupOptions = useMemo(() => {
@@ -323,150 +286,6 @@ export default function ParcellesEditorMap() {
       setSideExpanded(false);
     }
   }, [parcelleViewMode, sideOpen]);
-
-  useEffect(() => {
-    const draw = drawRef.current;
-    if (!draw) return;
-    const desiredMode = debugView ? "static" : "simple_select";
-    const availableModes = draw.modes ?? draw._modes ?? {};
-    const nextMode = availableModes[desiredMode] ? desiredMode : "simple_select";
-    draw.changeMode(nextMode);
-  }, [debugView, features.length]);
-
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-    const sourceId = "debug-parcelles";
-    const fillId = "debug-parcelles-fill";
-    const lineId = "debug-parcelles-line";
-
-    const setDrawLayersVisibility = (visibility) => {
-      const layerIds = DRAW_LAYER_IDS.flatMap((layerId) =>
-        DRAW_LAYER_VARIANTS.map((suffix) => `${layerId}${suffix}`)
-      );
-      layerIds.forEach((layerId) => {
-        if (!map.getLayer(layerId)) return;
-        if (visibility === "none") {
-          if (!drawLayerVisibilityRef.current.has(layerId)) {
-            const current = map.getLayoutProperty(layerId, "visibility") ?? "visible";
-            drawLayerVisibilityRef.current.set(layerId, current);
-          }
-          map.setLayoutProperty(layerId, "visibility", "none");
-        } else {
-          const previous = drawLayerVisibilityRef.current.get(layerId) ?? "visible";
-          map.setLayoutProperty(layerId, "visibility", previous);
-          drawLayerVisibilityRef.current.delete(layerId);
-        }
-      });
-    };
-
-    const ensureDebugLayers = () => {
-      if (!map.getSource(sourceId)) {
-        map.addSource(sourceId, {
-          type: "geojson",
-          data: emptyParcellesCollection,
-        });
-      }
-      if (!map.getLayer(fillId)) {
-        map.addLayer({
-          id: fillId,
-          type: "fill",
-          source: sourceId,
-          filter: ["in", ["geometry-type"], "Polygon", "MultiPolygon"],
-          paint: {
-            "fill-color": [
-              "case",
-              ["has", "color"],
-              ["get", "color"],
-              DEFAULT_POLYGON_FILL,
-            ],
-            "fill-opacity": 0.25,
-          },
-        });
-      }
-      if (!map.getLayer(lineId)) {
-        map.addLayer({
-          id: lineId,
-          type: "line",
-          source: sourceId,
-          filter: ["in", ["geometry-type"], "Polygon", "MultiPolygon"],
-          layout: { "line-cap": "round", "line-join": "round" },
-          paint: {
-            "line-color": [
-              "case",
-              ["has", "outlineColor"],
-              ["get", "outlineColor"],
-              ["case", ["has", "color"], ["get", "color"], DEFAULT_POLYGON_LINE],
-            ],
-            "line-width": 2,
-          },
-        });
-      }
-    };
-
-    const applyDebugView = () => {
-      if (debugView) {
-        ensureDebugLayers();
-        const source = map.getSource(sourceId);
-        if (source && typeof source.setData === "function") {
-          source.setData(buildDebugFeatureCollection());
-        }
-        setDrawLayersVisibility("none");
-      } else {
-        setDrawLayersVisibility("visible");
-        if (map.getLayer(lineId)) map.removeLayer(lineId);
-        if (map.getLayer(fillId)) map.removeLayer(fillId);
-        if (map.getSource(sourceId)) map.removeSource(sourceId);
-      }
-    };
-
-    if (typeof map.isStyleLoaded === "function" && !map.isStyleLoaded()) {
-      map.once("load", applyDebugView);
-    } else {
-      applyDebugView();
-    }
-
-    return () => {
-      if (!map.getStyle()) return;
-      if (map.getLayer(lineId)) map.removeLayer(lineId);
-      if (map.getLayer(fillId)) map.removeLayer(fillId);
-      if (map.getSource(sourceId)) map.removeSource(sourceId);
-      setDrawLayersVisibility("visible");
-    };
-  }, [debugView, mapRef, emptyParcellesCollection, buildDebugFeatureCollection]);
-
-  useEffect(() => {
-    if (!debugView) return;
-    const map = mapRef.current;
-    if (!map) return;
-    const source = map.getSource("debug-parcelles");
-    if (!source || typeof source.setData !== "function") return;
-    source.setData(buildDebugFeatureCollection());
-  }, [debugView, features, mapRef, buildDebugFeatureCollection]);
-
-  useEffect(() => {
-    if (!debugView) return;
-    const map = mapRef.current;
-    if (!map) return;
-    const refreshDebugSource = () => {
-      const source = map.getSource("debug-parcelles");
-      if (!source || typeof source.setData !== "function") return;
-      source.setData(buildDebugFeatureCollection());
-    };
-    refreshDebugSource();
-    map.on("draw.create", refreshDebugSource);
-    map.on("draw.update", refreshDebugSource);
-    map.on("draw.delete", refreshDebugSource);
-    map.on("draw.selectionchange", refreshDebugSource);
-    map.on("draw.render", refreshDebugSource);
-    return () => {
-      map.off("draw.create", refreshDebugSource);
-      map.off("draw.update", refreshDebugSource);
-      map.off("draw.delete", refreshDebugSource);
-      map.off("draw.selectionchange", refreshDebugSource);
-      map.off("draw.render", refreshDebugSource);
-    };
-  }, [debugView, mapRef, buildDebugFeatureCollection]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1398,29 +1217,8 @@ export default function ParcellesEditorMap() {
                 >
                   Comparer les parcelles
                 </button>
-                <label
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 6,
-                    marginLeft: "auto",
-                    fontSize: 12,
-                    color: "#444",
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={debugView}
-                    onChange={(e) => setDebugView(e.target.checked)}
-                  />
-                  Mode débug (géométries figées)
-                </label>
+                <div style={{ marginLeft: "auto" }} />
               </div>
-              <p style={{ margin: "6px 0 0", fontSize: 12, color: "#666" }}>
-                Le mode débug affiche les parcelles sur la carte sans édition
-                de géométrie : filtres et couleurs restent disponibles, mais les
-                contours ne sont plus modifiables.
-              </p>
               <p style={{ margin: "8px 0 0", fontSize: 12, color: "#666" }}>
                 Ouvre une vue dédiée pour comparer deux années côte à côte et
                 valider les correspondances proposées.
@@ -1774,30 +1572,15 @@ export default function ParcellesEditorMap() {
 
             {/* Dessin */}
             <div style={{ ...groupStyle, borderRight: "none" }}>
-              {debugView ? (
-                <div
-                  style={{
-                    padding: "6px 10px",
-                    borderRadius: 8,
-                    border: "1px dashed #d1d5db",
-                    color: "#6b7280",
-                    fontSize: 12,
-                    background: "#f9fafb",
-                  }}
-                >
-                  Mode débug activé : édition des polygones désactivée.
-                </div>
-              ) : (
-                <DrawToolbar
-                  mapRef={mapRef}
-                  drawRef={drawRef}
-                  features={features}
-                  setFeatures={setFeatures}
-                  selectFeatureOnMap={selectFeatureOnMap}
-                  onReset={handleResetParcelles}
-                  compact={compact}
-                />
-              )}
+              <DrawToolbar
+                mapRef={mapRef}
+                drawRef={drawRef}
+                features={features}
+                setFeatures={setFeatures}
+                selectFeatureOnMap={selectFeatureOnMap}
+                onReset={handleResetParcelles}
+                compact={compact}
+              />
             </div>
           </div>
           {compact && (
