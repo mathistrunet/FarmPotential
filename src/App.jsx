@@ -203,6 +203,24 @@ export default function App() {
     () => ({ type: "FeatureCollection", features: [] }),
     []
   );
+  const buildDebugFeatureCollection = useCallback(() => {
+    const draw = drawRef.current;
+    if (draw && typeof draw.getAll === "function") {
+      const data = draw.getAll();
+      const safeFeatures = (data?.features || [])
+        .filter(
+          (feature) =>
+            feature.geometry?.type === "Polygon" ||
+            feature.geometry?.type === "MultiPolygon"
+        )
+        .map((feature) => ({
+          ...feature,
+          properties: feature.properties || {},
+        }));
+      return { type: "FeatureCollection", features: safeFeatures };
+    }
+    return { type: "FeatureCollection", features: featuresRef.current };
+  }, [drawRef]);
 
   const yearOptions = useMemo(() => {
     const years = new Set();
@@ -359,10 +377,7 @@ export default function App() {
         ensureDebugLayers();
         const source = map.getSource(sourceId);
         if (source && typeof source.setData === "function") {
-          source.setData({
-            type: "FeatureCollection",
-            features: featuresRef.current,
-          });
+          source.setData(buildDebugFeatureCollection());
         }
         setDrawLayersVisibility("none");
       } else {
@@ -386,7 +401,7 @@ export default function App() {
       if (map.getSource(sourceId)) map.removeSource(sourceId);
       setDrawLayersVisibility("visible");
     };
-  }, [debugView, mapRef, emptyParcellesCollection]);
+  }, [debugView, mapRef, emptyParcellesCollection, buildDebugFeatureCollection]);
 
   useEffect(() => {
     if (!debugView) return;
@@ -394,11 +409,32 @@ export default function App() {
     if (!map) return;
     const source = map.getSource("debug-parcelles");
     if (!source || typeof source.setData !== "function") return;
-    source.setData({
-      type: "FeatureCollection",
-      features,
-    });
-  }, [debugView, features, mapRef]);
+    source.setData(buildDebugFeatureCollection());
+  }, [debugView, features, mapRef, buildDebugFeatureCollection]);
+
+  useEffect(() => {
+    if (!debugView) return;
+    const map = mapRef.current;
+    if (!map) return;
+    const refreshDebugSource = () => {
+      const source = map.getSource("debug-parcelles");
+      if (!source || typeof source.setData !== "function") return;
+      source.setData(buildDebugFeatureCollection());
+    };
+    refreshDebugSource();
+    map.on("draw.create", refreshDebugSource);
+    map.on("draw.update", refreshDebugSource);
+    map.on("draw.delete", refreshDebugSource);
+    map.on("draw.selectionchange", refreshDebugSource);
+    map.on("draw.render", refreshDebugSource);
+    return () => {
+      map.off("draw.create", refreshDebugSource);
+      map.off("draw.update", refreshDebugSource);
+      map.off("draw.delete", refreshDebugSource);
+      map.off("draw.selectionchange", refreshDebugSource);
+      map.off("draw.render", refreshDebugSource);
+    };
+  }, [debugView, mapRef, buildDebugFeatureCollection]);
 
   useEffect(() => {
     const map = mapRef.current;
