@@ -84,12 +84,19 @@ export function useMapInitialization() {
   const setDrawFeatures = useCallback(
     (collection) => {
       if (!collection) return;
+      const safeCollection = {
+        type: "FeatureCollection",
+        features: (collection.features || []).map((feature) => ({
+          ...feature,
+          properties: feature.properties || {},
+        })),
+      };
       const draw = drawRef.current;
       if (!draw) {
-        pendingFeaturesRef.current = collection;
+        pendingFeaturesRef.current = safeCollection;
         return;
       }
-      draw.set(collection);
+      draw.set(safeCollection);
       syncFeaturesFromDraw(draw);
     },
     [syncFeaturesFromDraw]

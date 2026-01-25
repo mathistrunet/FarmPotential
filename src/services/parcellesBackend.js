@@ -1,11 +1,49 @@
 const PARCELLES_ENDPOINT = "/api/parcelles";
 const LOCAL_STORAGE_KEY = "parcelles.geojson";
 
-const normalizeFeatureCollection = (payload) => {
-  if (payload && payload.type === "FeatureCollection") {
-    return payload;
+const normalizeFeature = (feature) => {
+  if (!feature || typeof feature !== "object") {
+    return null;
   }
-  return { type: "FeatureCollection", features: [] };
+  if (feature.type !== "Feature") {
+    return null;
+  }
+  return {
+    ...feature,
+    properties: feature.properties || {},
+  };
+};
+
+const normalizeFeatureCollection = (payload) => {
+  const resolveCollection = (candidate) => {
+    if (!candidate || typeof candidate !== "object") return null;
+    if (candidate.type !== "FeatureCollection") return null;
+    if (!Array.isArray(candidate.features)) return null;
+    return candidate;
+  };
+
+  let collection = resolveCollection(payload);
+  if (!collection && payload && typeof payload === "object") {
+    collection =
+      resolveCollection(payload.data) ||
+      resolveCollection(payload.geojson) ||
+      resolveCollection(payload.collection);
+  }
+  if (!collection && Array.isArray(payload?.features)) {
+    collection = { type: "FeatureCollection", features: payload.features };
+  }
+  if (!collection && Array.isArray(payload)) {
+    collection = { type: "FeatureCollection", features: payload };
+  }
+
+  if (!collection) {
+    return { type: "FeatureCollection", features: [] };
+  }
+
+  return {
+    ...collection,
+    features: collection.features.map(normalizeFeature).filter(Boolean),
+  };
 };
 
 const canUseLocalStorage = () =>
