@@ -3,24 +3,36 @@ import { PARCELLES_VIEWER_FILL_ID, PARCELLES_VIEWER_LINE_ID } from "./parcellesL
 const buildFilterExpression = (filters) => {
   if (!filters) return null;
   const clauses = [];
-  if (filters.cultures && filters.cultures.length > 0) {
+  const cultures = Array.isArray(filters.cultures)
+    ? filters.cultures.map((value) => String(value).trim()).filter(Boolean)
+    : [];
+  if (cultures.length > 0) {
     clauses.push([
       "in",
-      ["get", "culture"],
-      ["literal", filters.cultures],
+      ["coalesce", ["get", "culture"], ""],
+      ["literal", cultures],
     ]);
   }
-  if (filters.precedent) {
-    clauses.push(["==", ["get", "precedent"], filters.precedent]);
+  const precedent =
+    typeof filters.precedent === "string"
+      ? filters.precedent.trim()
+      : filters.precedent;
+  if (precedent) {
+    clauses.push(["==", ["coalesce", ["get", "precedent"], ""], precedent]);
   }
-  if (filters.ilot) {
-    clauses.push(["==", ["get", "ilot"], filters.ilot]);
+  const ilot = typeof filters.ilot === "string" ? filters.ilot.trim() : filters.ilot;
+  if (ilot) {
+    clauses.push(["==", ["coalesce", ["get", "ilot"], ""], ilot]);
   }
-  if (filters.exploitationId) {
+  const exploitation =
+    typeof filters.exploitation === "string"
+      ? filters.exploitation.trim()
+      : filters.exploitation;
+  if (exploitation) {
     clauses.push([
       "==",
-      ["to-string", ["get", "exploitationId"]],
-      String(filters.exploitationId),
+      ["to-string", ["coalesce", ["get", "exploitation"], ""]],
+      String(exploitation),
     ]);
   }
 

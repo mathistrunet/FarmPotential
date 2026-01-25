@@ -1,6 +1,7 @@
 import { Suspense, lazy, useMemo, useState } from "react";
 
 import ParcellesViewerMap from "./maps/parcelles/ParcellesViewerMap";
+import { ParcellesProvider, useParcelles } from "./maps/parcelles/ParcellesStore";
 
 const ParcellesEditorMap = lazy(() => import("./maps/parcelles/ParcellesEditorMap"));
 
@@ -8,10 +9,11 @@ const VIEWER_DEFAULT_FILTERS = {
   cultures: [],
   precedent: "",
   ilot: "",
-  exploitationId: "",
+  exploitation: "",
 };
 
-export default function App() {
+function AppContent() {
+  const { parcellesCollection } = useParcelles();
   const [mapMode, setMapMode] = useState("editor");
   const [viewerFilters, setViewerFilters] = useState(VIEWER_DEFAULT_FILTERS);
   const [colorBy, setColorBy] = useState("culture");
@@ -145,11 +147,11 @@ export default function App() {
               <span style={{ fontSize: 12, color: "#475569" }}>Exploitation</span>
               <input
                 type="text"
-                value={viewerFilters.exploitationId}
+                value={viewerFilters.exploitation}
                 onChange={(event) =>
                   setViewerFilters((prev) => ({
                     ...prev,
-                    exploitationId: event.target.value,
+                    exploitation: event.target.value,
                   }))
                 }
                 style={{
@@ -175,6 +177,7 @@ export default function App() {
                 <option value="culture">Culture</option>
                 <option value="precedent">Précédent</option>
                 <option value="ilot">Ilot</option>
+                <option value="exploitation">Exploitation</option>
                 <option value="score">Score</option>
               </select>
             </label>
@@ -197,6 +200,7 @@ export default function App() {
           <ParcellesViewerMap
             filters={viewerFilters}
             colorBy={colorBy}
+            data={parcellesCollection}
             isActive={mapMode === "viewer"}
           />
         </>
@@ -206,5 +210,13 @@ export default function App() {
         </Suspense>
       )}
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <ParcellesProvider>
+      <AppContent />
+    </ParcellesProvider>
   );
 }

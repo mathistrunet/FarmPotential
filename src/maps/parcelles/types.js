@@ -6,7 +6,7 @@
  * @property {string} [culture]
  * @property {string} [precedent]
  * @property {string} [ilot]
- * @property {string|number} [exploitationId]
+ * @property {string|number} [exploitation]
  * @property {number|string} [score]
  */
 
@@ -15,7 +15,7 @@
  * @property {string[]} [cultures]
  * @property {string} [precedent]
  * @property {string} [ilot]
- * @property {string|number} [exploitationId]
+ * @property {string|number} [exploitation]
  */
 
 export {};

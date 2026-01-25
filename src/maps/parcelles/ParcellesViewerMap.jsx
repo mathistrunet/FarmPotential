@@ -7,9 +7,11 @@ import { fetchParcellesGeojson } from "../../services/parcellesBackend";
 import { normalizeParcellesCollection } from "./parcellesData";
 import {
   DEFAULT_PARCELLE_LINE,
+  PARCELLE_COLOR_ATTRIBUTE_MAP,
   PARCELLES_VIEWER_FILL_ID,
   PARCELLES_VIEWER_LINE_ID,
   PARCELLES_VIEWER_SOURCE_ID,
+  buildDeterministicPalette,
   getFillColorExpression,
 } from "./parcellesLayers";
 import { applyFilters } from "./parcellesFilters";
@@ -75,17 +77,50 @@ export default function ParcellesViewerMap({
   const popupRef = useRef(null);
   const hoveredIdRef = useRef(null);
   const [collection, setCollection] = useState(null);
+  const [debugStats, setDebugStats] = useState(null);
   const ensureRaster = useRasterLayers();
+  const latestFiltersRef = useRef(filters);
+  const latestPaletteRef = useRef(palette);
+  const latestColorByRef = useRef(colorBy);
 
   const resolvedCollection = useMemo(
     () => normalizeParcellesCollection(data || collection),
     [data, collection]
+  );
+  const computedPalette = useMemo(() => {
+    const attribute = PARCELLE_COLOR_ATTRIBUTE_MAP[colorBy];
+    if (!attribute || attribute === "score") return {};
+    const values = new Set();
+    resolvedCollection?.features?.forEach((feature) => {
+      const raw = feature?.properties?.[attribute];
+      if (raw == null) return;
+      const value = String(raw).trim();
+      if (!value) return;
+      values.add(value);
+    });
+    return buildDeterministicPalette(Array.from(values));
+  }, [resolvedCollection, colorBy]);
+  const resolvedPalette = useMemo(
+    () => ({ ...computedPalette, ...palette }),
+    [computedPalette, palette]
   );
   const latestCollectionRef = useRef(resolvedCollection);
 
   useEffect(() => {
     latestCollectionRef.current = resolvedCollection;
   }, [resolvedCollection]);
+
+  useEffect(() => {
+    latestFiltersRef.current = filters;
+  }, [filters]);
+
+  useEffect(() => {
+    latestPaletteRef.current = resolvedPalette;
+  }, [resolvedPalette]);
+
+  useEffect(() => {
+    latestColorByRef.current = colorBy;
+  }, [colorBy]);
 
   useEffect(() => {
     if (data) return undefined;
@@ -150,7 +185,10 @@ export default function ParcellesViewerMap({
             ["literal", ["Polygon", "MultiPolygon"]],
           ],
           paint: {
-            "fill-color": getFillColorExpression(colorBy, palette),
+            "fill-color": getFillColorExpression(
+              latestColorByRef.current,
+              latestPaletteRef.current
+            ),
             "fill-opacity": [
               "case",
               ["boolean", ["feature-state", "hover"], false],
@@ -185,7 +223,7 @@ export default function ParcellesViewerMap({
       }
       ensureRaster(map);
       ensureLayers();
-      applyFilters(map, filters);
+      applyFilters(map, latestFiltersRef.current);
       requestAnimationFrame(() => map.resize());
     };
 
@@ -232,6 +270,10 @@ export default function ParcellesViewerMap({
       const precedent = props.precedent ? `Précédent : ${props.precedent}` : null;
       const content = [title, culture, precedent].filter(Boolean).join("<br />");
       if (!content) return;
+      if (DEBUG_MAP) {
+        // eslint-disable-next-line no-console
+        console.info("[ViewerMap] click properties", props);
+      }
       if (popupRef.current) {
         popupRef.current.remove();
       }
@@ -273,16 +315,38 @@ export default function ParcellesViewerMap({
       map.setPaintProperty(
         PARCELLES_VIEWER_FILL_ID,
         "fill-color",
-        getFillColorExpression(colorBy, palette)
+        getFillColorExpression(colorBy, resolvedPalette)
       );
     }
-  }, [colorBy, palette]);
+  }, [colorBy, resolvedPalette]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
+    if (DEBUG_MAP) {
+      // eslint-disable-next-line no-console
+      console.info("[ViewerMap] filters", filters);
+    }
     applyFilters(map, filters);
   }, [filters]);
+
+  useEffect(() => {
+    if (!DEBUG_MAP) return;
+    const map = mapRef.current;
+    if (!map || !map.getLayer(PARCELLES_VIEWER_FILL_ID)) return;
+    const updateStats = () => {
+      const total = resolvedCollection?.features?.length ?? 0;
+      const visible = map.queryRenderedFeatures({
+        layers: [PARCELLES_VIEWER_FILL_ID],
+      }).length;
+      setDebugStats({ total, visible });
+    };
+    if (map.isStyleLoaded()) {
+      requestAnimationFrame(updateStats);
+    } else {
+      map.once("idle", updateStats);
+    }
+  }, [filters, resolvedCollection, colorBy]);
 
   useEffect(() => {
     if (!DEBUG_MAP) return;
@@ -332,6 +396,23 @@ export default function ParcellesViewerMap({
           }}
         >
           Aucune parcelle chargée.
+        </div>
+      ) : null}
+      {DEBUG_MAP && debugStats ? (
+        <div
+          style={{
+            position: "absolute",
+            bottom: 16,
+            right: 16,
+            background: "rgba(15, 23, 42, 0.85)",
+            color: "#fff",
+            padding: "8px 12px",
+            borderRadius: 8,
+            fontSize: 12,
+          }}
+        >
+          <div>Total : {debugStats.total}</div>
+          <div>Visibles : {debugStats.visible}</div>
         </div>
       ) : null}
     </div>
