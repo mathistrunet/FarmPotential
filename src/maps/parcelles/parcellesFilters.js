@@ -3,13 +3,14 @@ import { PARCELLES_VIEWER_FILL_ID, PARCELLES_VIEWER_LINE_ID } from "./parcellesL
 const buildFilterExpression = (filters) => {
   if (!filters) return null;
   const clauses = [];
+  const cultureField = filters.cultureField === "precedent" ? "precedent" : "culture";
   const cultures = Array.isArray(filters.cultures)
     ? filters.cultures.map((value) => String(value).trim()).filter(Boolean)
     : [];
   if (cultures.length > 0) {
     clauses.push([
       "in",
-      ["coalesce", ["get", "culture"], ""],
+      ["coalesce", ["get", cultureField], ""],
       ["literal", cultures],
     ]);
   }
