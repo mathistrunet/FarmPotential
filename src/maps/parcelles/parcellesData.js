@@ -59,6 +59,19 @@ const resolvePropertyAlias = (properties, aliases) => {
   return null;
 };
 
+const resolvePropertyKey = (properties, key) => {
+  if (!properties || !key) return null;
+  if (Object.prototype.hasOwnProperty.call(properties, key)) {
+    return normalizeStringValue(properties[key]);
+  }
+  const lowered = String(key).toLowerCase();
+  const matched = Object.keys(properties).find(
+    (prop) => prop.toLowerCase() === lowered
+  );
+  if (!matched) return null;
+  return normalizeStringValue(properties[matched]);
+};
+
 const resolveSourceCollection = (payload) => {
   if (!payload || typeof payload !== "object") return null;
   if (payload.type === "FeatureCollection" && Array.isArray(payload.features)) {
@@ -81,6 +94,8 @@ const resolveSourceCollection = (payload) => {
 };
 
 const resolveCultureYearValue = (properties, yearKey = "current") => {
+  const directValue = resolvePropertyKey(properties, yearKey);
+  if (directValue != null) return directValue;
   const aliases = CULTURE_YEAR_ALIASES[yearKey];
   if (Array.isArray(aliases)) {
     const value = resolvePropertyAlias(properties, aliases);
