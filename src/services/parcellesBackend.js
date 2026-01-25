@@ -1,4 +1,5 @@
 const PARCELLES_ENDPOINT = "/api/parcelles";
+const LOCAL_STORAGE_KEY = "parcelles.geojson";
 
 const normalizeFeatureCollection = (payload) => {
   if (payload && payload.type === "FeatureCollection") {
@@ -7,13 +8,47 @@ const normalizeFeatureCollection = (payload) => {
   return { type: "FeatureCollection", features: [] };
 };
 
-export async function fetchParcellesGeojson(signal) {
-  const response = await fetch(PARCELLES_ENDPOINT, { signal });
-  if (!response.ok) {
-    throw new Error(`Backend error: ${response.status}`);
+const canUseLocalStorage = () =>
+  typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+
+const loadLocalCollection = () => {
+  if (!canUseLocalStorage()) return null;
+  try {
+    const raw = window.localStorage.getItem(LOCAL_STORAGE_KEY);
+    if (!raw) return null;
+    return normalizeFeatureCollection(JSON.parse(raw));
+  } catch {
+    return null;
   }
-  const data = await response.json();
-  return normalizeFeatureCollection(data);
+};
+
+const persistLocalCollection = (collection) => {
+  if (!canUseLocalStorage()) return;
+  try {
+    window.localStorage.setItem(
+      LOCAL_STORAGE_KEY,
+      JSON.stringify(normalizeFeatureCollection(collection))
+    );
+  } catch {
+    // ignore storage failures
+  }
+};
+
+export async function fetchParcellesGeojson(signal) {
+  try {
+    const response = await fetch(PARCELLES_ENDPOINT, { signal });
+    if (!response.ok) {
+      throw new Error(`Backend error: ${response.status}`);
+    }
+    const data = await response.json();
+    const collection = normalizeFeatureCollection(data);
+    persistLocalCollection(collection);
+    return collection;
+  } catch (error) {
+    const local = loadLocalCollection();
+    if (local) return local;
+    throw error;
+  }
 }
 
 export async function saveParcellesGeojson(features, signal) {
@@ -26,6 +61,8 @@ export async function saveParcellesGeojson(features, signal) {
       properties: feature.properties || {},
     })),
   };
+
+  persistLocalCollection(collection);
 
   const response = await fetch(PARCELLES_ENDPOINT, {
     method: "PUT",
