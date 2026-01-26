@@ -856,6 +856,53 @@ export default function ParcellesEditorMap() {
       ];
     });
 
+    const applyLocalMerge = () => {
+      setFeatures((prev) => {
+        const next = Array.isArray(prev) ? prev : [];
+        if (!next.length) return next;
+        const parcellesByYear = buildParcellesByYearFromFeatures(next);
+        const {
+          parcellesByYear: mergedParcellesByYear,
+          removedOldKeys,
+          updatedNewByKey,
+        } =
+          applyCorrespondencesAndMerge({
+            parcellesByYear,
+            oldYear: olderYear,
+            newYear: newerYear,
+            correspondancesValidated,
+          });
+
+        const mergedById = new Map();
+        const removedOldKeySet = removedOldKeys ?? new Set();
+        Object.values(mergedParcellesByYear || {}).forEach((collection) => {
+          (collection?.features || []).forEach((feature) => {
+            const id = getFeatureId(feature);
+            if (id != null) {
+              mergedById.set(String(id), feature);
+            }
+          });
+        });
+
+        return next
+          .map((feature, index) => {
+            const featureKey = getFeatureKey(feature, index);
+            if (removedOldKeySet.has(String(featureKey))) {
+              return null;
+            }
+            const id = getFeatureId(feature);
+            if (id == null) {
+              return updatedNewByKey?.get(String(featureKey)) ?? feature;
+            }
+            if (mergedById.has(String(id))) {
+              return mergedById.get(String(id));
+            }
+            return updatedNewByKey?.get(String(featureKey)) ?? feature;
+          })
+          .filter(Boolean);
+      });
+    };
+
     try {
       const response = await validateParcellesMatching({
         oldYear: olderYear,
@@ -866,50 +913,7 @@ export default function ParcellesEditorMap() {
       if (response?.collection?.features) {
         setFeatures(response.collection.features);
       } else {
-        setFeatures((prev) => {
-          const next = Array.isArray(prev) ? prev : [];
-          if (!next.length) return next;
-          const parcellesByYear = buildParcellesByYearFromFeatures(next);
-          const {
-            parcellesByYear: mergedParcellesByYear,
-            removedOldKeys,
-            updatedNewByKey,
-          } =
-            applyCorrespondencesAndMerge({
-              parcellesByYear,
-              oldYear: olderYear,
-              newYear: newerYear,
-              correspondancesValidated,
-            });
-
-          const mergedById = new Map();
-          const removedOldKeySet = removedOldKeys ?? new Set();
-          Object.values(mergedParcellesByYear || {}).forEach((collection) => {
-            (collection?.features || []).forEach((feature) => {
-              const id = getFeatureId(feature);
-              if (id != null) {
-                mergedById.set(String(id), feature);
-              }
-            });
-          });
-
-          return next
-            .map((feature, index) => {
-              const featureKey = getFeatureKey(feature, index);
-              if (removedOldKeySet.has(String(featureKey))) {
-                return null;
-              }
-              const id = getFeatureId(feature);
-              if (id == null) {
-                return updatedNewByKey?.get(String(featureKey)) ?? feature;
-              }
-              if (mergedById.has(String(id))) {
-                return mergedById.get(String(id));
-              }
-              return updatedNewByKey?.get(String(featureKey)) ?? feature;
-            })
-            .filter(Boolean);
-        });
+        applyLocalMerge();
       }
 
       setValidatedMatches(rows);
@@ -917,12 +921,19 @@ export default function ParcellesEditorMap() {
       setMatchViewOpen(false);
       return true;
     } catch (error) {
-      alert(
-        `Erreur lors de la validation des correspondances : ${
-          error?.message || "échec du backend"
-        }`
+      console.warn(
+        "Validation backend indisponible, application locale des correspondances.",
+        error,
       );
-      return false;
+      applyLocalMerge();
+      setValidatedMatches(rows);
+      setValidatedMatchesAt(new Date());
+      setMatchViewOpen(false);
+      alert(
+        "Validation appliquée localement (backend indisponible). " +
+          "Démarrez `npm run backend` pour persister les correspondances."
+      );
+      return true;
     }
   };
 
