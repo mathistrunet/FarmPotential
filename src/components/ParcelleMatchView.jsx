@@ -621,14 +621,22 @@ function ParcelleMatchViewContent({
     setSelectedBaseKey(row?.baseKey || null);
   }, [setSelectedBaseKey, setSelectedIncomingKey]);
 
-  const handleValidate = () => {
-    setValidatedAt(new Date());
-    if (typeof onValidate === "function") {
-      onValidate({
+  const handleValidate = async () => {
+    if (typeof onValidate !== "function") {
+      setValidatedAt(new Date());
+      return;
+    }
+    try {
+      const result = await onValidate({
         rows: matchRows,
         leftYear,
         rightYear,
       });
+      if (result !== false) {
+        setValidatedAt(new Date());
+      }
+    } catch (error) {
+      // parent handles error display
     }
   };
 

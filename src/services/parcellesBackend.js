@@ -1,4 +1,5 @@
 const PARCELLES_ENDPOINT = "/api/parcelles";
+const MATCH_VALIDATE_ENDPOINT = "/api/parcelles/matching/validate";
 const LOCAL_STORAGE_KEY = "parcelles.geojson";
 
 const normalizeFeature = (feature) => {
@@ -143,4 +144,26 @@ export async function saveParcellesGeojson(features, signal) {
   }
 
   return collection;
+}
+
+export async function validateParcellesMatching(
+  { oldYear, newYear, matches },
+  signal
+) {
+  const response = await fetch(MATCH_VALIDATE_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      oldYear,
+      newYear,
+      matches: Array.isArray(matches) ? matches : [],
+    }),
+    signal,
+  });
+
+  if (!response.ok) {
+    throw new Error(`Backend error: ${response.status}`);
+  }
+
+  return response.json();
 }
