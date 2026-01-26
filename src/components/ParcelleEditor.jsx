@@ -8,11 +8,8 @@ import {
   codeFromLabel,
 } from "../utils/cultureLabels";
 import { featureAreaM2 } from "../utils/geometry";
+import { resolveOverlappingParcels } from "../utils/overlapResolution";
 import { fetchRpgGeoJSON, getCultureLabel } from "../services/rpg";
-
-const DEFAULT_POLYGON_FILL = "#18A0FB";
-const DEFAULT_POLYGON_LINE = "#0066CC";
-const HEX_COLOR_RE = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 
 const CULTURE_FIELDS = [
   {
@@ -68,19 +65,6 @@ const CULTURE_FIELDS = [
 ];
 
 const TABLE_CELL_PADDING = "4px 6px";
-
-function expandShortHex(value) {
-  if (value.length !== 4) return value;
-  const [, r, g, b] = value;
-  return `#${r}${r}${g}${g}${b}${b}`;
-}
-
-function normalizeHexColor(value, fallback) {
-  if (typeof value !== "string") return fallback;
-  const trimmed = value.trim();
-  if (!HEX_COLOR_RE.test(trimmed)) return fallback;
-  return trimmed.length === 4 ? expandShortHex(trimmed) : trimmed;
-}
 
 function normalizePart(raw) {
   if (raw == null) return "";
@@ -437,50 +421,21 @@ export default function ParcelleEditor({
     }
   };
 
-  const updateFeatureColor = (index, propKey, rawValue) => {
-    const nextFeatures = [...features];
-    const feature = nextFeatures[index];
-    if (!feature) return;
-
-    const nextProps = { ...(feature.properties || {}) };
-    if (rawValue) nextProps[propKey] = rawValue;
-    else delete nextProps[propKey];
-
-    if (feature.properties?.[propKey] === nextProps[propKey]) return;
-
-    nextFeatures[index] = { ...feature, properties: nextProps };
-    setFeatures(nextFeatures);
-
+  const syncFeaturesFromDraw = () => {
     const draw = drawRef?.current;
-    if (draw && feature.id) {
-      draw.setFeatureProperty(feature.id, propKey, nextProps[propKey] || undefined);
-    }
+    if (!draw) return;
+    const arr = draw.getAll()?.features ?? [];
+    const polys = arr.filter(
+      (f) => f.geometry?.type === "Polygon" || f.geometry?.type === "MultiPolygon"
+    );
+    setFeatures(polys);
   };
 
-  const resetFeatureColors = (index) => {
-    const nextFeatures = [...features];
-    const feature = nextFeatures[index];
-    if (!feature) return;
-
-    const nextProps = { ...(feature.properties || {}) };
-    delete nextProps.color;
-    delete nextProps.outlineColor;
-
-    if (
-      feature.properties?.color === nextProps.color
-      && feature.properties?.outlineColor === nextProps.outlineColor
-    ) {
-      return;
-    }
-
-    nextFeatures[index] = { ...feature, properties: nextProps };
-    setFeatures(nextFeatures);
-
+  const handleRecheckOverlaps = () => {
     const draw = drawRef?.current;
-    if (draw && feature.id) {
-      draw.setFeatureProperty(feature.id, "color", undefined);
-      draw.setFeatureProperty(feature.id, "outlineColor", undefined);
-    }
+    if (!draw) return;
+    resolveOverlappingParcels(draw, { mode: "warn" });
+    syncFeaturesFromDraw();
   };
 
   const renderWarning = (value) => {
@@ -791,28 +746,6 @@ export default function ParcelleEditor({
                 >
                   Type de sol
                 </th>
-                <th
-                  style={{
-                    textAlign: "left",
-                    padding: TABLE_CELL_PADDING,
-                    fontSize: 12,
-                    width: 170,
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  Couleurs
-                </th>
-                <th
-                  style={{
-                    textAlign: "left",
-                    padding: TABLE_CELL_PADDING,
-                    fontSize: 12,
-                    width: 140,
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  Groupe
-                </th>
               </tr>
               <tr>
                 <th style={{ padding: TABLE_CELL_PADDING }} />
@@ -820,6 +753,27 @@ export default function ParcelleEditor({
                 <th style={{ padding: TABLE_CELL_PADDING }} />
                 <th style={{ padding: TABLE_CELL_PADDING }} />
                 <th style={{ padding: TABLE_CELL_PADDING }} />
+                <th style={{ padding: TABLE_CELL_PADDING }}>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRecheckOverlaps();
+                    }}
+                    disabled={isReadOnly}
+                    style={{
+                      padding: "3px 8px",
+                      borderRadius: 6,
+                      border: "1px solid #d1d5db",
+                      background: "#fff",
+                      fontSize: 11,
+                      cursor: isReadOnly ? "not-allowed" : "pointer",
+                      opacity: isReadOnly ? 0.6 : 1,
+                    }}
+                  >
+                    Revérifier
+                  </button>
+                </th>
                 {CULTURE_FIELDS.map((field) => {
                   const isRpgFillable = field.rpgOffset >= 2;
                   return (
@@ -858,8 +812,6 @@ export default function ParcelleEditor({
                   );
                 })}
                 <th style={{ padding: TABLE_CELL_PADDING }} />
-                <th style={{ padding: TABLE_CELL_PADDING }} />
-                <th style={{ padding: TABLE_CELL_PADDING }} />
               </tr>
             </thead>
             <tbody>
@@ -884,15 +836,6 @@ export default function ParcelleEditor({
                   f.properties?.import_year ??
                   "";
                 const selected = selectedId === id;
-                const fillColor = normalizeHexColor(
-                  f.properties?.color,
-                  DEFAULT_POLYGON_FILL
-                );
-                const outlineColor = normalizeHexColor(
-                  f.properties?.outlineColor ?? f.properties?.color,
-                  DEFAULT_POLYGON_LINE
-                );
-
                 return (
                   <tr
                     key={id}
@@ -1122,86 +1065,6 @@ export default function ParcelleEditor({
                         }}
                       />
                     </td>
-                    <td
-                      style={{
-                        padding: TABLE_CELL_PADDING,
-                        minWidth: 170,
-                        width: 170,
-                      }}
-                    >
-                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                          <input
-                            type="color"
-                            value={fillColor}
-                            onChange={(e) =>
-                              updateFeatureColor(idx, "color", e.target.value)
-                            }
-                            onClick={(e) => e.stopPropagation()}
-                            aria-label="Couleur de remplissage"
-                          />
-                          <span style={{ fontSize: 11, color: "#374151" }}>Rempl.</span>
-                        </label>
-                        <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                          <input
-                            type="color"
-                            value={outlineColor}
-                            onChange={(e) =>
-                              updateFeatureColor(idx, "outlineColor", e.target.value)
-                            }
-                            onClick={(e) => e.stopPropagation()}
-                            aria-label="Couleur du contour"
-                          />
-                          <span style={{ fontSize: 11, color: "#374151" }}>Contour</span>
-                        </label>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          resetFeatureColors(idx);
-                        }}
-                        style={{
-                          marginTop: 4,
-                          padding: "2px 6px",
-                          borderRadius: 6,
-                          border: "1px solid #d1d5db",
-                          background: "#fff",
-                          fontSize: 11,
-                          cursor: "pointer",
-                        }}
-                      >
-                        Réinitialiser
-                      </button>
-                    </td>
-                    <td
-                      style={{
-                        padding: TABLE_CELL_PADDING,
-                        minWidth: 130,
-                        width: 140,
-                      }}
-                    >
-                      <input
-                        value={f.properties?.layerType ?? ""}
-                        onChange={(e) =>
-                          updateFeatureProperty(idx, "layerType", e.target.value)
-                        }
-                        onBlur={(e) =>
-                          updateFeatureProperty(idx, "layerType", e.target.value, { trim: true })
-                        }
-                        onClick={(e) => e.stopPropagation()}
-                        placeholder="Ex: télépac"
-                        disabled={isReadOnly}
-                        style={{
-                          width: "100%",
-                          padding: "2px 4px",
-                          borderRadius: 4,
-                          border: "1px solid #d1d5db",
-                          fontSize: 12,
-                          background: isReadOnly ? "#f3f4f6" : "#fff",
-                        }}
-                      />
-                    </td>
                   </tr>
                 );
               })}
@@ -1228,8 +1091,6 @@ export default function ParcelleEditor({
         const displayPrevious = typedRow.cultureN_1 ?? "";
         const listId = datalistId;
         const selected = selectedId === id;
-        const groupValue = f.properties?.layerType ?? "";
-
         const ilot = normalizePart(f.properties?.ilot_numero);
         const num = normalizePart(f.properties?.numero);
         const rawParcelleValue = buildParcelleValue(ilot, num);
@@ -1243,15 +1104,6 @@ export default function ParcelleEditor({
 
         const area = featureAreaM2(f);
         const surfaceHa = area != null ? area / 10000 : null;
-        const fillColor = normalizeHexColor(
-          f.properties?.color,
-          DEFAULT_POLYGON_FILL
-        );
-        const outlineColor = normalizeHexColor(
-          f.properties?.outlineColor ?? f.properties?.color,
-          DEFAULT_POLYGON_LINE
-        );
-
         return (
           <div
             key={id}
@@ -1446,81 +1298,6 @@ export default function ParcelleEditor({
               {renderWarning(displayPrevious)}
             </label>
 
-            <div
-              style={{
-                marginTop: 10,
-                paddingTop: 10,
-                borderTop: "1px dashed #e5e7eb",
-              }}
-            >
-              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>
-                Couleurs de la parcelle
-              </div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
-                <label style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 6 }}>
-                  Remplissage
-                  <input
-                    type="color"
-                    value={fillColor}
-                    onChange={(e) => updateFeatureColor(idx, "color", e.target.value)}
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                </label>
-                <label style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 6 }}>
-                  Contour
-                  <input
-                    type="color"
-                    value={outlineColor}
-                    onChange={(e) =>
-                      updateFeatureColor(idx, "outlineColor", e.target.value)
-                    }
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                </label>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    resetFeatureColors(idx);
-                  }}
-                  style={{
-                    padding: "4px 8px",
-                    borderRadius: 6,
-                    border: "1px solid #d1d5db",
-                    background: "#fff",
-                    fontSize: 12,
-                    cursor: "pointer",
-                  }}
-                >
-                  Réinitialiser
-                </button>
-              </div>
-              <div style={{ fontSize: 11, color: "#6b7280", marginTop: 4 }}>
-                Les couleurs sont appliquées immédiatement sur la carte.
-              </div>
-            </div>
-            <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <span style={{ fontSize: 12, color: "#555" }}>Groupe (filtre)</span>
-              <input
-                value={groupValue}
-                onClick={(e) => e.stopPropagation()}
-                onChange={(e) =>
-                  updateFeatureProperty(idx, "layerType", e.target.value)
-                }
-                onBlur={(e) =>
-                  updateFeatureProperty(idx, "layerType", e.target.value, { trim: true })
-                }
-                placeholder="Ex: télépac, manuel"
-                disabled={isReadOnly}
-                style={{
-                  padding: "6px 8px",
-                  borderRadius: 6,
-                  border: "1px solid #d1d5db",
-                  fontSize: 12,
-                  background: isReadOnly ? "#f3f4f6" : "#fff",
-                }}
-              />
-            </label>
           </div>
         );
       })}
