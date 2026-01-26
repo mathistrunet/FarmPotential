@@ -1,4 +1,4 @@
-import { getFeatureKey } from "../../utils/parcelleMatching";
+import { getFeatureKey } from "../../utils/parcelleMatching.js";
 
 export const PRECEDENT_N1_FIELDS = [
   "precedent",

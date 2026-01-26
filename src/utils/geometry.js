@@ -1,4 +1,4 @@
-import { toLambert93, toWgs84 } from "./proj";
+import { toLambert93, toWgs84 } from "./proj.js";
 
 // Convertis les sommets du polygone dessiné en WGS en Lambert93
 export function ringToGml(ringLonLat) {

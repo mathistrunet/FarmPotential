@@ -1,6 +1,6 @@
 import * as polygonClipping from "polygon-clipping";
-import { featureAreaM2, polygonAreaM2 } from "./geometry";
-import { toLambert93 } from "./proj";
+import { featureAreaM2, polygonAreaM2 } from "./geometry.js";
+import { toLambert93 } from "./proj.js";
 
 const polygonClippingModule = polygonClipping;
 const clipIntersection =
