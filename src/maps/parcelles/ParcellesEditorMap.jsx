@@ -35,7 +35,11 @@ import {
   getFeatureId,
 } from "../../domain/parcelles/fusion";
 import { getFeatureKey } from "../../utils/parcelleMatching";
-import { clearParcellesGeojson, saveParcellesGeojson } from "../../services/parcellesBackend";
+import {
+  clearParcellesGeojson,
+  saveParcellesGeojson,
+  validateParcellesMatching,
+} from "../../services/parcellesBackend";
 import { useParcelles } from "./ParcellesStore";
 
 const EARTH_RADIUS = 6378137;
@@ -823,75 +827,103 @@ export default function ParcellesEditorMap() {
     setMatchViewOpen(true);
   };
 
-  const handleValidateParcelleMatch = (payload) => {
+  const handleValidateParcelleMatch = async (payload) => {
     const rows = Array.isArray(payload) ? payload : payload?.rows ?? [];
     const leftYear = Array.isArray(payload) ? null : payload?.leftYear ?? null;
     const rightYear = Array.isArray(payload) ? null : payload?.rightYear ?? null;
-    setValidatedMatches(rows);
-    setValidatedMatchesAt(new Date());
-    setMatchViewOpen(false);
 
     const leftYearValue = normalizeYearValue(leftYear);
     const rightYearValue = normalizeYearValue(rightYear);
-    if (!rows.length || leftYearValue == null || rightYearValue == null) return;
-    if (leftYearValue === rightYearValue) return;
+    if (!rows.length || leftYearValue == null || rightYearValue == null) return false;
+    if (leftYearValue === rightYearValue) return false;
 
     const olderYear = Math.min(leftYearValue, rightYearValue);
     const newerYear = Math.max(leftYearValue, rightYearValue);
     const olderIsLeft = leftYearValue < rightYearValue;
 
-    setFeatures((prev) => {
-      const next = Array.isArray(prev) ? prev : [];
-      if (!next.length) return next;
-      const correspondancesValidated = {};
-      rows.forEach((row) => {
-        if (!row?.baseKey || !row?.incomingKey) return;
-        const olderKey = olderIsLeft ? row.baseKey : row.incomingKey;
-        const newerKey = olderIsLeft ? row.incomingKey : row.baseKey;
-        correspondancesValidated[olderKey] = newerKey;
-      });
-
-      const parcellesByYear = buildParcellesByYearFromFeatures(next);
-      const {
-        parcellesByYear: mergedParcellesByYear,
-        removedOldKeys,
-        updatedNewByKey,
-      } =
-        applyCorrespondencesAndMerge({
-          parcellesByYear,
-          oldYear: olderYear,
-          newYear: newerYear,
-          correspondancesValidated,
-        });
-
-      const mergedById = new Map();
-      const removedOldKeySet = removedOldKeys ?? new Set();
-      Object.values(mergedParcellesByYear || {}).forEach((collection) => {
-        (collection?.features || []).forEach((feature) => {
-          const id = getFeatureId(feature);
-          if (id != null) {
-            mergedById.set(String(id), feature);
-          }
-        });
-      });
-
-      return next
-        .map((feature, index) => {
-          const featureKey = getFeatureKey(feature, index);
-          if (removedOldKeySet.has(String(featureKey))) {
-            return null;
-          }
-          const id = getFeatureId(feature);
-          if (id == null) {
-            return updatedNewByKey?.get(String(featureKey)) ?? feature;
-          }
-          if (mergedById.has(String(id))) {
-            return mergedById.get(String(id));
-          }
-          return updatedNewByKey?.get(String(featureKey)) ?? feature;
-        })
-        .filter(Boolean);
+    const correspondancesValidated = {};
+    const matchesPayload = rows.flatMap((row) => {
+      if (!row?.baseKey || !row?.incomingKey) return [];
+      const olderKey = olderIsLeft ? row.baseKey : row.incomingKey;
+      const newerKey = olderIsLeft ? row.incomingKey : row.baseKey;
+      correspondancesValidated[String(olderKey)] = String(newerKey);
+      return [
+        {
+          oldId: String(olderKey),
+          newId: String(newerKey),
+          previousValue: row?.previousValue ?? null,
+        },
+      ];
     });
+
+    try {
+      const response = await validateParcellesMatching({
+        oldYear: olderYear,
+        newYear: newerYear,
+        matches: matchesPayload,
+      });
+
+      if (response?.collection?.features) {
+        setFeatures(response.collection.features);
+      } else {
+        setFeatures((prev) => {
+          const next = Array.isArray(prev) ? prev : [];
+          if (!next.length) return next;
+          const parcellesByYear = buildParcellesByYearFromFeatures(next);
+          const {
+            parcellesByYear: mergedParcellesByYear,
+            removedOldKeys,
+            updatedNewByKey,
+          } =
+            applyCorrespondencesAndMerge({
+              parcellesByYear,
+              oldYear: olderYear,
+              newYear: newerYear,
+              correspondancesValidated,
+            });
+
+          const mergedById = new Map();
+          const removedOldKeySet = removedOldKeys ?? new Set();
+          Object.values(mergedParcellesByYear || {}).forEach((collection) => {
+            (collection?.features || []).forEach((feature) => {
+              const id = getFeatureId(feature);
+              if (id != null) {
+                mergedById.set(String(id), feature);
+              }
+            });
+          });
+
+          return next
+            .map((feature, index) => {
+              const featureKey = getFeatureKey(feature, index);
+              if (removedOldKeySet.has(String(featureKey))) {
+                return null;
+              }
+              const id = getFeatureId(feature);
+              if (id == null) {
+                return updatedNewByKey?.get(String(featureKey)) ?? feature;
+              }
+              if (mergedById.has(String(id))) {
+                return mergedById.get(String(id));
+              }
+              return updatedNewByKey?.get(String(featureKey)) ?? feature;
+            })
+            .filter(Boolean);
+        });
+      }
+
+      setValidatedMatches(rows);
+      setValidatedMatchesAt(new Date());
+      setMatchViewOpen(false);
+      return true;
+    } catch (error) {
+      alert(
+        `Erreur lors de la validation des correspondances : ${
+          error?.message || "échec du backend"
+        }`
+      );
+      return false;
+    }
   };
 
   // ---- Styles de la barre d’outils bas
