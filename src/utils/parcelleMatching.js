@@ -1,5 +1,5 @@
-import { featureAreaM2 } from "./geometry";
-import { intersectionArea } from "./overlapResolution";
+import { featureAreaM2 } from "./geometry.js";
+import { intersectionArea } from "./overlapResolution.js";
 
 export function getFeatureLabel(feature, index) {
   const props = feature?.properties || {};
