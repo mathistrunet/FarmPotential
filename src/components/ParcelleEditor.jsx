@@ -65,6 +65,7 @@ const CULTURE_FIELDS = [
 ];
 
 const TABLE_CELL_PADDING = "4px 6px";
+const RPG_FIRST_AVAILABLE_YEAR = 2024;
 
 function normalizePart(raw) {
   if (raw == null) return "";
@@ -114,13 +115,6 @@ function getCultureWarning(value) {
     return `“${trimmed}” n’est pas un nom de culture reconnu.`;
   }
   return null;
-}
-
-function parseYearValue(raw) {
-  if (raw == null) return null;
-  const year = Number.parseInt(String(raw).trim(), 10);
-  if (!Number.isFinite(year) || year < 1990 || year > 2100) return null;
-  return year;
 }
 
 function updateBounds(bounds, position) {
@@ -208,7 +202,6 @@ export default function ParcelleEditor({
     if (!visibleFeatures) return null;
     return new Set(visibleFeatures);
   }, [visibleFeatures]);
-  const baseCultureYearRef = useRef(null);
   const isReadOnly = Boolean(readOnly);
 
   useEffect(() => {
@@ -446,16 +439,6 @@ export default function ParcelleEditor({
     );
   };
 
-  const getBaseCultureYear = () => {
-    if (baseCultureYearRef.current != null) return baseCultureYearRef.current;
-    const input = window.prompt(
-      "Indique l'année de référence de Culture N (ex: 2024)."
-    );
-    const year = parseYearValue(input);
-    if (year != null) baseCultureYearRef.current = year;
-    return year;
-  };
-
   const handleFillRpgColumn = async (fieldConfig) => {
     if (isReadOnly) return;
     if (!fieldConfig || !Number.isFinite(fieldConfig.rpgOffset)) return;
@@ -465,28 +448,15 @@ export default function ParcelleEditor({
     try {
       const updates = new Map();
       const yearGroups = new Map();
-      let baseYear = baseCultureYearRef.current;
+      const targetYear =
+        RPG_FIRST_AVAILABLE_YEAR - Math.max(fieldConfig.rpgOffset - 2, 0);
 
-      features.forEach((feature, index) => {
-        const featureYear = parseYearValue(feature.properties?.annee);
-        if (featureYear != null) {
-          const targetYear = featureYear - fieldConfig.rpgOffset;
-          if (Number.isFinite(targetYear)) {
-            if (!yearGroups.has(targetYear)) yearGroups.set(targetYear, []);
-            yearGroups.get(targetYear).push({ feature, index });
-          }
-          return;
-        }
-
-        if (baseYear == null) baseYear = getBaseCultureYear();
-        if (baseYear == null) return;
-
-        const targetYear = baseYear - fieldConfig.rpgOffset;
-        if (Number.isFinite(targetYear)) {
-          if (!yearGroups.has(targetYear)) yearGroups.set(targetYear, []);
-          yearGroups.get(targetYear).push({ feature, index });
-        }
-      });
+      if (Number.isFinite(targetYear)) {
+        yearGroups.set(
+          targetYear,
+          features.map((feature, index) => ({ feature, index }))
+        );
+      }
 
       if (!yearGroups.size) {
         alert(
