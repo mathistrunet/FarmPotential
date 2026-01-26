@@ -3,10 +3,12 @@ import { parse } from "csv-parse/browser/esm/sync";
 import { featureAreaHa } from "../utils/geometry";
 import {
   codeFromLabel,
+  detectCultureCode,
   displayLabelFromProps,
   labelFromCode,
 } from "../utils/cultureLabels";
 import { buildError, ERROR_CODES } from "../utils/errors";
+import { withBasePath } from "../utils/publicBase";
 
 const CSV_HEADERS = [
   "Secteur",
@@ -23,6 +25,9 @@ const CSV_HEADERS = [
   "CultureN4",
   "Geometrie",
 ];
+
+const ASSOLIA_CULTURES_PATH = withBasePath("/data/assolia_cultures_export.csv");
+let assoliaCulturesPromise;
 
 function escapeCsvCell(value) {
   const str = value == null ? "" : String(value);
@@ -66,6 +71,74 @@ function formatCultureValue(raw) {
   const value = String(raw).trim();
   if (!value) return "";
   return labelFromCode(value) || value;
+}
+
+function normalizeStructureName(raw) {
+  return String(raw || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ");
+}
+
+function getMetacodeFromValue(raw) {
+  if (raw == null) return "";
+  const trimmed = String(raw).trim();
+  if (!trimmed) return "";
+  const fromLabel = codeFromLabel(trimmed);
+  if (fromLabel) return String(fromLabel).trim().toUpperCase();
+  const upper = trimmed.toUpperCase();
+  if (labelFromCode(upper)) return upper;
+  if (/^[A-Z0-9]{2,10}$/.test(upper)) return upper;
+  return "";
+}
+
+async function loadAssoliaCulturesExport() {
+  if (!assoliaCulturesPromise) {
+    assoliaCulturesPromise = fetch(ASSOLIA_CULTURES_PATH)
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error("Chargement du référentiel cultures impossible.");
+        }
+        return response.text();
+      })
+      .then((text) =>
+        parse(text, {
+          columns: true,
+          delimiter: ";",
+          relax_quotes: true,
+          skip_empty_lines: true,
+          bom: true,
+          trim: true,
+        })
+      );
+  }
+  return assoliaCulturesPromise;
+}
+
+async function getStructureCultureLookup(structureName) {
+  const normalizedStructure = normalizeStructureName(structureName);
+  if (!normalizedStructure) return null;
+  const entries = await loadAssoliaCulturesExport();
+  const byMetacode = {};
+  let fallbackName = "";
+  entries.forEach((entry) => {
+    const structure = normalizeStructureName(entry.structure_name);
+    if (structure !== normalizedStructure) return;
+    const metacode = String(entry.metacode || "").trim().toUpperCase();
+    const name = String(entry.culture_name || "").trim();
+    if (!name) return;
+    if (metacode) {
+      byMetacode[metacode] = name;
+    } else if (!fallbackName) {
+      fallbackName = name;
+    }
+  });
+  if (!Object.keys(byMetacode).length && !fallbackName) {
+    return null;
+  }
+  return { byMetacode, fallbackName };
 }
 
 function buildCultureProps(cultureValues, offset) {
@@ -151,7 +224,34 @@ function normalizeRowMap(row) {
   return map;
 }
 
-export function buildParcellesCsv(features, secteur, exploitation, codeExploitation) {
+export async function buildParcellesCsv(
+  features,
+  secteur,
+  exploitation,
+  codeExploitation,
+  options = {}
+) {
+  let structureLookup = null;
+  if (options.structureName) {
+    try {
+      structureLookup = await getStructureCultureLookup(options.structureName);
+    } catch (error) {
+      console.warn(error);
+    }
+  }
+  const resolveCulture = (raw, metacodeOverride = "") => {
+    const value = raw == null ? "" : String(raw).trim();
+    if (!value && !metacodeOverride) return "";
+    const metacode = metacodeOverride || getMetacodeFromValue(value);
+    if (structureLookup?.byMetacode?.[metacode]) {
+      return structureLookup.byMetacode[metacode];
+    }
+    if (structureLookup?.fallbackName) {
+      return structureLookup.fallbackName;
+    }
+    return formatCultureValue(value);
+  };
+
   const rows = (features || []).map((feature, idx) => {
     const props = feature?.properties || {};
     const parcelleName =
@@ -170,6 +270,16 @@ export function buildParcellesCsv(features, secteur, exploitation, codeExploitat
       props.parcelle_bio_label;
     const typeSol =
       props.type_sol ?? props.typeSol ?? props.type_de_sol ?? props.sol ?? "";
+    const cultureNValue = displayLabelFromProps(props);
+    const cultureNCode = detectCultureCode(props) || getMetacodeFromValue(cultureNValue);
+    const cultureNOutput = structureLookup
+      ? resolveCulture(cultureNValue, cultureNCode)
+      : cultureNValue;
+    const cultureN1Value = props.cultureN1 ?? props.cultureN_1 ?? "";
+    const cultureN2Value = props.cultureN2 ?? props.cultureN_2 ?? "";
+    const cultureN3Value = props.cultureN3 ?? props.cultureN_3 ?? "";
+    const cultureN4Value = props.cultureN4 ?? props.cultureN_4 ?? "";
+
     return [
       secteur || props.secteur || "",
       exploitation || props.exploitation || props.exploitations || "",
@@ -178,11 +288,19 @@ export function buildParcellesCsv(features, secteur, exploitation, codeExploitat
       formatNumber(surfaceValue),
       formatParcelleBioValue(parcelleBio),
       typeSol == null ? "" : String(typeSol),
-      displayLabelFromProps(props),
-      formatCultureValue(props.cultureN1 ?? props.cultureN_1 ?? ""),
-      formatCultureValue(props.cultureN2 ?? props.cultureN_2 ?? ""),
-      formatCultureValue(props.cultureN3 ?? props.cultureN_3 ?? ""),
-      formatCultureValue(props.cultureN4 ?? props.cultureN_4 ?? ""),
+      cultureNOutput,
+      structureLookup
+        ? resolveCulture(cultureN1Value)
+        : formatCultureValue(cultureN1Value),
+      structureLookup
+        ? resolveCulture(cultureN2Value)
+        : formatCultureValue(cultureN2Value),
+      structureLookup
+        ? resolveCulture(cultureN3Value)
+        : formatCultureValue(cultureN3Value),
+      structureLookup
+        ? resolveCulture(cultureN4Value)
+        : formatCultureValue(cultureN4Value),
       formatGeometry(feature),
     ];
   });

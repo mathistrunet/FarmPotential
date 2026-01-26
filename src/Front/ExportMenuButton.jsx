@@ -89,6 +89,18 @@ function CsvModal({ values, onChange, onCancel, onConfirm, disabled }) {
               style={inputStyle}
             />
           </label>
+          <label style={labelStyle}>
+            Nom de la structure
+            <input
+              type="text"
+              value={values.structureName}
+              onChange={(e) =>
+                onChange({ ...values, structureName: e.target.value })
+              }
+              style={inputStyle}
+              placeholder="Ex: Assolia"
+            />
+          </label>
           <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
             <button type="button" style={modalSecondaryButtonStyle} onClick={onCancel}>
               Annuler
@@ -182,6 +194,7 @@ export default function ExportMenuButton({
     secteur: "TEST",
     exploitation: "Exploitation 1",
     codeExploitation: defaultCode,
+    structureName: "",
   });
   const csvValues = csvValuesProp ?? internalCsvValues;
   const setCsvValues = onCsvValuesChange ?? setInternalCsvValues;
@@ -233,14 +246,16 @@ export default function ExportMenuButton({
     }
   };
 
-  const exportCsv = () => {
+  const exportCsv = async () => {
     if (!ensureFeatures()) return;
+    setLoading(true);
     try {
-      const csv = buildParcellesCsv(
+      const csv = await buildParcellesCsv(
         features,
         csvValues.secteur,
         csvValues.exploitation,
-        csvValues.codeExploitation
+        csvValues.codeExploitation,
+        { structureName: csvValues.structureName }
       );
       const blob = new Blob([csv], {
         type: "text/csv;charset=utf-8",
@@ -250,6 +265,8 @@ export default function ExportMenuButton({
     } catch (err) {
       console.error(err);
       alert("Échec de l’export CSV.");
+    } finally {
+      setLoading(false);
     }
   };
 
