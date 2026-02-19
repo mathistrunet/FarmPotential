@@ -38,8 +38,19 @@ export function intersectionArea(existingFeature, incomingFeature) {
   const incomingGeom = getClippingGeometry(incomingFeature);
   if (!existingGeom || !incomingGeom) return 0;
   const intersection = clipIntersection(existingGeom, incomingGeom);
-  if (!Array.isArray(intersection) || intersection.length === 0) return 0;
-  return intersection.reduce((sum, polygon) => sum + polygonAreaM2(polygon), 0);
+  const cleanedIntersection = filterClippingResult(intersection, 0);
+  if (!Array.isArray(cleanedIntersection) || cleanedIntersection.length === 0) return 0;
+  return cleanedIntersection.reduce((sum, polygon) => sum + polygonAreaM2(polygon), 0);
+}
+
+function hasSignificantIntersection(existingFeature, incomingFeature, minWidthMeters = 0) {
+  if (!clipIntersection) return false;
+  const existingGeom = getClippingGeometry(existingFeature);
+  const incomingGeom = getClippingGeometry(incomingFeature);
+  if (!existingGeom || !incomingGeom) return false;
+  const intersection = clipIntersection(existingGeom, incomingGeom);
+  const cleanedIntersection = filterClippingResult(intersection, minWidthMeters);
+  return cleanedIntersection.length > 0;
 }
 
 function geometryFromClippingResult(result) {
@@ -84,6 +95,7 @@ function filterClippingResult(result, minWidthMeters = 0.5) {
 }
 
 export function resolveOverlappingParcels(draw, { mode = "clip" } = {}) {
+  const overlapWarningToleranceM = 1;
   const features = draw.getAll()?.features ?? [];
   const entries = features
     .filter((f) => f.geometry?.type === "Polygon" || f.geometry?.type === "MultiPolygon")
@@ -100,8 +112,7 @@ export function resolveOverlappingParcels(draw, { mode = "clip" } = {}) {
   if (!clipIntersection || !clipDifference || mode === "warn") {
     entries.forEach((entryA, indexA) => {
       entries.slice(indexA + 1).forEach((entryB) => {
-        const interArea = intersectionArea(entryA.feature, entryB.feature);
-        if (interArea > 0) {
+        if (hasSignificantIntersection(entryA.feature, entryB.feature, overlapWarningToleranceM)) {
           warnings.add(entryA.id);
           warnings.add(entryB.id);
         }
@@ -114,8 +125,7 @@ export function resolveOverlappingParcels(draw, { mode = "clip" } = {}) {
       for (let j = i + 1; j < entries.length; j += 1) {
         const entryB = entries[j];
         if (entryB.deleted) continue;
-        const interArea = intersectionArea(entryA, entryB);
-        if (interArea <= 0) continue;
+        if (!hasSignificantIntersection(entryA, entryB, overlapWarningToleranceM)) continue;
 
         const [larger, smaller] =
           entryA.area >= entryB.area ? [entryA, entryB] : [entryB, entryA];
