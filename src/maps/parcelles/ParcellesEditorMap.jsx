@@ -871,6 +871,7 @@ export default function ParcellesEditorMap() {
             oldYear: olderYear,
             newYear: newerYear,
             correspondancesValidated,
+            dropOldYear: true,
           });
 
         const mergedById = new Map();
