@@ -929,6 +929,13 @@ export default function ParcellesEditorMap() {
       });
     };
 
+    const schedulePageRefresh = () => {
+      if (typeof window === "undefined") return;
+      window.setTimeout(() => {
+        window.location.reload();
+      }, 150);
+    };
+
     try {
       const response = await validateParcellesMatching({
         oldYear: olderYear,
@@ -945,6 +952,7 @@ export default function ParcellesEditorMap() {
       setValidatedMatches(rows);
       setValidatedMatchesAt(new Date());
       setMatchViewOpen(false);
+      schedulePageRefresh();
       return true;
     } catch (error) {
       console.warn(
@@ -955,6 +963,7 @@ export default function ParcellesEditorMap() {
       setValidatedMatches(rows);
       setValidatedMatchesAt(new Date());
       setMatchViewOpen(false);
+      schedulePageRefresh();
       alert(
         "Validation appliquée localement (backend indisponible). " +
           "Démarrez `npm run backend` pour persister les correspondances."
