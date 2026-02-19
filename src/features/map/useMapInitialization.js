@@ -12,9 +12,29 @@ if (typeof window !== "undefined") window.mapboxgl = maplibregl;
 export function useMapInitialization() {
   const mapRef = useRef(null);
   const drawRef = useRef(null);
-  const [features, setFeatures] = useState([]);
+  const [features, setFeaturesState] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
+  const syncingDrawRef = useRef(false);
   const ensureRaster = useRasterLayers();
+
+  const setFeatures = useCallback((nextValue) => {
+    setFeaturesState((prev) => {
+      const next = typeof nextValue === "function" ? nextValue(prev) : nextValue;
+      const safeNext = Array.isArray(next) ? next : [];
+
+      const draw = drawRef.current;
+      if (draw && !syncingDrawRef.current) {
+        syncingDrawRef.current = true;
+        try {
+          draw.set({ type: "FeatureCollection", features: safeNext });
+        } finally {
+          syncingDrawRef.current = false;
+        }
+      }
+
+      return safeNext;
+    });
+  }, []);
 
   const selectFeatureOnMap = useCallback((id, fit = false) => {
     const map = mapRef.current;
@@ -123,11 +143,12 @@ export function useMapInitialization() {
       map.addControl(draw, "top-left");
 
       const updateList = () => {
+        if (syncingDrawRef.current) return;
         const data = draw.getAll();
         const polys = (data && data.features ? data.features : [])
           .filter((f) => f.geometry?.type === "Polygon")
           .map((f) => ({ ...f, properties: f.properties || {} }));
-        setFeatures(polys);
+        setFeaturesState(polys);
       };
 
       map.on("draw.selectionchange", (e) => {
