@@ -66,26 +66,6 @@ function nearestPointOnSegment(point, a, b) {
   return { point: projected, dist2: squaredDistance(point, projected) };
 }
 
-function cross2d(a, b) {
-  return (a[0] * b[1]) - (a[1] * b[0]);
-}
-
-function raySegmentIntersection(origin, direction, a, b) {
-  const segmentDirection = [b[0] - a[0], b[1] - a[1]];
-  const denominator = cross2d(direction, segmentDirection);
-  if (Math.abs(denominator) < 1e-12) return null;
-
-  const fromOriginToSegment = [a[0] - origin[0], a[1] - origin[1]];
-  const rayFactor = cross2d(fromOriginToSegment, segmentDirection) / denominator;
-  const segmentFactor = cross2d(fromOriginToSegment, direction) / denominator;
-
-  if (rayFactor < 0 || segmentFactor < 0 || segmentFactor > 1) return null;
-  return {
-    point: [origin[0] + (direction[0] * rayFactor), origin[1] + (direction[1] * rayFactor)],
-    rayFactor,
-  };
-}
-
 function getPolygonOuterRings(feature) {
   const geometry = feature?.geometry;
   if (!geometry) return [];
@@ -105,16 +85,9 @@ function snapLineExtremitiesToParcelBorder(targetFeature, lineFeature) {
   const rings = getPolygonOuterRings(targetFeature);
   if (!rings.length) return lineFeature;
 
-  const snapEndpoint = (inputPoint, neighborPoint) => {
+  const snapEndpoint = (inputPoint) => {
     let bestPoint = inputPoint;
     let bestDist2 = Number.POSITIVE_INFINITY;
-    let bestForwardIntersection = null;
-    const hasNeighbor = Array.isArray(neighborPoint) && neighborPoint.length >= 2;
-    const forwardDirection = hasNeighbor
-      ? [inputPoint[0] - neighborPoint[0], inputPoint[1] - neighborPoint[1]]
-      : null;
-    const canUseForwardDirection =
-      hasNeighbor && (Math.abs(forwardDirection[0]) + Math.abs(forwardDirection[1]) > 1e-12);
 
     rings.forEach((ring) => {
       for (let i = 0; i < ring.length - 1; i += 1) {
@@ -126,24 +99,16 @@ function snapLineExtremitiesToParcelBorder(targetFeature, lineFeature) {
           bestPoint = candidate.point;
           bestDist2 = candidate.dist2;
         }
-
-        if (canUseForwardDirection) {
-          const intersection = raySegmentIntersection(inputPoint, forwardDirection, a, b);
-          if (intersection && (!bestForwardIntersection || intersection.rayFactor < bestForwardIntersection.rayFactor)) {
-            bestForwardIntersection = intersection;
-          }
-        }
       }
     });
 
-    return bestForwardIntersection?.point ?? bestPoint;
+    return bestPoint;
   };
 
   const adjusted = lineCoords.map((coord) => [...coord]);
-  adjusted[0] = snapEndpoint(adjusted[0], adjusted[1]);
+  adjusted[0] = snapEndpoint(adjusted[0]);
   adjusted[adjusted.length - 1] = snapEndpoint(
-    adjusted[adjusted.length - 1],
-    adjusted[adjusted.length - 2]
+    adjusted[adjusted.length - 1]
   );
 
   return {
