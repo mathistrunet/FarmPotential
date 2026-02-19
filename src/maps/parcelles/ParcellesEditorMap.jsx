@@ -165,6 +165,10 @@ export default function ParcellesEditorMap() {
     setFeatureCollection,
     reset: resetParcellesStore,
     loading: parcellesLoading,
+    undo: undoParcelleEdit,
+    redo: redoParcelleEdit,
+    canUndo,
+    canRedo,
   } = useParcelles();
 
   useToponymieAutoNaming(features, setFeatures);
@@ -270,6 +274,27 @@ export default function ParcellesEditorMap() {
       setSideExpanded(false);
     }
   }, [sideOpen]);
+
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      const isUndo = (event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === "z";
+      const isRedo = (event.ctrlKey || event.metaKey) && (
+        event.key.toLowerCase() === "y" ||
+        (event.shiftKey && event.key.toLowerCase() === "z")
+      );
+      if (!isUndo && !isRedo) return;
+      if (isUndo && !canUndo) return;
+      if (isRedo && !canRedo) return;
+      event.preventDefault();
+      if (isUndo) {
+        undoParcelleEdit();
+      } else {
+        redoParcelleEdit();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [canRedo, canUndo, redoParcelleEdit, undoParcelleEdit]);
 
   useEffect(() => {
     if (parcelleYearFilter === "all" || parcelleYearFilter === "unknown") {
