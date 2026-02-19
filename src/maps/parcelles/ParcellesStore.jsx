@@ -32,31 +32,50 @@ export function ParcellesProvider({ children, initialCollection }) {
   const [parcellesCollection, setParcellesCollectionState] = useState(() =>
     normalizeParcellesCollection(initialCollection || EMPTY_COLLECTION)
   );
+  const [historyPast, setHistoryPast] = useState([]);
+  const [historyFuture, setHistoryFuture] = useState([]);
   const [loading, setLoading] = useState(!initialCollection);
   const [error, setError] = useState(null);
   const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
   const [isDirty, setIsDirty] = useState(false);
   const [hydratedFromStorage, setHydratedFromStorage] = useState(false);
 
-  const setParcellesCollection = useCallback((next) => {
-    setParcellesCollectionState(normalizeParcellesCollection(next));
-    setLastUpdatedAt(Date.now());
-    setIsDirty(true);
-  }, []);
-
-  const setFeatureCollection = useCallback((next, { dirty = true } = {}) => {
-    setParcellesCollectionState(normalizeParcellesCollection(next));
+  const setCollectionState = useCallback((next, { dirty = true, trackHistory = true } = {}) => {
+    setParcellesCollectionState((prev) => {
+      const safePrev = normalizeParcellesCollection(prev || EMPTY_COLLECTION);
+      const safeNext = normalizeParcellesCollection(
+        typeof next === "function" ? next(safePrev) : next
+      );
+      if (JSON.stringify(safePrev) === JSON.stringify(safeNext)) {
+        return safePrev;
+      }
+      if (trackHistory) {
+        setHistoryPast((current) => [...current, safePrev].slice(-50));
+        setHistoryFuture([]);
+      }
+      return safeNext;
+    });
     setLastUpdatedAt(Date.now());
     if (dirty) {
       setIsDirty(true);
     }
   }, []);
 
+  const setParcellesCollection = useCallback((next) => {
+    setCollectionState(next);
+  }, [setCollectionState]);
+
+  const setFeatureCollection = useCallback((next, { dirty = true } = {}) => {
+    setCollectionState(next, { dirty, trackHistory: dirty });
+  }, [setCollectionState]);
+
   const refreshParcelles = useCallback(async (signal) => {
     setLoading(true);
     try {
       const collection = await fetchParcellesGeojson(signal);
       setParcellesCollectionState(normalizeParcellesCollection(collection));
+      setHistoryPast([]);
+      setHistoryFuture([]);
       setError(null);
       setLastUpdatedAt(Date.now());
       setIsDirty(false);
@@ -72,6 +91,8 @@ export function ParcellesProvider({ children, initialCollection }) {
     const stored = readFromStorage();
     if (stored) {
       setParcellesCollectionState(normalizeParcellesCollection(stored));
+      setHistoryPast([]);
+      setHistoryFuture([]);
       setLoading(false);
       setHydratedFromStorage(true);
     }
@@ -100,7 +121,7 @@ export function ParcellesProvider({ children, initialCollection }) {
 
   const upsertFeature = useCallback((feature) => {
     if (!feature) return;
-    setParcellesCollectionState((prev) => {
+    setCollectionState((prev) => {
       const safePrev = normalizeParcellesCollection(prev || EMPTY_COLLECTION);
       const filtered = safePrev.features.filter((item) => item.id !== feature.id);
       return normalizeParcellesCollection({
@@ -108,13 +129,11 @@ export function ParcellesProvider({ children, initialCollection }) {
         features: [...filtered, feature],
       });
     });
-    setLastUpdatedAt(Date.now());
-    setIsDirty(true);
-  }, []);
+  }, [setCollectionState]);
 
   const updateFeatureProps = useCallback((id, partialProps) => {
     if (!id || !partialProps) return;
-    setParcellesCollectionState((prev) => {
+    setCollectionState((prev) => {
       const safePrev = normalizeParcellesCollection(prev || EMPTY_COLLECTION);
       const nextFeatures = safePrev.features.map((feature) => {
         if (feature.id !== id) return feature;
@@ -131,13 +150,11 @@ export function ParcellesProvider({ children, initialCollection }) {
         features: nextFeatures,
       });
     });
-    setLastUpdatedAt(Date.now());
-    setIsDirty(true);
-  }, []);
+  }, [setCollectionState]);
 
   const updateFeatureGeometry = useCallback((id, geometry) => {
     if (!id || !geometry) return;
-    setParcellesCollectionState((prev) => {
+    setCollectionState((prev) => {
       const safePrev = normalizeParcellesCollection(prev || EMPTY_COLLECTION);
       const nextFeatures = safePrev.features.map((feature) => {
         if (feature.id !== id) return feature;
@@ -148,15 +165,34 @@ export function ParcellesProvider({ children, initialCollection }) {
         features: nextFeatures,
       });
     });
-    setLastUpdatedAt(Date.now());
-    setIsDirty(true);
-  }, []);
+  }, [setCollectionState]);
 
   const reset = useCallback(() => {
-    setParcellesCollectionState(normalizeParcellesCollection(EMPTY_COLLECTION));
+    setCollectionState(EMPTY_COLLECTION);
+  }, [setCollectionState]);
+
+  const undo = useCallback(() => {
+    if (!historyPast.length) return;
+    const previous = historyPast[historyPast.length - 1];
+    setHistoryPast((current) => current.slice(0, -1));
+    setHistoryFuture((current) => [normalizeParcellesCollection(parcellesCollection), ...current].slice(0, 50));
+    setParcellesCollectionState(normalizeParcellesCollection(previous));
     setLastUpdatedAt(Date.now());
     setIsDirty(true);
-  }, []);
+  }, [historyPast, parcellesCollection]);
+
+  const redo = useCallback(() => {
+    if (!historyFuture.length) return;
+    const [next, ...rest] = historyFuture;
+    setHistoryFuture(rest);
+    setHistoryPast((current) => [...current, normalizeParcellesCollection(parcellesCollection)].slice(-50));
+    setParcellesCollectionState(normalizeParcellesCollection(next));
+    setLastUpdatedAt(Date.now());
+    setIsDirty(true);
+  }, [historyFuture, parcellesCollection]);
+
+  const canUndo = historyPast.length > 0;
+  const canRedo = historyFuture.length > 0;
 
   const value = useMemo(
     () => ({
@@ -168,6 +204,10 @@ export function ParcellesProvider({ children, initialCollection }) {
       updateFeatureProps,
       updateFeatureGeometry,
       reset,
+      undo,
+      redo,
+      canUndo,
+      canRedo,
       loading,
       error,
       refreshParcelles,
@@ -183,11 +223,15 @@ export function ParcellesProvider({ children, initialCollection }) {
       updateFeatureProps,
       updateFeatureGeometry,
       reset,
+      undo,
+      redo,
+      canUndo,
+      canRedo,
       loading,
       error,
       refreshParcelles,
       lastUpdatedAt,
-      isDirty,
+      isDirty
     ]
   );
 
