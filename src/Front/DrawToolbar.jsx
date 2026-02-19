@@ -46,6 +46,76 @@ const IconMerge = () => (
   </svg>
 );
 
+function squaredDistance(a, b) {
+  const dx = a[0] - b[0];
+  const dy = a[1] - b[1];
+  return dx * dx + dy * dy;
+}
+
+function nearestPointOnSegment(point, a, b) {
+  const abx = b[0] - a[0];
+  const aby = b[1] - a[1];
+  const ab2 = abx * abx + aby * aby;
+  if (ab2 === 0) return { point: a, dist2: squaredDistance(point, a) };
+  const apx = point[0] - a[0];
+  const apy = point[1] - a[1];
+  const t = Math.max(0, Math.min(1, (apx * abx + apy * aby) / ab2));
+  const projected = [a[0] + (abx * t), a[1] + (aby * t)];
+  return { point: projected, dist2: squaredDistance(point, projected) };
+}
+
+function getPolygonOuterRings(feature) {
+  const geometry = feature?.geometry;
+  if (!geometry) return [];
+  if (geometry.type === "Polygon") {
+    return geometry.coordinates?.[0] ? [geometry.coordinates[0]] : [];
+  }
+  if (geometry.type === "MultiPolygon") {
+    return (geometry.coordinates || []).map((poly) => poly?.[0]).filter(Boolean);
+  }
+  return [];
+}
+
+function snapLineExtremitiesToParcelBorder(targetFeature, lineFeature) {
+  const lineCoords = lineFeature?.geometry?.coordinates;
+  if (!Array.isArray(lineCoords) || lineCoords.length < 2) return lineFeature;
+
+  const rings = getPolygonOuterRings(targetFeature);
+  if (!rings.length) return lineFeature;
+
+  const snapEndpoint = (inputPoint) => {
+    let bestPoint = inputPoint;
+    let bestDist2 = Number.POSITIVE_INFINITY;
+
+    rings.forEach((ring) => {
+      for (let i = 0; i < ring.length - 1; i += 1) {
+        const a = ring[i];
+        const b = ring[i + 1];
+        if (!a || !b) continue;
+        const candidate = nearestPointOnSegment(inputPoint, a, b);
+        if (candidate.dist2 < bestDist2) {
+          bestPoint = candidate.point;
+          bestDist2 = candidate.dist2;
+        }
+      }
+    });
+
+    return bestPoint;
+  };
+
+  const adjusted = lineCoords.map((coord) => [...coord]);
+  adjusted[0] = snapEndpoint(adjusted[0]);
+  adjusted[adjusted.length - 1] = snapEndpoint(adjusted[adjusted.length - 1]);
+
+  return {
+    ...lineFeature,
+    geometry: {
+      ...lineFeature.geometry,
+      coordinates: adjusted,
+    },
+  };
+}
+
 /**
  * Barre d'outils de dessin (autonome)
  * Props:
@@ -67,6 +137,7 @@ export default function DrawToolbar({
 }) {
   const [mode, setMode] = useState("simple_select");
   const [splitTargetId, setSplitTargetId] = useState(null);
+  const [splitLineId, setSplitLineId] = useState(null);
 
   const btn = {
     display: "inline-flex", alignItems: "center", gap: 8,
@@ -225,6 +296,10 @@ export default function DrawToolbar({
       alert("La sélection doit être une parcelle polygonale.");
       return;
     }
+    if (splitLineId) {
+      draw.delete(splitLineId);
+      setSplitLineId(null);
+    }
     setSplitTargetId(targetId);
     draw.changeMode("draw_line_string");
   }
@@ -252,6 +327,40 @@ export default function DrawToolbar({
       });
     });
     return true;
+  }
+
+  function cancelSplitParcel() {
+    const draw = drawRef?.current;
+    if (!draw) return;
+    if (splitLineId) {
+      draw.delete(splitLineId);
+    }
+    setSplitLineId(null);
+    setSplitTargetId(null);
+    draw.changeMode("simple_select");
+  }
+
+  function confirmSplitParcel() {
+    const draw = drawRef?.current;
+    if (!draw || !splitTargetId || !splitLineId) return;
+    const lineFeature = draw.get?.(splitLineId);
+    const targetFeature = draw.get?.(splitTargetId);
+    if (!lineFeature || !targetFeature) return;
+
+    const snappedLineFeature = snapLineExtremitiesToParcelBorder(targetFeature, lineFeature);
+    draw.setFeatureProperty?.(splitLineId, "split_preview", true);
+    draw.add({ ...snappedLineFeature, id: splitLineId });
+
+    const splitDone = applySplitFromLine(snappedLineFeature);
+    if (splitLineId) {
+      draw.delete(splitLineId);
+    }
+    setSplitLineId(null);
+    if (splitDone) {
+      setSplitTargetId(null);
+      draw.changeMode("simple_select");
+      refreshFromDraw();
+    }
   }
 
   const refreshFromDraw = useCallback(() => {
@@ -355,15 +464,11 @@ export default function DrawToolbar({
     const onCreate = (event) => {
       if (splitTargetId) {
         const lineFeature = (event?.features || []).find((f) => f.geometry?.type === "LineString");
-        if (lineFeature) {
-          const splitDone = applySplitFromLine(lineFeature);
-          if (lineFeature.id) draw.delete(lineFeature.id);
-          setSplitTargetId(null);
-          draw.changeMode("simple_select");
-          if (splitDone) {
-            refreshFromDraw();
-            return;
-          }
+        if (lineFeature?.id) {
+          setSplitLineId(lineFeature.id);
+          draw.setFeatureProperty?.(lineFeature.id, "split_preview", true);
+          draw.changeMode("direct_select", { featureId: lineFeature.id });
+          return;
         }
       }
       refreshFromDraw();
@@ -387,6 +492,7 @@ export default function DrawToolbar({
     refreshFromDraw,
     enlargeVertexHitbox,
     splitTargetId,
+    splitLineId,
   ]);
 
 
@@ -433,10 +539,29 @@ export default function DrawToolbar({
           ...btn,
           background: splitTargetId ? "#eef6ff" : "#fff",
         }}
-        title="Découper la parcelle sélectionnée avec un tracé"
+        title="Tracer la ligne de découpe de la parcelle sélectionnée"
       >
-        <IconSplit /> {label("Découper parcelle")}
+        <IconSplit /> {label(splitTargetId ? "Tracer découpe…" : "Découper parcelle")}
       </button>
+
+      {splitTargetId && splitLineId && (
+        <>
+          <button
+            onClick={confirmSplitParcel}
+            style={{ ...btn, background: "#dcfce7", borderColor: "#86efac" }}
+            title="Valider la découpe tracée"
+          >
+            <IconCheck /> {label("Valider découpe")}
+          </button>
+          <button
+            onClick={cancelSplitParcel}
+            style={{ ...btn, background: "#fee2e2", borderColor: "#fca5a5" }}
+            title="Annuler le tracé de découpe"
+          >
+            <IconTrash /> {label("Annuler découpe")}
+          </button>
+        </>
+      )}
 
       <button onClick={addSquareAtCenter} style={btn} title="Ajouter un carré au centre">
         <IconSquare /> {label("Carré centre")}
@@ -458,6 +583,8 @@ export default function DrawToolbar({
       {!compact && (
         <span style={{ marginLeft: 6, fontSize: 12, color: "#666" }}>
           Mode : <code>{mode}</code>
+          {splitTargetId && !splitLineId ? " · Trace la ligne de découpe puis relâche." : ""}
+          {splitTargetId && splitLineId ? " · Ajuste le trait bleu (les extrémités sont collées à la bordure) puis valide la découpe." : ""}
         </span>
       )}
     </div>
