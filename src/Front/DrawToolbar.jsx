@@ -2,6 +2,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { featureAreaM2 } from "../utils/geometry";
 import { resolveOverlappingParcels } from "../utils/overlapResolution";
+import { mergeFeaturesByIds } from "../utils/parcelleFusion";
 import { splitParcelleByLine } from "../utils/parcelleSplit";
 
 
@@ -37,6 +38,11 @@ const IconSelectBox = () => (
       stroke="currentColor"
       strokeDasharray="3 2"
     />
+  </svg>
+);
+const IconMerge = () => (
+  <svg viewBox="0 0 24 24" style={iconStyle}>
+    <path d="M4 5h6v6H4V5zm10 0h6v6h-6V5zM9 8h6v2H9V8zM7 14h10v5H7v-5z" fill="currentColor" />
   </svg>
 );
 
@@ -271,6 +277,60 @@ export default function DrawToolbar({
     refreshFromDraw();
   }
 
+  function mergeSelection() {
+    const draw = drawRef?.current;
+    if (!draw) return;
+
+    const selectedIds = draw.getSelectedIds?.() || [];
+    if (selectedIds.length < 2) {
+      alert("Sélectionnez au moins deux parcelles (mode multi-sélection), puis cliquez sur Fusionner.");
+      return;
+    }
+
+    const allFeatures = draw.getAll()?.features || [];
+    const selectedFeatures = allFeatures.filter((feature) =>
+      selectedIds.map(String).includes(String(feature.id))
+    );
+    const choices = selectedFeatures
+      .map((feature, index) => {
+        const name =
+          feature?.properties?.nom_affiche ||
+          feature?.properties?.parcelle ||
+          feature?.properties?.numero ||
+          feature.id;
+        return `${index + 1}. ${name}`;
+      })
+      .join("\n");
+    const answer = window.prompt(
+      `Quelle parcelle doit conserver ses données de tableau après fusion ?\n${choices}\n\nEntrez le numéro de la parcelle à conserver :`,
+      "1"
+    );
+    if (answer == null) return;
+
+    const keepIndex = Number(answer.trim()) - 1;
+    if (!Number.isInteger(keepIndex) || keepIndex < 0 || keepIndex >= selectedFeatures.length) {
+      alert("Choix invalide. Veuillez saisir un numéro de parcelle valide.");
+      return;
+    }
+
+    try {
+      const keepId = selectedFeatures[keepIndex].id;
+      const { feature, removedIds } = mergeFeaturesByIds(allFeatures, selectedIds, keepId);
+      draw.delete(selectedIds);
+      const addedIds = draw.add(feature);
+      refreshFromDraw();
+      const mergedId = Array.isArray(addedIds) && addedIds.length ? addedIds[0] : feature?.id;
+      if (mergedId) {
+        selectFeatureOnMap?.(mergedId, true);
+      }
+      if (removedIds.length) {
+        alert("Fusion effectuée : les autres lignes de parcelles ont été supprimées.");
+      }
+    } catch (error) {
+      alert(error?.message || "La fusion des parcelles a échoué.");
+    }
+  }
+
   /**
    * Sync auto: quand Draw crée / met à jour / supprime, on met à jour la liste.
    * (Les events 'draw.create|update|delete' viennent de map, pas de draw.)
@@ -363,6 +423,8 @@ export default function DrawToolbar({
         <IconSplit /> {label("Découper chevauchements")}
       </button>
 
+      <button onClick={mergeSelection} style={btn} title="Fusionner les parcelles sélectionnées">
+        <IconMerge /> {label("Fusionner")}
       <button
         onClick={startSplitParcel}
         style={{
