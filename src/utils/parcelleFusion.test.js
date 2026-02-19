@@ -35,4 +35,30 @@ describe("mergeFeaturesByIds", () => {
   it("lève une erreur avec moins de deux parcelles", () => {
     expect(() => mergeFeaturesByIds([featureA], ["a"], "a")).toThrow(/au moins deux/i);
   });
+
+  it("supprime les trous de la géométrie fusionnée pour éviter les obstacles internes", () => {
+    const outer = {
+      type: "Feature",
+      id: "outer",
+      properties: { nom: "Outer" },
+      geometry: {
+        type: "Polygon",
+        coordinates: [[[-2, -2], [2, -2], [2, 2], [-2, 2], [-2, -2]]],
+      },
+    };
+    const inner = {
+      type: "Feature",
+      id: "inner",
+      properties: { nom: "Inner" },
+      geometry: {
+        type: "Polygon",
+        coordinates: [[[-1, -1], [1, -1], [1, 1], [-1, 1], [-1, -1]]],
+      },
+    };
+
+    const result = mergeFeaturesByIds([outer, inner], ["outer", "inner"], "outer");
+
+    expect(result.feature.geometry.type).toBe("Polygon");
+    expect(result.feature.geometry.coordinates).toHaveLength(1);
+  });
 });

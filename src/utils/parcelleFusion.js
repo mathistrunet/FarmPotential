@@ -19,6 +19,25 @@ function normalizeUnionResult(unionResult) {
   return { type: "MultiPolygon", coordinates: unionResult };
 }
 
+function removeInteriorRingsFromGeometry(geometry) {
+  if (!geometry?.coordinates) return geometry;
+  if (geometry.type === "Polygon") {
+    return {
+      ...geometry,
+      coordinates: geometry.coordinates.length ? [geometry.coordinates[0]] : [],
+    };
+  }
+  if (geometry.type === "MultiPolygon") {
+    return {
+      ...geometry,
+      coordinates: geometry.coordinates.map((polygon) =>
+        polygon.length ? [polygon[0]] : [],
+      ),
+    };
+  }
+  return geometry;
+}
+
 function buildMergedProperties(baseProperties, featuresToMerge) {
   const totalSurfaceHa = featuresToMerge.reduce((sum, feature) => {
     const areaM2 = featureAreaM2(feature);
@@ -50,7 +69,7 @@ export function mergeFeaturesByIds(features, selectedIds, keepId) {
   }
 
   const unionResult = polygonClipping.union(...unionInputs);
-  const mergedGeometry = normalizeUnionResult(unionResult);
+  const mergedGeometry = removeInteriorRingsFromGeometry(normalizeUnionResult(unionResult));
   if (!mergedGeometry) {
     throw new Error("La fusion géométrique a échoué.");
   }
