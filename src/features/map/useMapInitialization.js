@@ -4,6 +4,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import MapboxDraw from "@mapbox/mapbox-gl-draw";
 import "@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css";
 import MultipleSelectionMode from "./multipleSelectionMode.js";
+import { findOverlappingParcels } from "../../utils/parcelOverlap";
 
 import { useRasterLayers } from "./useRasterLayers";
 
@@ -15,6 +16,7 @@ export function useMapInitialization() {
   const [features, setFeatures] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const ensureRaster = useRasterLayers();
+  const previousOverlapSignatureRef = useRef(null);
 
   const selectFeatureOnMap = useCallback((id, fit = false) => {
     const map = mapRef.current;
@@ -128,6 +130,20 @@ export function useMapInitialization() {
           .filter((f) => f.geometry?.type === "Polygon")
           .map((f) => ({ ...f, properties: f.properties || {} }));
         setFeatures(polys);
+
+        const overlappingPairs = findOverlappingParcels(polys, 1);
+        const overlapSignature = overlappingPairs
+          .map(([a, b]) => [String(a.id ?? ""), String(b.id ?? "")].sort().join("::"))
+          .sort()
+          .join("|");
+
+        if (overlapSignature && overlapSignature !== previousOverlapSignatureRef.current) {
+          alert(
+            "Chevauchement détecté entre certaines parcelles. "
+              + "Une marge de 1 m est appliquée, donc deux parcelles qui se touchent ne sont pas considérées superposées."
+          );
+        }
+        previousOverlapSignatureRef.current = overlapSignature || null;
       };
 
       map.on("draw.selectionchange", (e) => {
