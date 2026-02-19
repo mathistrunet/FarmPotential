@@ -105,6 +105,7 @@ const server = http.createServer(async (req, res) => {
                 oldYear,
                 newYear,
                 correspondancesValidated,
+                dropOldYear: true,
               });
 
             const oldCollection = mergedParcellesByYear?.[oldYear] || emptyCollection();

@@ -160,6 +160,7 @@ export const applyCorrespondencesAndMerge = ({
   oldYear,
   newYear,
   correspondancesValidated,
+  dropOldYear = false,
   onWarning,
 }) => {
   const warn = typeof onWarning === "function" ? onWarning : defaultWarn;
@@ -244,7 +245,10 @@ export const applyCorrespondencesAndMerge = ({
   return {
     parcellesByYear: {
       ...current,
-      [oldYear]: { ...oldCollection, features: nextOldFeatures },
+      [oldYear]: {
+        ...oldCollection,
+        features: dropOldYear ? [] : nextOldFeatures,
+      },
       [newYear]: { ...newCollection, features: nextNewFeatures },
     },
     removedOldKeys,
