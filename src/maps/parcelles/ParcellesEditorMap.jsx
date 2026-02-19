@@ -165,10 +165,6 @@ export default function ParcellesEditorMap() {
     setFeatureCollection,
     reset: resetParcellesStore,
     loading: parcellesLoading,
-    undo: undoParcelleEdit,
-    redo: redoParcelleEdit,
-    canUndo,
-    canRedo,
   } = useParcelles();
 
   useToponymieAutoNaming(features, setFeatures);
@@ -274,31 +270,6 @@ export default function ParcellesEditorMap() {
       setSideExpanded(false);
     }
   }, [sideOpen]);
-
-  useEffect(() => {
-    const onKeyDown = (event) => {
-      const normalizedKey = String(event.key || "").toLowerCase();
-      const normalizedCode = String(event.code || "").toLowerCase();
-      const isUndoShortcut = normalizedKey === "z" || normalizedCode === "keyz";
-      const isRedoShortcut = normalizedKey === "y" || normalizedCode === "keyy";
-      const isUndo = (event.ctrlKey || event.metaKey) && !event.shiftKey && isUndoShortcut;
-      const isRedo = (event.ctrlKey || event.metaKey) && (
-        isRedoShortcut ||
-        (event.shiftKey && isUndoShortcut)
-      );
-      if (!isUndo && !isRedo) return;
-      if (isUndo && !canUndo) return;
-      if (isRedo && !canRedo) return;
-      event.preventDefault();
-      if (isUndo) {
-        undoParcelleEdit();
-      } else {
-        redoParcelleEdit();
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [canRedo, canUndo, redoParcelleEdit, undoParcelleEdit]);
 
   useEffect(() => {
     if (parcelleYearFilter === "all" || parcelleYearFilter === "unknown") {
