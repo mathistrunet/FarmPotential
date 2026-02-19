@@ -3,6 +3,7 @@ import departementsMeta from "../data/departements_meta.json";
 import { featureAreaHa, featureCentroid } from "../utils/geometry";
 import { getToponymiePoints } from "../services/toponymie";
 import { DEPARTMENT_TO_TOPONYMIE_REGION } from "../config/toponymie";
+import { resolveToponymNames } from "./toponymieNameFormatting";
 
 const TELEPAC_NUMBER_REGEX = /^[0-9]+(?:[.\-][0-9]+)*$/;
 const META_ENTRIES = Object.entries(departementsMeta || {});
@@ -138,27 +139,7 @@ export function useToponymieAutoNaming(features, setFeatures) {
         });
         if (!assignments.length) return;
 
-        const grouped = new Map();
-        assignments.forEach((entry) => {
-          const key = entry.baseName;
-          if (!grouped.has(key)) grouped.set(key, []);
-          grouped.get(key).push(entry);
-        });
-
-        const finalMap = new Map();
-        grouped.forEach((entries, name) => {
-          if (entries.length === 1) {
-            finalMap.set(entries[0].key, name);
-            return;
-          }
-          entries.forEach((entry) => {
-            const area = Number.isFinite(entry.areaHa)
-              ? Math.max(1, Math.round(entry.areaHa))
-              : null;
-            const suffix = area ? ` ${area}ha` : "";
-            finalMap.set(entry.key, `${name}${suffix}`);
-          });
-        });
+        const finalMap = resolveToponymNames(assignments);
         if (!finalMap.size || cancelled) return;
 
         setFeatures((prev) => {

@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { featureAreaM2 } from "../utils/geometry";
 import { resolveOverlappingParcels } from "../utils/overlapResolution";
 import { mergeFeaturesByIds } from "../utils/parcelleFusion";
+import { splitParcelleByLine } from "../utils/parcelleSplit";
 
 
 /** Petite lib d’icônes inline, légères */
@@ -65,6 +66,7 @@ export default function DrawToolbar({
   className
 }) {
   const [mode, setMode] = useState("simple_select");
+  const [splitTargetId, setSplitTargetId] = useState(null);
 
   const btn = {
     display: "inline-flex", alignItems: "center", gap: 8,
@@ -208,6 +210,50 @@ export default function DrawToolbar({
     draw.changeMode(next);
   }
 
+  function startSplitParcel() {
+    const draw = drawRef?.current;
+    if (!draw) return;
+    const selIds =
+      (draw.getSelectedIds?.() || (draw.getSelected?.().features || []).map((f) => f.id)) || [];
+    const targetId = selIds[0];
+    if (!targetId) {
+      alert("Sélectionne d'abord une parcelle à découper.");
+      return;
+    }
+    const target = draw.get?.(targetId);
+    if (!target || (target.geometry?.type !== "Polygon" && target.geometry?.type !== "MultiPolygon")) {
+      alert("La sélection doit être une parcelle polygonale.");
+      return;
+    }
+    setSplitTargetId(targetId);
+    draw.changeMode("draw_line_string");
+  }
+
+  function applySplitFromLine(lineFeature) {
+    const draw = drawRef?.current;
+    if (!draw || !splitTargetId) return false;
+    const target = draw.get?.(splitTargetId);
+    if (!target) return false;
+    const pieces = splitParcelleByLine(target, lineFeature);
+    if (pieces.length < 2) {
+      alert("Le tracé doit traverser la parcelle pour la découper en 2.");
+      return false;
+    }
+
+    draw.delete(splitTargetId);
+    pieces.forEach((polygonCoordinates) => {
+      draw.add({
+        type: "Feature",
+        properties: { ...(target.properties || {}) },
+        geometry: {
+          type: "Polygon",
+          coordinates: polygonCoordinates,
+        },
+      });
+    });
+    return true;
+  }
+
   const refreshFromDraw = useCallback(() => {
     const draw = drawRef?.current;
     if (!draw) return;
@@ -306,19 +352,42 @@ export default function DrawToolbar({
       }
     };
 
-    map.on("draw.create", refreshFromDraw);
+    const onCreate = (event) => {
+      if (splitTargetId) {
+        const lineFeature = (event?.features || []).find((f) => f.geometry?.type === "LineString");
+        if (lineFeature) {
+          const splitDone = applySplitFromLine(lineFeature);
+          if (lineFeature.id) draw.delete(lineFeature.id);
+          setSplitTargetId(null);
+          draw.changeMode("simple_select");
+          if (splitDone) {
+            refreshFromDraw();
+            return;
+          }
+        }
+      }
+      refreshFromDraw();
+    };
+
+    map.on("draw.create", onCreate);
     map.on("draw.update", refreshFromDraw);
     map.on("draw.delete", refreshFromDraw);
     map.on("draw.modechange", onMode);
 
     return () => {
-      map.off("draw.create", refreshFromDraw);
+      map.off("draw.create", onCreate);
       map.off("draw.update", refreshFromDraw);
       map.off("draw.delete", refreshFromDraw);
       map.off("draw.modechange", onMode);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mapRef?.current, drawRef?.current, refreshFromDraw, enlargeVertexHitbox]);
+  }, [
+    mapRef?.current,
+    drawRef?.current,
+    refreshFromDraw,
+    enlargeVertexHitbox,
+    splitTargetId,
+  ]);
 
 
   return (
@@ -356,6 +425,15 @@ export default function DrawToolbar({
 
       <button onClick={mergeSelection} style={btn} title="Fusionner les parcelles sélectionnées">
         <IconMerge /> {label("Fusionner")}
+      <button
+        onClick={startSplitParcel}
+        style={{
+          ...btn,
+          background: splitTargetId ? "#eef6ff" : "#fff",
+        }}
+        title="Découper la parcelle sélectionnée avec un tracé"
+      >
+        <IconSplit /> {label("Découper parcelle")}
       </button>
 
       <button onClick={addSquareAtCenter} style={btn} title="Ajouter un carré au centre">
