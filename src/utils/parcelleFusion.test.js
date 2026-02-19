@@ -61,4 +61,38 @@ describe("mergeFeaturesByIds", () => {
     expect(result.feature.geometry.type).toBe("Polygon");
     expect(result.feature.geometry.coordinates).toHaveLength(1);
   });
+
+  it("comble les petites bordures espacées de 1 mètre ou moins", () => {
+    const meterInDegrees = 1 / 111320;
+    const left = {
+      type: "Feature",
+      id: "left",
+      properties: { nom: "Left" },
+      geometry: {
+        type: "Polygon",
+        coordinates: [[[0, 0], [0.0001, 0], [0.0001, 0.0001], [0, 0.0001], [0, 0]]],
+      },
+    };
+    const right = {
+      type: "Feature",
+      id: "right",
+      properties: { nom: "Right" },
+      geometry: {
+        type: "Polygon",
+        coordinates: [
+          [
+            [0.0001 + meterInDegrees * 0.8, 0],
+            [0.0002 + meterInDegrees * 0.8, 0],
+            [0.0002 + meterInDegrees * 0.8, 0.0001],
+            [0.0001 + meterInDegrees * 0.8, 0.0001],
+            [0.0001 + meterInDegrees * 0.8, 0],
+          ],
+        ],
+      },
+    };
+
+    const result = mergeFeaturesByIds([left, right], ["left", "right"], "left");
+
+    expect(result.feature.geometry.type).toBe("Polygon");
+  });
 });

@@ -1,6 +1,9 @@
 import polygonClipping from "polygon-clipping";
+import buffer from "@turf/buffer";
 
 import { featureAreaM2 } from "./geometry";
+
+const BORDER_SNAP_DISTANCE_METERS = 1;
 
 function geometryToUnionParts(geometry) {
   if (!geometry?.coordinates) return [];
@@ -38,6 +41,17 @@ function removeInteriorRingsFromGeometry(geometry) {
   return geometry;
 }
 
+function smoothNearBorders(geometry, distanceMeters = BORDER_SNAP_DISTANCE_METERS) {
+  if (!geometry?.coordinates || !Number.isFinite(distanceMeters) || distanceMeters <= 0) {
+    return geometry;
+  }
+  const halfDistance = distanceMeters / 2;
+  const feature = { type: "Feature", properties: {}, geometry };
+  const expanded = buffer(feature, halfDistance, { units: "meters" });
+  const closed = buffer(expanded, -halfDistance, { units: "meters" });
+  return closed?.geometry || geometry;
+}
+
 function buildMergedProperties(baseProperties, featuresToMerge) {
   const totalSurfaceHa = featuresToMerge.reduce((sum, feature) => {
     const areaM2 = featureAreaM2(feature);
@@ -69,7 +83,9 @@ export function mergeFeaturesByIds(features, selectedIds, keepId) {
   }
 
   const unionResult = polygonClipping.union(...unionInputs);
-  const mergedGeometry = removeInteriorRingsFromGeometry(normalizeUnionResult(unionResult));
+  const mergedGeometry = removeInteriorRingsFromGeometry(
+    smoothNearBorders(normalizeUnionResult(unionResult)),
+  );
   if (!mergedGeometry) {
     throw new Error("La fusion géométrique a échoué.");
   }
