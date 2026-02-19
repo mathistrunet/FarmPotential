@@ -277,10 +277,14 @@ export default function ParcellesEditorMap() {
 
   useEffect(() => {
     const onKeyDown = (event) => {
-      const isUndo = (event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === "z";
+      const normalizedKey = String(event.key || "").toLowerCase();
+      const normalizedCode = String(event.code || "").toLowerCase();
+      const isUndoShortcut = normalizedKey === "z" || normalizedCode === "keyz";
+      const isRedoShortcut = normalizedKey === "y" || normalizedCode === "keyy";
+      const isUndo = (event.ctrlKey || event.metaKey) && !event.shiftKey && isUndoShortcut;
       const isRedo = (event.ctrlKey || event.metaKey) && (
-        event.key.toLowerCase() === "y" ||
-        (event.shiftKey && event.key.toLowerCase() === "z")
+        isRedoShortcut ||
+        (event.shiftKey && isUndoShortcut)
       );
       if (!isUndo && !isRedo) return;
       if (isUndo && !canUndo) return;
