@@ -425,6 +425,8 @@ export default function DrawToolbar({
 
       <button onClick={mergeSelection} style={btn} title="Fusionner les parcelles sélectionnées">
         <IconMerge /> {label("Fusionner")}
+      </button>
+
       <button
         onClick={startSplitParcel}
         style={{
