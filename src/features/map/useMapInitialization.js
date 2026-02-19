@@ -371,6 +371,30 @@ export function useMapInitialization() {
             },
           },
           {
+            id: "draw-line-split-preview-inactive",
+            type: "line",
+            filter: [
+              "all",
+              ["==", "$type", "LineString"],
+              ["==", "split_preview", true],
+              ["==", "active", "false"],
+            ],
+            layout: { "line-cap": "round", "line-join": "round" },
+            paint: { "line-color": "#2563eb", "line-width": 4, "line-dasharray": [1, 1] },
+          },
+          {
+            id: "draw-line-split-preview-active",
+            type: "line",
+            filter: [
+              "all",
+              ["==", "$type", "LineString"],
+              ["==", "split_preview", true],
+              ["==", "active", "true"],
+            ],
+            layout: { "line-cap": "round", "line-join": "round" },
+            paint: { "line-color": "#1d4ed8", "line-width": 5 },
+          },
+          {
             id: "draw-line-static",
             type: "line",
             filter: ["all", ["==", "$type", "LineString"], ["==", "mode", "static"]],
