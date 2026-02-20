@@ -62,7 +62,7 @@ export function useMapInitialization() {
     try {
       data = draw.getAll();
     } catch (error) {
-      console.warn("Impossible de lire les parcelles depuis Mapbox Draw.", error);
+      console.warn("[DRAW_READ_FAILED] Impossible de lire les parcelles depuis Mapbox Draw.", error);
       return;
     }
     const polys = (data && data.features ? data.features : [])
@@ -488,7 +488,7 @@ export function useMapInitialization() {
         return;
       }
 
-      console.error("Map error:", err);
+      console.error("[MAP_RUNTIME_ERROR] Erreur MapLibre.", err);
     });
 
     return () => {
@@ -516,7 +516,7 @@ export function useMapInitialization() {
         // ignore
       }
     };
-  }, [ensureRaster]);
+  }, [ensureRaster, syncFeaturesFromDraw]);
 
   return {
     mapRef,

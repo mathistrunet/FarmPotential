@@ -3,12 +3,8 @@ const MATCH_VALIDATE_ENDPOINT = "/api/parcelles/matching/validate";
 const LOCAL_STORAGE_KEY = "parcelles.geojson";
 
 const normalizeFeature = (feature) => {
-  if (!feature || typeof feature !== "object") {
-    return null;
-  }
-  if (feature.type !== "Feature") {
-    return null;
-  }
+  if (!feature || typeof feature !== "object") return null;
+  if (feature.type !== "Feature") return null;
   return {
     ...feature,
     properties: feature.properties || {},
@@ -56,7 +52,8 @@ const loadLocalCollection = () => {
     const raw = window.localStorage.getItem(LOCAL_STORAGE_KEY);
     if (!raw) return null;
     return normalizeFeatureCollection(JSON.parse(raw));
-  } catch {
+  } catch (error) {
+    console.warn("[PARCELLES_LOCAL_READ_FAILED] Lecture localStorage impossible.", error);
     return null;
   }
 };
@@ -68,8 +65,8 @@ const persistLocalCollection = (collection) => {
       LOCAL_STORAGE_KEY,
       JSON.stringify(normalizeFeatureCollection(collection))
     );
-  } catch {
-    // ignore storage failures
+  } catch (error) {
+    console.warn("[PARCELLES_LOCAL_WRITE_FAILED] Écriture localStorage impossible.", error);
   }
 };
 
@@ -77,8 +74,8 @@ const clearLocalCollection = () => {
   if (!canUseLocalStorage()) return;
   try {
     window.localStorage.removeItem(LOCAL_STORAGE_KEY);
-  } catch {
-    // ignore storage failures
+  } catch (error) {
+    console.warn("[PARCELLES_LOCAL_CLEAR_FAILED] Suppression localStorage impossible.", error);
   }
 };
 
@@ -86,7 +83,7 @@ export async function fetchParcellesGeojson(signal) {
   try {
     const response = await fetch(PARCELLES_ENDPOINT, { signal });
     if (!response.ok) {
-      throw new Error(`Backend error: ${response.status}`);
+      throw new Error(`[PARCELLES_FETCH_BACKEND_${response.status}] Réponse backend invalide.`);
     }
     const data = await response.json();
     const collection = normalizeFeatureCollection(data);
@@ -95,7 +92,8 @@ export async function fetchParcellesGeojson(signal) {
   } catch (error) {
     const local = loadLocalCollection();
     if (local) return local;
-    throw error;
+    const message = error instanceof Error ? error.message : "Erreur inconnue";
+    throw new Error(`[PARCELLES_FETCH_FAILED] Chargement impossible: ${message}`);
   }
 }
 
@@ -113,7 +111,7 @@ export async function clearParcellesGeojson(signal) {
   });
 
   if (!response.ok) {
-    throw new Error(`Backend error: ${response.status}`);
+    throw new Error(`[PARCELLES_CLEAR_BACKEND_${response.status}] Réinitialisation refusée.`);
   }
 
   return collection;
@@ -140,7 +138,7 @@ export async function saveParcellesGeojson(features, signal) {
   });
 
   if (!response.ok) {
-    throw new Error(`Backend error: ${response.status}`);
+    throw new Error(`[PARCELLES_SAVE_BACKEND_${response.status}] Enregistrement refusé.`);
   }
 
   return collection;
@@ -162,7 +160,7 @@ export async function validateParcellesMatching(
   });
 
   if (!response.ok) {
-    throw new Error(`Backend error: ${response.status}`);
+    throw new Error(`[PARCELLES_MATCH_VALIDATE_BACKEND_${response.status}] Validation refusée.`);
   }
 
   return response.json();

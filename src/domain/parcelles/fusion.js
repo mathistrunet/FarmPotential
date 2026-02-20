@@ -99,7 +99,6 @@ const mergeParcelleProperties = (newProps, oldProps) => {
 
 const defaultWarn = (message, meta) => {
   if (typeof import.meta !== "undefined" && import.meta?.env?.DEV) {
-    // eslint-disable-next-line no-console
     console.warn(message, meta);
   }
 };
@@ -120,7 +119,7 @@ export const buildParcellesByYearFromFeatures = (features) => {
   return grouped;
 };
 
-export const getOldYearPrevious = (oldFeature, oldYear, newYear) => {
+export const getOldYearPrevious = (oldFeature) => {
   const properties = oldFeature?.properties || null;
   if (!properties) return null;
   return (
@@ -135,7 +134,7 @@ export const getOldYearCulture = (oldFeature) => {
   return findFirstValue(properties, CULTURE_FIELDS);
 };
 
-export const getTargetPreviousField = (newFeature, oldYear, newYear) => {
+export const getTargetPreviousField = (newFeature) => {
   const properties = newFeature?.properties || null;
   return (
     findExistingPropertyKey(properties, PRECEDENT_N2_FIELDS) ||

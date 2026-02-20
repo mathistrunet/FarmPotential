@@ -1,7 +1,8 @@
 import { Suspense, lazy, useEffect, useMemo, useState } from "react";
 
 import ParcellesViewerMap from "./maps/parcelles/ParcellesViewerMap";
-import { ParcellesProvider, useParcelles } from "./maps/parcelles/ParcellesStore";
+import { ParcellesProvider } from "./maps/parcelles/ParcellesStore";
+import { useParcelles } from "./maps/parcelles/useParcelles";
 import { buildDeterministicPalette } from "./maps/parcelles/parcellesLayers";
 import { projectCultureYear } from "./maps/parcelles/parcellesData";
 import { codeFromLabel, labelFromCode } from "./utils/cultureLabels";
@@ -119,9 +120,7 @@ function AppContent() {
     const sample = viewerCollection?.features?.find((feature) => feature?.properties);
     if (!sample) return;
     const keys = Object.keys(sample.properties || {});
-    // eslint-disable-next-line no-console
     console.info("[ViewerFilters] properties keys sample", keys);
-    // eslint-disable-next-line no-console
     console.info("[ViewerFilters] culture year mapping", {
       cultureYear,
       cultureValue: sample.properties?.culture,

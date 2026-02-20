@@ -17,7 +17,8 @@ import {
 } from "../maps/parcelles/parcellesMapLayers";
 import { applyFilters } from "../maps/parcelles/parcellesFilters";
 import { assignUniqueParcelNumbers, normalizeParcellesCollection } from "../maps/parcelles/parcellesData";
-import { ParcellesMatchProvider, useParcellesMatchStore } from "../maps/parcelles/ParcellesMatchStore";
+import { ParcellesMatchProvider } from "../maps/parcelles/ParcellesMatchStore";
+import { useParcellesMatchStore } from "../maps/parcelles/useParcellesMatchStore";
 import {
   cacheYearFeatures,
   getCachedYearEntry,
@@ -284,6 +285,10 @@ function ParcelleMatchViewContent({
     setSelectedBaseKey,
   } = useParcellesMatchStore();
   const selectedIncomingKeyRef = useRef(selectedIncomingKey);
+  const leftColorRef = useRef(leftColor);
+  const rightColorRef = useRef(rightColor);
+  const handleLeftFeatureClickRef = useRef((feature) => feature);
+  const handleRightFeatureClickRef = useRef((feature) => feature);
 
   useEffect(() => {
     if (!open) return;
@@ -307,12 +312,10 @@ function ParcelleMatchViewContent({
     leftMap.addControl(new maplibregl.NavigationControl(), "top-left");
     rightMap.addControl(new maplibregl.NavigationControl(), "top-left");
     leftMap.on("error", (event) => {
-      // eslint-disable-next-line no-console
-      console.error("MAP ERROR (left)", event.error || event);
+      console.error("[MATCH_MAP_LEFT_ERROR] Erreur carte gauche.", event.error || event);
     });
     rightMap.on("error", (event) => {
-      // eslint-disable-next-line no-console
-      console.error("MAP ERROR (right)", event.error || event);
+      console.error("[MATCH_MAP_RIGHT_ERROR] Erreur carte droite.", event.error || event);
     });
 
     const handleLeftLoad = () => {
@@ -325,7 +328,7 @@ function ParcelleMatchViewContent({
         leftCollectionRef.current
       );
       ensureSelectedLayer(leftMap, LEFT_SOURCE_ID, LEFT_SELECTED_ID);
-      setColorBy(leftMap, LEFT_FILL_ID, "fixed", { fixedColor: leftColor });
+      setColorBy(leftMap, LEFT_FILL_ID, "fixed", { fixedColor: leftColorRef.current });
       applyFilters(leftMap, null, [LEFT_FILL_ID, LEFT_LINE_ID]);
       fitToGeojson(leftMap, leftCollectionRef.current);
       requestAnimationFrame(() => leftMap.resize());
@@ -340,7 +343,7 @@ function ParcelleMatchViewContent({
         rightCollectionRef.current
       );
       ensureSelectedLayer(rightMap, RIGHT_SOURCE_ID, RIGHT_SELECTED_ID);
-      setColorBy(rightMap, RIGHT_FILL_ID, "fixed", { fixedColor: rightColor });
+      setColorBy(rightMap, RIGHT_FILL_ID, "fixed", { fixedColor: rightColorRef.current });
       applyFilters(rightMap, null, [RIGHT_FILL_ID, RIGHT_LINE_ID]);
       fitToGeojson(rightMap, rightCollectionRef.current);
       requestAnimationFrame(() => rightMap.resize());
@@ -363,7 +366,7 @@ function ParcelleMatchViewContent({
         fillLayerId: LEFT_FILL_ID,
         popupRef: leftPopupRef,
         hoveredIdRef: leftHoveredIdRef,
-        onClickFeature: (feature) => handleLeftFeatureClick(feature),
+        onClickFeature: (feature) => handleLeftFeatureClickRef.current(feature),
       }
     );
     const detachRight = attachViewerInteractions(
@@ -373,7 +376,7 @@ function ParcelleMatchViewContent({
         fillLayerId: RIGHT_FILL_ID,
         popupRef: rightPopupRef,
         hoveredIdRef: rightHoveredIdRef,
-        onClickFeature: (feature) => handleRightFeatureClick(feature),
+        onClickFeature: (feature) => handleRightFeatureClickRef.current(feature),
       }
     );
 
@@ -420,7 +423,7 @@ function ParcelleMatchViewContent({
         : normalizeParcellesCollection(leftEntries.map((entry) => entry.feature));
     const numberedCollection = assignUniqueParcelNumbers(sourceCollection);
     return numberedCollection.features.map((feature) => ensureWgs84ForDisplay(feature));
-  }, [leftEntries, leftYear]);
+  }, [leftEntries, leftYear, parcellesByYear]);
 
   const rightDisplayFeatures = useMemo(() => {
     if (!rightYear) return [];
@@ -431,7 +434,7 @@ function ParcelleMatchViewContent({
         : normalizeParcellesCollection(rightEntries.map((entry) => entry.feature));
     const numberedCollection = assignUniqueParcelNumbers(sourceCollection);
     return numberedCollection.features.map((feature) => ensureWgs84ForDisplay(feature));
-  }, [rightEntries, rightYear]);
+  }, [rightEntries, rightYear, parcellesByYear]);
 
   const leftCollection = useMemo(
     () => ({
@@ -636,11 +639,12 @@ function ParcelleMatchViewContent({
         setValidatedAt(new Date());
       }
     } catch (error) {
-      // parent handles error display
+      const message = error instanceof Error ? error.message : "Erreur inconnue";
+      console.error(`[MATCH_VALIDATE_FAILED] Validation impossible: ${message}`);
     }
   };
 
-  function handleLeftFeatureClick(feature) {
+  const handleLeftFeatureClick = useCallback((feature) => {
     const baseKey = String(feature.id ?? feature.properties?.id ?? "");
     if (!baseKey) return;
     setSelectedBaseKey(baseKey);
@@ -649,13 +653,26 @@ function ParcelleMatchViewContent({
     if (handleMatchChangeRef.current) {
       handleMatchChangeRef.current(incomingKey, baseKey);
     }
-  }
+  }, [setSelectedBaseKey]);
 
-  function handleRightFeatureClick(feature) {
+  const handleRightFeatureClick = useCallback((feature) => {
     const incomingKey = String(feature.id ?? feature.properties?.id ?? "");
     if (!incomingKey) return;
     handleRowSelect(incomingKey);
-  }
+  }, [handleRowSelect]);
+
+  useEffect(() => {
+    leftColorRef.current = leftColor;
+  }, [leftColor]);
+
+  useEffect(() => {
+    rightColorRef.current = rightColor;
+  }, [rightColor]);
+
+  useEffect(() => {
+    handleLeftFeatureClickRef.current = handleLeftFeatureClick;
+    handleRightFeatureClickRef.current = handleRightFeatureClick;
+  }, [handleLeftFeatureClick, handleRightFeatureClick]);
 
   useEffect(() => {
     if (!selectedIncomingKey) return;
@@ -685,7 +702,6 @@ function ParcelleMatchViewContent({
     });
     setCorrespondances(next);
   }, [matchRows, setCorrespondances]);
-
   useEffect(() => {
     if (!selectedIncomingKey) return;
     const node = rowRefs.current.get(selectedIncomingKey);

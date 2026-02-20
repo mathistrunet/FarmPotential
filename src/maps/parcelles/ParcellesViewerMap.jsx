@@ -113,7 +113,6 @@ export default function ParcellesViewerMap({
     mapRef.current = map;
     map.addControl(new maplibregl.NavigationControl(), "top-left");
     map.on("error", (event) => {
-      // eslint-disable-next-line no-console
       console.error("MAP ERROR", event.error || event);
     });
 
