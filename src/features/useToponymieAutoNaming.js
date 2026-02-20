@@ -5,7 +5,7 @@ import { getToponymiePoints } from "../services/toponymie";
 import { DEPARTMENT_TO_TOPONYMIE_REGION } from "../config/toponymie";
 import { resolveToponymNames } from "./toponymieNameFormatting";
 
-const TELEPAC_NUMBER_REGEX = /^[0-9]+(?:[.\-][0-9]+)*$/;
+const TELEPAC_NUMBER_REGEX = /^[0-9]+(?:[.-][0-9]+)*$/;
 const META_ENTRIES = Object.entries(departementsMeta || {});
 const GRAPHIE_FIELDS = [
   "graphie",

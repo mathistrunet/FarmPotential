@@ -40,7 +40,7 @@ import {
   saveParcellesGeojson,
   validateParcellesMatching,
 } from "../../services/parcellesBackend";
-import { useParcelles } from "./ParcellesStore";
+import { useParcelles } from "./useParcelles";
 
 const EARTH_RADIUS = 6378137;
 const DRAW_LAYER_IDS = [
@@ -430,13 +430,10 @@ export default function ParcellesEditorMap() {
     try {
       await clearParcellesGeojson();
     } catch (error) {
-      console.warn(
-        "Impossible de réinitialiser les parcelles dans le backend.",
-        error
-      );
+      const message = error instanceof Error ? error.message : "Erreur inconnue";
+      console.warn(`[PARCELLES_RESET_FAILED] Réinitialisation backend impossible: ${message}`);
     }
   }, [
-    clearParcellesGeojson,
     emptyParcellesCollection,
     resetParcellesStore,
     setDrawFeatures,
@@ -462,7 +459,8 @@ export default function ParcellesEditorMap() {
           lastSavedPayloadRef.current = JSON.stringify(collection);
         })
         .catch((error) => {
-          console.warn("Impossible d'enregistrer les parcelles.", error);
+          const message = error instanceof Error ? error.message : "Erreur inconnue";
+          console.warn(`[PARCELLES_SAVE_FAILED] Enregistrement impossible: ${message}`);
         });
     }, 500);
 
@@ -514,14 +512,15 @@ export default function ParcellesEditorMap() {
     try {
       data = draw.getAll();
     } catch (error) {
-      console.warn("Impossible de lire les parcelles depuis Mapbox Draw.", error);
+      const message = error instanceof Error ? error.message : "Erreur inconnue";
+      console.warn(`[DRAW_SNAPSHOT_FAILED] Lecture Mapbox Draw impossible: ${message}`);
       return;
     }
     if (!data) return;
     const payload = buildCollectionFromFeatures(data?.features || []);
     lastSyncedPayloadRef.current = JSON.stringify(payload);
     setFeatureCollection(payload);
-  }, [buildCollectionFromFeatures, setFeatureCollection]);
+  }, [buildCollectionFromFeatures, drawRef, setFeatureCollection]);
 
   useEffect(() => {
     const map = mapRef.current;

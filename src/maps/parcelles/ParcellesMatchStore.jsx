@@ -1,8 +1,8 @@
-import { createContext, useContext, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { assignUniqueParcelNumbers, normalizeParcellesCollection } from "./parcellesData";
 
-const ParcellesMatchContext = createContext(null);
+import { ParcellesMatchContext } from "./ParcellesMatchContext";
 
 const buildParcellesByYear = (features) => {
   const grouped = {};
@@ -49,12 +49,4 @@ export function ParcellesMatchProvider({ features, children }) {
       {children}
     </ParcellesMatchContext.Provider>
   );
-}
-
-export function useParcellesMatchStore() {
-  const context = useContext(ParcellesMatchContext);
-  if (!context) {
-    throw new Error("useParcellesMatchStore must be used within ParcellesMatchProvider");
-  }
-  return context;
 }

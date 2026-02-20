@@ -1,9 +1,9 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { fetchParcellesGeojson } from "../../services/parcellesBackend";
 import { normalizeParcellesCollection } from "./parcellesData";
 
-const ParcellesContext = createContext(null);
+import { ParcellesContext } from "./ParcellesContext";
 const EMPTY_COLLECTION = { type: "FeatureCollection", features: [] };
 const LOCAL_STORAGE_KEY = "farmpotential.parcelles-temp";
 
@@ -14,7 +14,7 @@ const readFromStorage = () => {
     if (!raw) return null;
     return JSON.parse(raw);
   } catch (error) {
-    console.warn("Impossible de lire les parcelles depuis le stockage local.", error);
+    console.warn("[PARCELLES_TEMP_READ_FAILED] Lecture stockage local impossible.", error);
     return null;
   }
 };
@@ -24,7 +24,7 @@ const writeToStorage = (payload) => {
   try {
     window.localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(payload));
   } catch (error) {
-    console.warn("Impossible d'écrire les parcelles dans le stockage local.", error);
+    console.warn("[PARCELLES_TEMP_WRITE_FAILED] Écriture stockage local impossible.", error);
   }
 };
 
@@ -236,12 +236,4 @@ export function ParcellesProvider({ children, initialCollection }) {
   );
 
   return <ParcellesContext.Provider value={value}>{children}</ParcellesContext.Provider>;
-}
-
-export function useParcelles() {
-  const context = useContext(ParcellesContext);
-  if (!context) {
-    throw new Error("useParcelles must be used within ParcellesProvider");
-  }
-  return context;
 }
