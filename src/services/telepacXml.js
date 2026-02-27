@@ -23,7 +23,16 @@ function stableIlotReference(pacage, ilotNumero) {
   for (let i = 0; i < source.length; i += 1) {
     hash = (hash * 31 + source.charCodeAt(i)) >>> 0;
   }
-  return `${pacage}-${String(hash).padStart(10, "0")}`;
+  const prefix = normalizeDigits(pacage).slice(0, 9).padEnd(9, "0");
+  const suffix = String(hash % 1000).padStart(3, "0");
+  return `${prefix}${suffix}`;
+}
+
+function normalizeIlotReference(value, pacage, ilotNumero) {
+  const digits = normalizeDigits(value);
+  if (digits.length >= 12) return digits.slice(0, 12);
+  if (digits.length > 0) return digits.padStart(12, "0");
+  return stableIlotReference(pacage, ilotNumero);
 }
 
 function firstProperty(properties, keys) {
@@ -103,6 +112,11 @@ export function buildTelepacXML(features) {
     return `<?xml version="1.0" encoding="UTF-8"?>\n<producteurs xmlns="${NS}" xmlns:gml="${GML}">\n  <producteur numero-pacage="${meta.pacage}" campagne="Courante" fichier-xsd="Echanges-producteur-export-2025-V1">\n    <demandeur certificat-environnemental="false" dossier-sans-demande-aides="false">\n      <identification-societe>\n        <exploitation>${esc(meta.exploitation)}</exploitation>\n      </identification-societe>\n      <siret>${meta.siret}</siret>\n${meta.email ? `      <courriel>${esc(meta.email)}</courriel>\n` : ""}    </demandeur>\n    <rpg></rpg>\n  </producteur>\n</producteurs>`;
   }
 
+  const globalCommune =
+    normalizeDigits(
+      firstProperty(features[0]?.properties || {}, ["code_insee", "commune", "insee", "codeCommune"])
+    ) || meta.communeSiege;
+
   const usedIlotNumbers = new Set();
   features.forEach((feature) => {
     const ilotNumero = normalizeNumero(feature?.properties?.ilot_numero);
@@ -172,14 +186,7 @@ export function buildTelepacXML(features) {
     let maxX = -Infinity;
     let maxY = -Infinity;
     let hasCoords = false;
-    let commune = "";
-
     ilot.parcelles.forEach(({ feature }) => {
-      if (!commune) {
-        commune = normalizeDigits(
-          firstProperty(feature?.properties || {}, ["code_insee", "commune", "insee", "codeCommune"])
-        );
-      }
       const rings = getAllOuterRings(feature);
       rings.forEach((ring) => {
         ring.forEach(([lon, lat]) => {
@@ -207,10 +214,13 @@ export function buildTelepacXML(features) {
         .join(" ");
     }
 
-    const ilotReference =
-      firstProperty(ilot.parcelles[0]?.feature?.properties || {}, ["numero_ilot_reference", "numero-ilot-reference", "ilot_reference"]) ||
-      stableIlotReference(meta.pacage, ilot.numero);
-    const codeCommune = (commune || meta.communeSiege || "00000").slice(0, 5);
+    const rawIlotReference = firstProperty(ilot.parcelles[0]?.feature?.properties || {}, [
+      "numero_ilot_reference",
+      "numero-ilot-reference",
+      "ilot_reference",
+    ]);
+    const ilotReference = normalizeIlotReference(rawIlotReference, meta.pacage, ilot.numero);
+    const codeCommune = (globalCommune || "00000").slice(0, 5);
 
     xml += `      <ilot numero-ilot-reference="${esc(ilotReference)}" numero-ilot="${esc(ilot.numero)}">\n`;
     xml += `        <commune>${esc(codeCommune)}</commune>\n`;

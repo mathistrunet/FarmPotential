@@ -80,4 +80,51 @@ describe("buildTelepacXML", () => {
     expect(Math.abs(x)).toBeGreaterThan(180);
     expect(Math.abs(y)).toBeGreaterThan(90);
   });
+
+  it("force numero-ilot-reference sur 12 chiffres et une commune unique", () => {
+    const features = [
+      {
+        type: "Feature",
+        properties: {
+          ilot_numero: "1",
+          numero: "1",
+          code: "BLE",
+          code_exploitation: "123456789",
+          code_insee: "49123",
+          "numero-ilot-reference": "AB-12",
+        },
+        geometry: {
+          type: "Polygon",
+          coordinates: [[[0.125, 47.115],[0.126, 47.115],[0.126, 47.116],[0.125, 47.116],[0.125, 47.115]]],
+        },
+      },
+      {
+        type: "Feature",
+        properties: {
+          ilot_numero: "2",
+          numero: "2",
+          code: "ORH",
+          code_insee: "99999",
+        },
+        geometry: {
+          type: "Polygon",
+          coordinates: [[[0.127, 47.115],[0.128, 47.115],[0.128, 47.116],[0.127, 47.116],[0.127, 47.115]]],
+        },
+      },
+    ];
+
+    const xml = buildTelepacXML(features);
+    const parser = new (new JSDOM().window.DOMParser)();
+    const doc = parser.parseFromString(xml, "application/xml");
+
+    const ilots = [...doc.getElementsByTagName("ilot")];
+    expect(ilots).toHaveLength(2);
+
+    const refs = ilots.map((n) => n.getAttribute("numero-ilot-reference"));
+    refs.forEach((ref) => expect(ref).toMatch(/^\d{12}$/));
+
+    const communes = ilots.map((n) => n.getElementsByTagName("commune")[0]?.textContent?.trim());
+    expect(communes).toEqual(["49123", "49123"]);
+  });
+
 });
