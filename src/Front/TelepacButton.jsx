@@ -379,7 +379,7 @@ export function ExportTelepacButton({
     setLoading(true);
     try {
       const xml = buildTelepacXML(features);
-      const blob = new Blob([xml], { type: "application/xml;charset=ISO-8859-1" });
+      const blob = new Blob([xml], { type: "application/xml;charset=UTF-8" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
