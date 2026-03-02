@@ -1676,6 +1676,7 @@ export default function ParcellesEditorMap() {
                 selectFeatureOnMap={selectFeatureOnMap}
                 compact={compact}
                 buttonStyle={btn}
+                structureName={csvValues.structureName}
                 onImportMeta={(meta) => {
                   if (!meta?.pacage) return;
                   setCsvValues((prev) => ({

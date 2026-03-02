@@ -122,6 +122,7 @@ async function getStructureCultureLookup(structureName) {
   if (!normalizedStructure) return null;
   const entries = await loadAssoliaCulturesExport();
   const byMetacode = {};
+  const byCultureName = {};
   let fallbackName = "";
   entries.forEach((entry) => {
     const structure = normalizeStructureName(entry.structure_name);
@@ -129,16 +130,20 @@ async function getStructureCultureLookup(structureName) {
     const metacode = String(entry.metacode || "").trim().toUpperCase();
     const name = String(entry.culture_name || "").trim();
     if (!name) return;
+    const normalizedName = normalizeStructureName(name);
+    if (metacode && normalizedName && !byCultureName[normalizedName]) {
+      byCultureName[normalizedName] = metacode;
+    }
     if (metacode) {
       byMetacode[metacode] = name;
     } else if (!fallbackName) {
       fallbackName = name;
     }
   });
-  if (!Object.keys(byMetacode).length && !fallbackName) {
+  if (!Object.keys(byMetacode).length && !Object.keys(byCultureName).length && !fallbackName) {
     return null;
   }
-  return { byMetacode, fallbackName };
+  return { byMetacode, byCultureName, fallbackName };
 }
 
 function buildCultureProps(cultureValues, offset) {
@@ -168,9 +173,11 @@ function formatParcelleBioValue(raw) {
   return String(raw);
 }
 
-function parseCultureValue(raw) {
+function parseCultureValue(raw, structureLookup = null) {
   const trimmed = raw == null ? "" : String(raw).trim();
   if (!trimmed) return { value: "", code: "" };
+  const structureCode = structureLookup?.byCultureName?.[normalizeStructureName(trimmed)];
+  if (structureCode) return { value: structureCode, code: structureCode };
   const fromLabel = codeFromLabel(trimmed);
   if (fromLabel) return { value: fromLabel, code: fromLabel };
   const upper = trimmed.toUpperCase();
@@ -314,6 +321,14 @@ export async function parseParcellesCsvToFeatures(file, options = {}) {
   const cultureYearOffset = Number.isFinite(options.cultureYearOffset)
     ? options.cultureYearOffset
     : 0;
+  let structureLookup = null;
+  if (options.structureName) {
+    try {
+      structureLookup = await getStructureCultureLookup(options.structureName);
+    } catch (error) {
+      console.warn(error);
+    }
+  }
   const text = await new Promise((resolve, reject) => {
     const r = new FileReader();
     r.onerror = () => reject(r.error);
@@ -351,11 +366,11 @@ export async function parseParcellesCsvToFeatures(file, options = {}) {
     const surfaceParcelle = parseSurfaceValue(map.get("surfaceparcelle"));
     const parcelleBio = map.get("parcellebio") ?? "";
     const typeSol = map.get("typedsol") ?? map.get("typedesol") ?? "";
-    const cultureN = parseCultureValue(map.get("culturen"));
-    const cultureN1 = parseCultureValue(map.get("culturen1"));
-    const cultureN2 = parseCultureValue(map.get("culturen2"));
-    const cultureN3 = parseCultureValue(map.get("culturen3"));
-    const cultureN4 = parseCultureValue(map.get("culturen4"));
+    const cultureN = parseCultureValue(map.get("culturen"), structureLookup);
+    const cultureN1 = parseCultureValue(map.get("culturen1"), structureLookup);
+    const cultureN2 = parseCultureValue(map.get("culturen2"), structureLookup);
+    const cultureN3 = parseCultureValue(map.get("culturen3"), structureLookup);
+    const cultureN4 = parseCultureValue(map.get("culturen4"), structureLookup);
     const ring = parseGeometry(map.get("geometrie"));
     if (!ring) continue;
 
