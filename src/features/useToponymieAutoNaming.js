@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useCallback, useState } from "react";
 import departementsMeta from "../data/departements_meta.json";
 import { featureAreaHa, featureCentroid } from "../utils/geometry";
 import { getToponymiePoints } from "../services/toponymie";
@@ -99,71 +99,69 @@ function collectAssignments(features) {
   return pending;
 }
 
-export function useToponymieAutoNaming(features, setFeatures) {
-  useEffect(() => {
+export function useToponymieAutoNaming(setFeatures) {
+  const [isNaming, setIsNaming] = useState(false);
+
+  const fillToponymieNames = useCallback(async (features) => {
+    if (isNaming) return;
     if (!Array.isArray(features)) return;
     if (typeof setFeatures !== "function") return;
     const pending = collectAssignments(features);
     if (!pending.length) return;
-    let cancelled = false;
 
-    const run = async () => {
-      try {
-        const regionSet = new Set(pending.map((item) => item.region));
-        const regionData = new Map();
-        await Promise.all(
-          Array.from(regionSet).map(async (region) => {
-            try {
-              const points = await getToponymiePoints(region);
-              regionData.set(region, points);
-            } catch (error) {
-              console.error(`Toponymie: échec du chargement ${region}`, error);
-            }
-          })
-        );
-        if (cancelled) return;
+    setIsNaming(true);
+    try {
+      const regionSet = new Set(pending.map((item) => item.region));
+      const regionData = new Map();
+      await Promise.all(
+        Array.from(regionSet).map(async (region) => {
+          try {
+            const points = await getToponymiePoints(region);
+            regionData.set(region, points);
+          } catch (error) {
+            console.error(`Toponymie: échec du chargement ${region}`, error);
+          }
+        })
+      );
 
-        const assignments = [];
-        pending.forEach((item) => {
-          const points = regionData.get(item.region);
-          if (!points || !points.length) return;
-          const nearest = findNearestToponym(points, item.centroid);
-          if (!nearest) return;
-          const baseName = extractGraphie(nearest.properties);
-          if (!baseName) return;
-          assignments.push({
-            key: item.key,
-            baseName,
-            areaHa: item.areaHa,
-          });
+      const assignments = [];
+      pending.forEach((item) => {
+        const points = regionData.get(item.region);
+        if (!points || !points.length) return;
+        const nearest = findNearestToponym(points, item.centroid);
+        if (!nearest) return;
+        const baseName = extractGraphie(nearest.properties);
+        if (!baseName) return;
+        assignments.push({
+          key: item.key,
+          baseName,
+          areaHa: item.areaHa,
         });
-        if (!assignments.length) return;
+      });
+      if (!assignments.length) return;
 
-        const finalMap = resolveToponymNames(assignments);
-        if (!finalMap.size || cancelled) return;
+      const finalMap = resolveToponymNames(assignments);
+      if (!finalMap.size) return;
 
-        setFeatures((prev) => {
-          if (!Array.isArray(prev)) return prev;
-          let changed = false;
-          const next = prev.map((feature, index) => {
-            const key = feature?.id ?? `idx:${index}`;
-            const name = finalMap.get(key);
-            if (!name) return feature;
-            const props = { ...(feature?.properties || {}), nom: name };
-            changed = true;
-            return { ...feature, properties: props };
-          });
-          return changed ? next : prev;
+      setFeatures((prev) => {
+        if (!Array.isArray(prev)) return prev;
+        let changed = false;
+        const next = prev.map((feature, index) => {
+          const key = feature?.id ?? `idx:${index}`;
+          const name = finalMap.get(key);
+          if (!name) return feature;
+          const props = { ...(feature?.properties || {}), nom: name };
+          changed = true;
+          return { ...feature, properties: props };
         });
-      } catch (error) {
-        console.error("Toponymie: attribution automatique impossible", error);
-      }
-    };
+        return changed ? next : prev;
+      });
+    } catch (error) {
+      console.error("Toponymie: attribution automatique impossible", error);
+    } finally {
+      setIsNaming(false);
+    }
+  }, [isNaming, setFeatures]);
 
-    run();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [features, setFeatures]);
+  return { fillToponymieNames, isNaming };
 }

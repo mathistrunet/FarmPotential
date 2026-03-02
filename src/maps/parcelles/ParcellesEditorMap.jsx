@@ -167,7 +167,7 @@ export default function ParcellesEditorMap() {
     loading: parcellesLoading,
   } = useParcelles();
 
-  useToponymieAutoNaming(features, setFeatures);
+  const { fillToponymieNames, isNaming: isToponymieNaming } = useToponymieAutoNaming(setFeatures);
 
   // Onglets + panneau latéral repliable
   const [sideOpen, setSideOpen] = useState(true);          // panneau latéral ouvert/fermé
@@ -1363,6 +1363,8 @@ export default function ParcellesEditorMap() {
               features={features}
               visibleFeatures={visibleFeatures}
               setFeatures={setFeatures}
+              onFillNames={() => fillToponymieNames(features)}
+              isFillingNames={isToponymieNaming}
               selectedId={selectedId}
               onSelect={(id) => selectFeatureOnMap(id, true)}
               drawRef={drawRef}
