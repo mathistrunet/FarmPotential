@@ -101,10 +101,17 @@ function getAllOuterRings(feature) {
   return [];
 }
 
-export function buildTelepacXML(features) {
+function readCultureCodeFromProperty(props, cultureColumn) {
+  if (!cultureColumn) return normalizeNumero(props.code);
+  const rawValue = normalizeNumero(props?.[cultureColumn]);
+  return rawValue ? rawValue.toUpperCase() : "";
+}
+
+export function buildTelepacXML(features, options = {}) {
   const NS = "urn:x-telepac:fr.gouv.agriculture.telepac:echange-producteur";
   const GML = "http://www.opengis.net/gml";
   const esc = (s) => xmlEscape(s);
+  const cultureColumn = normalizeNumero(options.cultureColumn);
 
   const meta = inferProducerMeta(Array.isArray(features) ? features : []);
 
@@ -231,7 +238,7 @@ export function buildTelepacXML(features) {
       .sort((a, b) => a.index - b.index)
       .forEach(({ feature, numero }) => {
         const props = feature.properties || {};
-        const code = normalizeNumero(props.code) || "JAC"; // Mets automatiquement le code culture JAC quand on exporte une parcelle sans code culture
+        const code = readCultureCodeFromProperty(props, cultureColumn) || normalizeNumero(props.code) || "JAC";
         const ring = getFirstOuterRing(feature);
         const gmlCoords = ring ? ringToGml(ring) : "";
         const ares = ring ? Math.round(ringAreaM2(ring) / 100) : 0; //surface arrondie et transformée en ares

@@ -1,5 +1,5 @@
 // src/Front/ExportMenuButton.jsx
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { buildTelepacXML } from "../services/telepacXml";
 import { buildParcellesCsv } from "../services/parcellesCsv";
 
@@ -115,6 +115,49 @@ function CsvModal({ values, onChange, onCancel, onConfirm, disabled }) {
   );
 }
 
+function XmlModal({ cultureColumns, selectedColumn, onSelectColumn, onCancel, onConfirm, disabled }) {
+  return (
+    <div style={overlayStyle} onClick={onCancel}>
+      <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
+        <h2 style={{ marginTop: 0 }}>Paramètres de l&apos;export Télépac</h2>
+        <p style={{ color: "#555", marginBottom: 16 }}>
+          Choisis la colonne culture à utiliser pour remplir le code culture XML.
+        </p>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            onConfirm();
+          }}
+          style={{ display: "flex", flexDirection: "column", gap: 12 }}
+        >
+          <label style={labelStyle}>
+            Colonne culture
+            <select
+              value={selectedColumn}
+              onChange={(e) => onSelectColumn(e.target.value)}
+              style={inputStyle}
+            >
+              {cultureColumns.map((column) => (
+                <option key={column} value={column}>
+                  {column}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
+            <button type="button" style={modalSecondaryButtonStyle} onClick={onCancel}>
+              Annuler
+            </button>
+            <button type="submit" style={modalButtonStyle} disabled={disabled}>
+              Exporter en XML
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 const overlayStyle = {
   position: "fixed",
   inset: 0,
@@ -183,7 +226,28 @@ export default function ExportMenuButton({
 }) {
   const [showChoice, setShowChoice] = useState(false);
   const [showCsv, setShowCsv] = useState(false);
+  const [showXml, setShowXml] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [selectedCultureColumn, setSelectedCultureColumn] = useState("code");
+
+  const cultureColumns = useMemo(() => {
+    const columnSet = new Set(["code"]);
+    features.forEach((feature) => {
+      const props = feature?.properties || {};
+      Object.keys(props).forEach((key) => {
+        if (/^cultureN(?:_\d+)?$/i.test(key) || /^culture\d+$/i.test(key)) {
+          columnSet.add(key);
+        }
+      });
+    });
+    return Array.from(columnSet);
+  }, [features]);
+
+  useEffect(() => {
+    if (!cultureColumns.includes(selectedCultureColumn)) {
+      setSelectedCultureColumn(cultureColumns[0] || "code");
+    }
+  }, [cultureColumns, selectedCultureColumn]);
 
   const defaultCode = useMemo(
     () => String(Math.floor(Math.random() * 99999) + 1).padStart(5, "0"),
@@ -218,6 +282,7 @@ export default function ExportMenuButton({
   const closeAllModals = () => {
     setShowChoice(false);
     setShowCsv(false);
+    setShowXml(false);
   };
 
   const ensureFeatures = () => {
@@ -233,11 +298,14 @@ export default function ExportMenuButton({
     if (!ensureFeatures()) return;
     setLoading(true);
     try {
-      const xml = buildTelepacXML(features);
+      const xml = buildTelepacXML(features, {
+        cultureColumn: selectedCultureColumn,
+      });
       const blob = new Blob([xml], {
         type: "application/xml;charset=UTF-8",
       });
       downloadBlob(blob, `${filenamePrefixXml}${Date.now()}.xml`);
+      closeAllModals();
     } catch (err) {
       console.error(err);
       alert("Échec de l’export Télépac.");
@@ -285,8 +353,9 @@ export default function ExportMenuButton({
         <ChoiceModal
           onClose={closeAllModals}
           onTelepac={() => {
+            if (!ensureFeatures()) return;
             setShowChoice(false);
-            exportTelepac();
+            setShowXml(true);
           }}
           onCsv={() => {
             if (!ensureFeatures()) return;
@@ -302,6 +371,17 @@ export default function ExportMenuButton({
           onChange={setCsvValues}
           onCancel={closeAllModals}
           onConfirm={exportCsv}
+          disabled={loading}
+        />
+      )}
+
+      {showXml && (
+        <XmlModal
+          cultureColumns={cultureColumns}
+          selectedColumn={selectedCultureColumn}
+          onSelectColumn={setSelectedCultureColumn}
+          onCancel={closeAllModals}
+          onConfirm={exportTelepac}
           disabled={loading}
         />
       )}
