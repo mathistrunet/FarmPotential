@@ -190,6 +190,8 @@ export default function ParcelleEditor({
   viewMode = "cards",
   csvValues,
   onCsvValuesChange,
+  onFillNames,
+  isFillingNames = false,
   readOnly = false,
 }) {
   const options = entriesCodebook();
@@ -719,7 +721,27 @@ export default function ParcelleEditor({
               </tr>
               <tr>
                 <th style={{ padding: TABLE_CELL_PADDING }} />
-                <th style={{ padding: TABLE_CELL_PADDING }} />
+                <th style={{ padding: TABLE_CELL_PADDING, textAlign: "left" }}>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onFillNames?.();
+                    }}
+                    disabled={isReadOnly || isFillingNames}
+                    style={{
+                      padding: "3px 8px",
+                      borderRadius: 6,
+                      border: "1px solid #d1d5db",
+                      background: "#fff",
+                      fontSize: 11,
+                      cursor: isReadOnly || isFillingNames ? "not-allowed" : "pointer",
+                      opacity: isReadOnly || isFillingNames ? 0.6 : 1,
+                    }}
+                  >
+                    {isFillingNames ? "Chargement..." : "Remplir"}
+                  </button>
+                </th>
                 <th style={{ padding: TABLE_CELL_PADDING }} />
                 <th style={{ padding: TABLE_CELL_PADDING }} />
                 <th style={{ padding: TABLE_CELL_PADDING }} />
