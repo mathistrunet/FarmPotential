@@ -22,45 +22,10 @@ const CULTURE_FIELDS = [
   },
   {
     field: "cultureN_1",
-    label: "Culture N1",
+    label: "CultureN+1",
     propKey: "cultureN_1",
-    placeholders: ["cultureN_1", "cultureN1", "culture_prec"],
+    placeholders: ["cultureN_1", "cultureN1", "cultureN+1", "culture_prec"],
     rpgOffset: 1,
-  },
-  {
-    field: "cultureN_2",
-    label: "Culture N2",
-    propKey: "cultureN_2",
-    placeholders: ["cultureN_2", "cultureN2"],
-    rpgOffset: 2,
-  },
-  {
-    field: "cultureN_3",
-    label: "Culture N3",
-    propKey: "cultureN_3",
-    placeholders: ["cultureN_3", "cultureN3"],
-    rpgOffset: 3,
-  },
-  {
-    field: "cultureN_4",
-    label: "Culture N4",
-    propKey: "cultureN_4",
-    placeholders: ["cultureN_4", "cultureN4"],
-    rpgOffset: 4,
-  },
-  {
-    field: "cultureN_5",
-    label: "Culture N5",
-    propKey: "cultureN_5",
-    placeholders: ["cultureN_5", "cultureN5"],
-    rpgOffset: 5,
-  },
-  {
-    field: "cultureN_6",
-    label: "Culture N6",
-    propKey: "cultureN_6",
-    placeholders: ["cultureN_6", "cultureN6"],
-    rpgOffset: 6,
   },
 ];
 
@@ -1271,7 +1236,7 @@ export default function ParcelleEditor({
             </label>
 
             <label style={{ fontSize: 12, display: "block" }}>
-              Culture N-1
+              CultureN+1
               <input
                 list={listId}
                 value={displayPrevious}
