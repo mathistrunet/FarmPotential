@@ -24,7 +24,7 @@ const CULTURE_FIELDS = [
     field: "cultureN_1",
     label: "Culture N1",
     propKey: "cultureN_1",
-    placeholders: ["cultureN_1", "cultureN1", "culture_prec"],
+    placeholders: ["cultureN_1", "cultureN1", "cultureN+1", "culture_prec"],
     rpgOffset: 1,
   },
   {
@@ -62,6 +62,14 @@ const CULTURE_FIELDS = [
     placeholders: ["cultureN_6", "cultureN6"],
     rpgOffset: 6,
   },
+];
+
+const TABLE_CULTURE_FIELDS = [
+  {
+    ...CULTURE_FIELDS.find((field) => field.field === "cultureN_1"),
+    label: "CultureN+1",
+  },
+  ...CULTURE_FIELDS.filter((field) => field.field !== "cultureN_1"),
 ];
 
 const TABLE_CELL_PADDING = "4px 6px";
@@ -691,7 +699,7 @@ export default function ParcelleEditor({
                 >
                   Alertes import
                 </th>
-                {CULTURE_FIELDS.map((field) => (
+                {TABLE_CULTURE_FIELDS.map((field) => (
                   <th
                     key={field.field}
                     style={{
@@ -744,7 +752,7 @@ export default function ParcelleEditor({
                     Revérifier
                   </button>
                 </th>
-                {CULTURE_FIELDS.map((field) => {
+                {TABLE_CULTURE_FIELDS.map((field) => {
                   const isRpgFillable = field.rpgOffset >= 2;
                   return (
                     <th
@@ -979,7 +987,7 @@ export default function ParcelleEditor({
                         ? "—"
                         : null}
                     </td>
-                    {CULTURE_FIELDS.map((field) => (
+                    {TABLE_CULTURE_FIELDS.map((field) => (
                       <td
                         key={field.field}
                         style={{
@@ -1058,7 +1066,6 @@ export default function ParcelleEditor({
         const typedRow = typed[id] || {};
         const knownLabel = typedRow.cultureN ?? "";
         const displayValue = knownLabel ?? "";
-        const displayPrevious = typedRow.cultureN_1 ?? "";
         const listId = datalistId;
         const selected = selectedId === id;
         const ilot = normalizePart(f.properties?.ilot_numero);
@@ -1248,25 +1255,6 @@ export default function ParcelleEditor({
               {renderWarning(displayValue)}
             </label>
 
-            <label style={{ fontSize: 12, display: "block" }}>
-              Culture N-1
-              <input
-                list={listId}
-                value={displayPrevious}
-                onChange={(e) => handleCultureChange(id, idx, "cultureN_1", e.target.value)}
-                onClick={(e) => e.stopPropagation()}
-                placeholder="Tapez le nom (ou le code)…"
-                disabled={isReadOnly}
-                style={{
-                  width: "90%",
-                  padding: "6px 8px",
-                  border: "1px solid #ccc",
-                  borderRadius: 6,
-                  background: isReadOnly ? "#f3f4f6" : "#fff",
-                }}
-              />
-              {renderWarning(displayPrevious)}
-            </label>
 
           </div>
         );
