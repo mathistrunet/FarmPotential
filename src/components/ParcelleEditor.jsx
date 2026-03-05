@@ -29,6 +29,14 @@ const CULTURE_FIELDS = [
   },
 ];
 
+const TABLE_CULTURE_FIELDS = [
+  {
+    ...CULTURE_FIELDS.find((field) => field.field === "cultureN_1"),
+    label: "CultureN+1",
+  },
+  ...CULTURE_FIELDS.filter((field) => field.field !== "cultureN_1"),
+];
+
 const TABLE_CELL_PADDING = "4px 6px";
 const RPG_FIRST_AVAILABLE_YEAR = 2024;
 
@@ -658,7 +666,7 @@ export default function ParcelleEditor({
                 >
                   Alertes import
                 </th>
-                {CULTURE_FIELDS.map((field) => (
+                {TABLE_CULTURE_FIELDS.map((field) => (
                   <th
                     key={field.field}
                     style={{
@@ -731,7 +739,7 @@ export default function ParcelleEditor({
                     Revérifier
                   </button>
                 </th>
-                {CULTURE_FIELDS.map((field) => {
+                {TABLE_CULTURE_FIELDS.map((field) => {
                   const isRpgFillable = field.rpgOffset >= 2;
                   return (
                     <th
@@ -966,7 +974,7 @@ export default function ParcelleEditor({
                         ? "—"
                         : null}
                     </td>
-                    {CULTURE_FIELDS.map((field) => (
+                    {TABLE_CULTURE_FIELDS.map((field) => (
                       <td
                         key={field.field}
                         style={{
@@ -1045,7 +1053,6 @@ export default function ParcelleEditor({
         const typedRow = typed[id] || {};
         const knownLabel = typedRow.cultureN ?? "";
         const displayValue = knownLabel ?? "";
-        const displayPrevious = typedRow.cultureN_1 ?? "";
         const listId = datalistId;
         const selected = selectedId === id;
         const ilot = normalizePart(f.properties?.ilot_numero);
