@@ -127,4 +127,30 @@ describe("buildTelepacXML", () => {
     expect(communes).toEqual(["49123", "49123"]);
   });
 
+  it("utilise la colonne culture sélectionnée pour le code culture exporté", () => {
+    const features = [
+      {
+        type: "Feature",
+        properties: {
+          ilot_numero: "1",
+          numero: "1",
+          code: "BLE",
+          cultureN_1: "MIS",
+          code_exploitation: "123456789",
+        },
+        geometry: {
+          type: "Polygon",
+          coordinates: [[[0.125, 47.115],[0.126, 47.115],[0.126, 47.116],[0.125, 47.116],[0.125, 47.115]]],
+        },
+      },
+    ];
+
+    const xml = buildTelepacXML(features, { cultureColumn: "cultureN_1" });
+    const parser = new (new JSDOM().window.DOMParser)();
+    const doc = parser.parseFromString(xml, "application/xml");
+
+    const code = doc.getElementsByTagName("code-culture")[0]?.textContent?.trim();
+    expect(code).toBe("MIS");
+  });
+
 });

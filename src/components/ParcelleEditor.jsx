@@ -22,45 +22,10 @@ const CULTURE_FIELDS = [
   },
   {
     field: "cultureN_1",
-    label: "Culture N1",
+    label: "CultureN+1",
     propKey: "cultureN_1",
     placeholders: ["cultureN_1", "cultureN1", "cultureN+1", "culture_prec"],
     rpgOffset: 1,
-  },
-  {
-    field: "cultureN_2",
-    label: "Culture N2",
-    propKey: "cultureN_2",
-    placeholders: ["cultureN_2", "cultureN2"],
-    rpgOffset: 2,
-  },
-  {
-    field: "cultureN_3",
-    label: "Culture N3",
-    propKey: "cultureN_3",
-    placeholders: ["cultureN_3", "cultureN3"],
-    rpgOffset: 3,
-  },
-  {
-    field: "cultureN_4",
-    label: "Culture N4",
-    propKey: "cultureN_4",
-    placeholders: ["cultureN_4", "cultureN4"],
-    rpgOffset: 4,
-  },
-  {
-    field: "cultureN_5",
-    label: "Culture N5",
-    propKey: "cultureN_5",
-    placeholders: ["cultureN_5", "cultureN5"],
-    rpgOffset: 5,
-  },
-  {
-    field: "cultureN_6",
-    label: "Culture N6",
-    propKey: "cultureN_6",
-    placeholders: ["cultureN_6", "cultureN6"],
-    rpgOffset: 6,
   },
 ];
 
@@ -198,6 +163,8 @@ export default function ParcelleEditor({
   viewMode = "cards",
   csvValues,
   onCsvValuesChange,
+  onFillNames,
+  isFillingNames = false,
   readOnly = false,
 }) {
   const options = entriesCodebook();
@@ -727,7 +694,27 @@ export default function ParcelleEditor({
               </tr>
               <tr>
                 <th style={{ padding: TABLE_CELL_PADDING }} />
-                <th style={{ padding: TABLE_CELL_PADDING }} />
+                <th style={{ padding: TABLE_CELL_PADDING, textAlign: "left" }}>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onFillNames?.();
+                    }}
+                    disabled={isReadOnly || isFillingNames}
+                    style={{
+                      padding: "3px 8px",
+                      borderRadius: 6,
+                      border: "1px solid #d1d5db",
+                      background: "#fff",
+                      fontSize: 11,
+                      cursor: isReadOnly || isFillingNames ? "not-allowed" : "pointer",
+                      opacity: isReadOnly || isFillingNames ? 0.6 : 1,
+                    }}
+                  >
+                    {isFillingNames ? "Chargement..." : "Remplir"}
+                  </button>
+                </th>
                 <th style={{ padding: TABLE_CELL_PADDING }} />
                 <th style={{ padding: TABLE_CELL_PADDING }} />
                 <th style={{ padding: TABLE_CELL_PADDING }} />
@@ -1255,6 +1242,25 @@ export default function ParcelleEditor({
               {renderWarning(displayValue)}
             </label>
 
+            <label style={{ fontSize: 12, display: "block" }}>
+              CultureN+1
+              <input
+                list={listId}
+                value={displayPrevious}
+                onChange={(e) => handleCultureChange(id, idx, "cultureN_1", e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+                placeholder="Tapez le nom (ou le code)…"
+                disabled={isReadOnly}
+                style={{
+                  width: "90%",
+                  padding: "6px 8px",
+                  border: "1px solid #ccc",
+                  borderRadius: 6,
+                  background: isReadOnly ? "#f3f4f6" : "#fff",
+                }}
+              />
+              {renderWarning(displayPrevious)}
+            </label>
 
           </div>
         );

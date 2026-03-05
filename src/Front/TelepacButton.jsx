@@ -140,6 +140,7 @@ export default function ImportTelepacButton({
   onImported,
   onImportMeta,
   onError,
+  structureName,
 }) {
   const fileInputRef = useRef(null);
   const [loading, setLoading] = useState(false);
@@ -201,7 +202,7 @@ export default function ImportTelepacButton({
         importYear = fileYear;
       }
       const feats = isCsv
-        ? await parseParcellesCsvToFeatures(file)
+        ? await parseParcellesCsvToFeatures(file, { cultureYearOffset, structureName })
         : await parseTelepacXmlToFeatures(file, { cultureYearOffset });
       if (Number.isFinite(importYear)) {
         feats.forEach((feature) => {
