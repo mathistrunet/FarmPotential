@@ -1075,6 +1075,7 @@ export default function ParcelleEditor({
         const typedRow = typed[id] || {};
         const knownLabel = typedRow.cultureN ?? "";
         const displayValue = knownLabel ?? "";
+        const displayPrevious = typedRow.cultureN_1 ?? "";
         const listId = datalistId;
         const selected = selectedId === id;
         const ilot = normalizePart(f.properties?.ilot_numero);
