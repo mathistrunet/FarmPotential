@@ -1,6 +1,7 @@
 // src/maps/parcelles/ParcellesEditorMap.jsx
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
+import centroid from "@turf/centroid";
 
 import RasterToggles from "../../components/RasterToggles";
 import ParcelleEditor from "../../components/ParcelleEditor";
@@ -23,6 +24,7 @@ import DrawToolbar from "../../Front/DrawToolbar";
 import ImportTelepacButton from "../../Front/TelepacButton";
 import ExportMenuButton from "../../Front/ExportMenuButton";
 import ParcelleMatchView from "../../components/ParcelleMatchView";
+import SoilTypeMappingPanel from "../../components/SoilTypeMappingPanel";
 
 // ✅ NOUVEAU : hook d’affichage RRP local (depuis un fichier MBTiles placé dans /public/data)
 import { useSoilLayerLocal } from "../../features/useSoilLayerLocal";
@@ -41,6 +43,14 @@ import {
   validateParcellesMatching,
 } from "../../services/parcellesBackend";
 import { useParcelles } from "./useParcelles";
+import {
+  buildSoilCombinationLabel,
+  fetchSoilTypeMappings,
+  loadSoilTypeRows,
+  loadSoilTypeLookupBySourceFile,
+  resolveFileUcs,
+  saveSoilTypeMappings,
+} from "../../services/soilTypeMapping";
 
 const EARTH_RADIUS = 6378137;
 const DRAW_LAYER_IDS = [
@@ -172,8 +182,13 @@ export default function ParcellesEditorMap() {
   // Onglets + panneau latéral repliable
   const [sideOpen, setSideOpen] = useState(true);          // panneau latéral ouvert/fermé
   const [sideExpanded, setSideExpanded] = useState(false); // largeur étendue pour le tableau
-  const [activeTab, setActiveTab] = useState("parcelles"); // "parcelles" | "calques"
+  const [activeTab, setActiveTab] = useState("parcelles"); // "parcelles" | "calques" | "mapping-sols"
   const [parcelleViewMode, setParcelleViewMode] = useState("cards"); // "cards" | "table"
+  const [soilTypeRows, setSoilTypeRows] = useState([]);
+  const [soilMappingsByStructure, setSoilMappingsByStructure] = useState({});
+  const [soilMappingsLoading, setSoilMappingsLoading] = useState(false);
+  const [soilMappingsSaving, setSoilMappingsSaving] = useState(false);
+  const [soilTypesFilling, setSoilTypesFilling] = useState(false);
   const [compact, setCompact] = useState(false);
   const [rrpVisible, setRrpVisible] = useState(false);
   const [rrpOpacity, setRrpOpacity] = useState(DEFAULT_FILL_OPACITY);
@@ -946,6 +961,110 @@ export default function ParcellesEditorMap() {
     }
   };
 
+  useEffect(() => {
+    let cancelled = false;
+    setSoilMappingsLoading(true);
+    Promise.all([loadSoilTypeRows(), fetchSoilTypeMappings()])
+      .then(([rows, mappingsPayload]) => {
+        if (cancelled) return;
+        setSoilTypeRows(rows);
+        setSoilMappingsByStructure(mappingsPayload?.mappings || {});
+      })
+      .catch((error) => {
+        console.warn("[SOIL_MAPPING_INIT_FAILED]", error);
+      })
+      .finally(() => {
+        if (!cancelled) setSoilMappingsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleSaveStructureMappings = useCallback(async (structure, mappings) => {
+    const next = {
+      ...soilMappingsByStructure,
+      [structure]: Object.fromEntries(
+        Object.entries(mappings || {}).filter(([, value]) => String(value || "").trim())
+      ),
+    };
+    setSoilMappingsSaving(true);
+    try {
+      await saveSoilTypeMappings(next);
+      setSoilMappingsByStructure(next);
+      alert("Mapping des types de sol enregistré.");
+    } catch (error) {
+      console.warn(error);
+      alert("Impossible d'enregistrer le mapping des types de sol.");
+    } finally {
+      setSoilMappingsSaving(false);
+    }
+  }, [soilMappingsByStructure]);
+
+  const handleFillSoilTypes = useCallback(async () => {
+    if (!features.length) {
+      alert("Aucune parcelle à remplir.");
+      return;
+    }
+    const structures = Object.keys(soilMappingsByStructure || {}).filter(
+      (name) => Object.keys(soilMappingsByStructure[name] || {}).length > 0
+    );
+    if (!structures.length) {
+      alert("Aucune structure avec mapping type de sol enregistré.");
+      return;
+    }
+    const selectedStructure = window.prompt(
+      `Choisir une structure parmi :\n${structures.join("\n")}`,
+      structures[0]
+    );
+    if (!selectedStructure) return;
+    const mapping = soilMappingsByStructure[selectedStructure];
+    if (!mapping) {
+      alert("Structure inconnue ou mapping vide.");
+      return;
+    }
+    const map = mapRef.current;
+    if (!map || !rrpVisible || !map.getLayer("soils-rrp-fill")) {
+      alert("Active la couche Carte des sols France avant de remplir.");
+      return;
+    }
+
+    setSoilTypesFilling(true);
+    try {
+      const lookup = await loadSoilTypeLookupBySourceFile();
+      const nextFeatures = [...features];
+      let filledCount = 0;
+
+      for (let idx = 0; idx < nextFeatures.length; idx += 1) {
+        const feature = nextFeatures[idx];
+        if (!feature?.geometry) continue;
+        const center = centroid(feature).geometry?.coordinates;
+        if (!Array.isArray(center) || center.length < 2) continue;
+        const point = map.project([center[0], center[1]]);
+        const soilFeature = map.queryRenderedFeatures(point, { layers: ["soils-rrp-fill"] })?.[0];
+        if (!soilFeature?.properties) continue;
+        const fileUcs = resolveFileUcs(soilFeature.properties);
+        if (!fileUcs) continue;
+        const soilRow = lookup.get(fileUcs.toLowerCase());
+        if (!soilRow) continue;
+        const combination = buildSoilCombinationLabel(soilRow);
+        const mappedType = mapping[combination];
+        if (!mappedType || !String(mappedType).trim()) continue;
+
+        const nextProps = { ...(feature.properties || {}), type_sol: String(mappedType).trim() };
+        nextFeatures[idx] = { ...feature, properties: nextProps };
+        filledCount += 1;
+      }
+      setFeatures(nextFeatures);
+      alert(`${filledCount} parcelle(s) remplie(s) pour la structure ${selectedStructure}.`);
+    } catch (error) {
+      console.warn(error);
+      alert("Le remplissage des types de sol a échoué.");
+    } finally {
+      setSoilTypesFilling(false);
+    }
+  }, [features, mapRef, rrpVisible, setFeatures, soilMappingsByStructure]);
+
   // ---- Styles de la barre d’outils bas
   const bottomBarHeight = compact ? 56 : 64;
   const barBase = {
@@ -1179,6 +1298,18 @@ export default function ParcellesEditorMap() {
             >
               Calques
             </button>
+            <button
+              onClick={() => setActiveTab("mapping-sols")}
+              style={{
+                padding: "8px 10px",
+                borderRadius: 8,
+                border: "1px solid #ddd",
+                background: activeTab === "mapping-sols" ? "#ecfeff" : "#fff",
+                cursor: "pointer",
+              }}
+            >
+              Mapping sols
+            </button>
           </div>
 
           {activeTab === "parcelles" && (
@@ -1371,6 +1502,8 @@ export default function ParcellesEditorMap() {
               viewMode={parcelleViewMode}
               csvValues={csvValues}
               onCsvValuesChange={setCsvValues}
+              onFillSoilTypes={handleFillSoilTypes}
+              isFillingSoilTypes={soilTypesFilling}
             />
 
             <p style={{ fontSize: 12, color: "#777", marginTop: 10 }}>
@@ -1378,6 +1511,16 @@ export default function ParcellesEditorMap() {
               (et inversement).
             </p>
           </>
+        )}
+
+        {activeTab === "mapping-sols" && (
+          <SoilTypeMappingPanel
+            soilCombinations={soilTypeRows}
+            mappingsByStructure={soilMappingsByStructure}
+            onSaveStructureMappings={handleSaveStructureMappings}
+            loading={soilMappingsLoading}
+            saving={soilMappingsSaving}
+          />
         )}
 
         {/* Calques (hors sols en ligne ; on garde les rasters/basemaps locaux ou tiers) */}
