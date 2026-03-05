@@ -165,6 +165,8 @@ export default function ParcelleEditor({
   onCsvValuesChange,
   onFillNames,
   isFillingNames = false,
+  onFillSoilTypes,
+  isFillingSoilTypes = false,
   readOnly = false,
 }) {
   const options = entriesCodebook();
@@ -776,7 +778,27 @@ export default function ParcelleEditor({
                     </th>
                   );
                 })}
-                <th style={{ padding: TABLE_CELL_PADDING }} />
+                <th style={{ padding: TABLE_CELL_PADDING, textAlign: "left" }}>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onFillSoilTypes?.();
+                    }}
+                    disabled={isReadOnly || isFillingSoilTypes}
+                    style={{
+                      padding: "3px 8px",
+                      borderRadius: 6,
+                      border: "1px solid #d1d5db",
+                      background: "#fff",
+                      fontSize: 11,
+                      cursor: isReadOnly || isFillingSoilTypes ? "not-allowed" : "pointer",
+                      opacity: isReadOnly || isFillingSoilTypes ? 0.6 : 1,
+                    }}
+                  >
+                    {isFillingSoilTypes ? "Chargement..." : "Remplir"}
+                  </button>
+                </th>
               </tr>
             </thead>
             <tbody>

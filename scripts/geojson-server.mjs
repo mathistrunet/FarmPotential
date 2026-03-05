@@ -9,6 +9,7 @@ import {
 const PORT = Number(process.env.PORT || 4174);
 const DATA_DIR = path.resolve(process.cwd(), "data");
 const DATA_FILE = path.join(DATA_DIR, "parcelles.geojson");
+const SOIL_MAPPING_FILE = path.join(DATA_DIR, "soil-type-mappings.json");
 
 const emptyCollection = () => ({
   type: "FeatureCollection",
@@ -22,6 +23,35 @@ async function ensureDataFile() {
   } catch {
     await writeFile(DATA_FILE, JSON.stringify(emptyCollection(), null, 2));
   }
+}
+
+async function ensureSoilMappingFile() {
+  await mkdir(DATA_DIR, { recursive: true });
+  try {
+    await readFile(SOIL_MAPPING_FILE, "utf-8");
+  } catch {
+    await writeFile(SOIL_MAPPING_FILE, JSON.stringify({ mappings: {} }, null, 2));
+  }
+}
+
+async function readSoilMappings() {
+  await ensureSoilMappingFile();
+  const raw = await readFile(SOIL_MAPPING_FILE, "utf-8");
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object" && parsed.mappings && typeof parsed.mappings === "object") {
+      return parsed;
+    }
+  } catch {
+    // fall back to empty mappings
+  }
+  return { mappings: {} };
+}
+
+async function writeSoilMappings(payload) {
+  await ensureSoilMappingFile();
+  const mappings = payload && typeof payload.mappings === "object" ? payload.mappings : {};
+  await writeFile(SOIL_MAPPING_FILE, JSON.stringify({ mappings }, null, 2));
 }
 
 async function readCollection() {
@@ -157,6 +187,49 @@ const server = http.createServer(async (req, res) => {
             return;
           }
           await writeCollection(parsed);
+          res.writeHead(200);
+          res.end(JSON.stringify({ status: "ok" }));
+        } catch (error) {
+          res.writeHead(400);
+          res.end(JSON.stringify({ error: error?.message || "Invalid JSON payload." }));
+        }
+      });
+      return;
+    }
+
+    res.writeHead(405);
+    res.end(JSON.stringify({ error: "Method not allowed." }));
+    return;
+  }
+
+  if (req.url.startsWith("/api/soil-type-mappings")) {
+    res.setHeader("Content-Type", "application/json");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET,PUT,OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+    if (req.method === "OPTIONS") {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+
+    if (req.method === "GET") {
+      const mappings = await readSoilMappings();
+      res.writeHead(200);
+      res.end(JSON.stringify(mappings));
+      return;
+    }
+
+    if (req.method === "PUT") {
+      let body = "";
+      req.on("data", (chunk) => {
+        body += chunk;
+      });
+      req.on("end", async () => {
+        try {
+          const parsed = JSON.parse(body);
+          await writeSoilMappings(parsed);
           res.writeHead(200);
           res.end(JSON.stringify({ status: "ok" }));
         } catch (error) {
