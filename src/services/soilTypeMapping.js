@@ -1,6 +1,15 @@
 const SOIL_TYPE_CSV_PATH = "/data/Soil_type_RRP.csv";
 const SOIL_MAPPING_ENDPOINT = "/api/soil-type-mappings";
 
+export const SOIL_RULE_ATTRIBUTES = [
+  "texture",
+  "profondeur",
+  "position_topo",
+  "hydromorphie",
+  "ph_classe",
+  "cailloux",
+];
+
 let soilRowsPromise;
 
 function parseSemicolonCsv(text) {
@@ -17,11 +26,78 @@ function parseSemicolonCsv(text) {
   });
 }
 
+function parseCsvLine(line) {
+  const values = [];
+  let current = "";
+  let quoted = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    if (char === '"') {
+      if (quoted && line[index + 1] === '"') {
+        current += '"';
+        index += 1;
+      } else {
+        quoted = !quoted;
+      }
+      continue;
+    }
+    if (char === ";" && !quoted) {
+      values.push(current);
+      current = "";
+      continue;
+    }
+    current += char;
+  }
+  values.push(current);
+  return values.map((value) => value.trim());
+}
+
+function toCsvValue(value) {
+  const normalized = String(value ?? "");
+  if (!/[;"\n]/.test(normalized)) return normalized;
+  return `"${normalized.replace(/"/g, '""')}"`;
+}
+
 function norm(v) {
   if (v == null) return "";
   const s = String(v).trim();
   if (!s || /^na$/i.test(s)) return "";
   return s;
+}
+
+function normalizeRuleAttribute(attribute = {}) {
+  return {
+    include: Array.isArray(attribute.include)
+      ? attribute.include.map((item) => norm(item)).filter(Boolean)
+      : [],
+    exclude: Array.isArray(attribute.exclude)
+      ? attribute.exclude.map((item) => norm(item)).filter(Boolean)
+      : [],
+    nullMode:
+      attribute.nullMode === "IS_NULL" || attribute.nullMode === "IS_NOT_NULL"
+        ? attribute.nullMode
+        : "ANY",
+  };
+}
+
+function normalizeSoilTypeRule(rule = {}) {
+  const attributes = {};
+  SOIL_RULE_ATTRIBUTES.forEach((attributeName) => {
+    attributes[attributeName] = normalizeRuleAttribute(rule.attributes?.[attributeName]);
+  });
+  return {
+    id: rule.id || `soil-type-${Math.random().toString(36).slice(2, 8)}`,
+    name: String(rule.name || "").trim(),
+    residual: Boolean(rule.residual),
+    attributes,
+  };
+}
+
+export function normalizeSoilTypeConfiguration(configuration) {
+  const soilTypes = Array.isArray(configuration?.soilTypes)
+    ? configuration.soilTypes.map((rule) => normalizeSoilTypeRule(rule)).filter((rule) => rule.name)
+    : [];
+  return { soilTypes };
 }
 
 export function buildSoilCombinationLabel(row) {
@@ -70,6 +146,129 @@ export async function loadSoilTypeLookupBySourceFile() {
     lookup.set(key, row);
   });
   return lookup;
+}
+
+export function matchesSoilTypeRule(row, rule) {
+  if (!row || !rule) return false;
+  return SOIL_RULE_ATTRIBUTES.every((attributeName) => {
+    const attributeRule = normalizeRuleAttribute(rule.attributes?.[attributeName]);
+    const value = norm(row[attributeName]);
+
+    if (attributeRule.nullMode === "IS_NULL" && value) return false;
+    if (attributeRule.nullMode === "IS_NOT_NULL" && !value) return false;
+
+    if (attributeRule.include.length > 0 && !attributeRule.include.includes(value)) return false;
+    if (attributeRule.exclude.length > 0 && value && attributeRule.exclude.includes(value)) return false;
+
+    return true;
+  });
+}
+
+export function applySequentialSoilMapping(parcels, configuration) {
+  const normalizedConfiguration = normalizeSoilTypeConfiguration(configuration);
+  const assignments = [];
+  const remainingIndices = new Set(parcels.map((_, index) => index));
+
+  normalizedConfiguration.soilTypes.forEach((soilType, order) => {
+    const matchedIndices = [];
+
+    if (soilType.residual) {
+      remainingIndices.forEach((index) => {
+        matchedIndices.push(index);
+      });
+    } else {
+      remainingIndices.forEach((index) => {
+        if (matchesSoilTypeRule(parcels[index].soilRow, soilType)) matchedIndices.push(index);
+      });
+    }
+
+    matchedIndices.forEach((index) => {
+      remainingIndices.delete(index);
+      assignments[index] = {
+        soilTypeName: soilType.name,
+        order,
+        residual: soilType.residual,
+      };
+    });
+  });
+
+  return {
+    assignments,
+    remainingIndices,
+    normalizedConfiguration,
+  };
+}
+
+export function buildMappingCsv(configuration) {
+  const normalized = normalizeSoilTypeConfiguration(configuration);
+  const header = ["order", "soil_type", "residual", ...SOIL_RULE_ATTRIBUTES.flatMap((name) => [
+    `${name}_in`,
+    `${name}_not_in`,
+    `${name}_null`,
+  ])];
+
+  const lines = [header.join(";")];
+  normalized.soilTypes.forEach((soilType, index) => {
+    const row = [
+      String(index + 1),
+      soilType.name,
+      soilType.residual ? "1" : "0",
+      ...SOIL_RULE_ATTRIBUTES.flatMap((attributeName) => {
+        const attributeRule = soilType.attributes?.[attributeName] || {};
+        return [
+          (attributeRule.include || []).join("|"),
+          (attributeRule.exclude || []).join("|"),
+          attributeRule.nullMode || "ANY",
+        ];
+      }),
+    ];
+    lines.push(row.map((value) => toCsvValue(value)).join(";"));
+  });
+
+  return lines.join("\n");
+}
+
+export function parseMappingCsv(text) {
+  const lines = String(text || "").split(/\r?\n/).filter((line) => line.trim());
+  if (lines.length < 2) return { soilTypes: [] };
+
+  const headers = parseCsvLine(lines[0]);
+  const indexByHeader = new Map(headers.map((header, index) => [header, index]));
+  const soilTypes = lines.slice(1).map((line, rowIndex) => {
+    const values = parseCsvLine(line);
+    const attributes = {};
+
+    SOIL_RULE_ATTRIBUTES.forEach((attributeName) => {
+      const includeValue = values[indexByHeader.get(`${attributeName}_in`)] || "";
+      const excludeValue = values[indexByHeader.get(`${attributeName}_not_in`)] || "";
+      const nullModeRaw = values[indexByHeader.get(`${attributeName}_null`)] || "ANY";
+      const nullMode = ["ANY", "IS_NULL", "IS_NOT_NULL"].includes(nullModeRaw) ? nullModeRaw : "ANY";
+
+      attributes[attributeName] = {
+        include: includeValue
+          .split("|")
+          .map((item) => norm(item))
+          .filter(Boolean),
+        exclude: excludeValue
+          .split("|")
+          .map((item) => norm(item))
+          .filter(Boolean),
+        nullMode,
+      };
+    });
+
+    const name = values[indexByHeader.get("soil_type")] || "";
+    const residualRaw = values[indexByHeader.get("residual")] || "0";
+
+    return {
+      id: `imported-soil-type-${rowIndex + 1}`,
+      name: String(name).trim(),
+      residual: residualRaw === "1" || /^true$/i.test(residualRaw),
+      attributes,
+    };
+  }).filter((item) => item.name);
+
+  return normalizeSoilTypeConfiguration({ soilTypes });
 }
 
 export async function fetchSoilTypeMappings(signal) {
