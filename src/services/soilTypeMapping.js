@@ -359,7 +359,17 @@ export function resolveFileUcs(properties) {
   if (!properties || typeof properties !== "object") return "";
   const keys = ["file_ucs", "FILE_UCS", "source_file", "SOURCE_FILE", "id_ucs_file"];
   for (const key of keys) {
-    if (properties[key] != null && String(properties[key]).trim()) return String(properties[key]).trim();
+    const value = properties[key];
+    if (value == null) continue;
+    const normalized = String(value).trim();
+    if (!normalized) continue;
+
+    const ucsId = normalizeUcsId(normalized);
+    if (/^id_ucs_/i.test(normalized) && ucsId) {
+      return `id_ucs_${ucsId}.txt`;
+    }
+
+    return normalized;
   }
 
   const ucsId = resolveUcsId(properties);
