@@ -98,5 +98,7 @@ describe("soilTypeMapping sequential engine", () => {
 
     expect(resolveFileUcs({ id_ucs: 9984 })).toBe("id_ucs_9984.txt");
     expect(resolveFileUcs({ file_ucs: "id_ucs_9984.txt" })).toBe("id_ucs_9984.txt");
+    expect(resolveFileUcs({ file_ucs: "id_ucs_24318.pdf" })).toBe("id_ucs_24318.txt");
+    expect(resolveFileUcs({ source_file: "  ID_UCS_24318.PDF " })).toBe("id_ucs_24318.txt");
   });
 });
