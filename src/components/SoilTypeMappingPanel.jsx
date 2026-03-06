@@ -17,6 +17,8 @@ const ATTRIBUTE_LABELS = {
   cailloux: "Cailloux",
 };
 
+const NULL_MODALITY = "__NULL__";
+
 const buttonStyle = {
   padding: "6px 10px",
   border: "1px solid #d1d5db",
@@ -51,6 +53,7 @@ function formatHa(value) {
 }
 
 function valueLabel(v) {
+  if (v === NULL_MODALITY) return "NULL";
   return v ? v : "NULL";
 }
 
@@ -61,7 +64,12 @@ function ModalitiesMultiSelect({
   onChange,
 }) {
   const normalizedOptions = useMemo(
-    () => [...new Set((options || []).filter((option) => option != null && option !== ""))],
+    () => [
+      ...new Set([
+        ...(options || []).filter((option) => option != null && option !== ""),
+        NULL_MODALITY,
+      ]),
+    ],
     [options]
   );
   const normalizedValues = useMemo(
@@ -121,7 +129,7 @@ function ModalitiesMultiSelect({
                       checked={checked}
                       onChange={(event) => toggleOption(option, event.target.checked)}
                     />
-                    {option}
+                    {valueLabel(option)}
                   </label>
                 );
               })}

@@ -1,5 +1,6 @@
 const SOIL_TYPE_CSV_PATH = "/data/Soil_type_RRP.csv";
 const SOIL_MAPPING_ENDPOINT = "/api/soil-type-mappings";
+const NULL_MODALITY = "__NULL__";
 
 export const SOIL_RULE_ATTRIBUTES = [
   "texture",
@@ -205,8 +206,18 @@ export function matchesSoilTypeRule(row, rule) {
     if (attributeRule.nullMode === "IS_NULL" && value) return false;
     if (attributeRule.nullMode === "IS_NOT_NULL" && !value) return false;
 
-    if (attributeRule.include.length > 0 && !attributeRule.include.includes(value)) return false;
-    if (attributeRule.exclude.length > 0 && value && attributeRule.exclude.includes(value)) return false;
+    if (attributeRule.include.length > 0) {
+      const includesValue = value
+        ? attributeRule.include.includes(value)
+        : attributeRule.include.includes(NULL_MODALITY);
+      if (!includesValue) return false;
+    }
+    if (attributeRule.exclude.length > 0) {
+      const excludesValue = value
+        ? attributeRule.exclude.includes(value)
+        : attributeRule.exclude.includes(NULL_MODALITY);
+      if (excludesValue) return false;
+    }
 
     return true;
   });

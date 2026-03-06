@@ -3,6 +3,7 @@ import {
   applySequentialSoilMapping,
   buildDetectedSoilCombinations,
   buildMappingCsv,
+  matchesSoilTypeRule,
   parseMappingCsv,
   resolveFileUcs,
   resolveUcsId,
@@ -98,5 +99,23 @@ describe("soilTypeMapping sequential engine", () => {
 
     expect(resolveFileUcs({ id_ucs: 9984 })).toBe("id_ucs_9984.txt");
     expect(resolveFileUcs({ file_ucs: "id_ucs_9984.txt" })).toBe("id_ucs_9984.txt");
+  });
+
+  it("gère une modalité NULL explicite dans les règles IN/NOT IN", () => {
+    const rowWithNullTopo = { texture: "argileux", profondeur: "profond", position_topo: "" };
+
+    expect(matchesSoilTypeRule(rowWithNullTopo, {
+      attributes: {
+        texture: { include: ["argileux"], exclude: [], nullMode: "ANY" },
+        profondeur: { include: ["profond"], exclude: [], nullMode: "ANY" },
+        position_topo: { include: ["plateau", "__NULL__"], exclude: [], nullMode: "ANY" },
+      },
+    })).toBe(true);
+
+    expect(matchesSoilTypeRule(rowWithNullTopo, {
+      attributes: {
+        position_topo: { include: [], exclude: ["__NULL__"], nullMode: "ANY" },
+      },
+    })).toBe(false);
   });
 });
