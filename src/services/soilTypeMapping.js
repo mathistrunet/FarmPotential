@@ -166,6 +166,7 @@ export async function loadSoilTypeRows() {
         return rows.map((row) => ({
           ...row,
           source_file: norm(row.source_file),
+          ucs_id: norm(row.ucs_id),
           combination_label: buildSoilCombinationLabel(row),
         }));
       });
@@ -178,6 +179,17 @@ export async function loadSoilTypeLookupBySourceFile() {
   const lookup = new Map();
   rows.forEach((row) => {
     const key = norm(row.source_file).toLowerCase();
+    if (!key || lookup.has(key)) return;
+    lookup.set(key, row);
+  });
+  return lookup;
+}
+
+export async function loadSoilTypeLookupByUcsId() {
+  const rows = await loadSoilTypeRows();
+  const lookup = new Map();
+  rows.forEach((row) => {
+    const key = normalizeUcsId(row.ucs_id);
     if (!key || lookup.has(key)) return;
     lookup.set(key, row);
   });
@@ -349,5 +361,27 @@ export function resolveFileUcs(properties) {
   for (const key of keys) {
     if (properties[key] != null && String(properties[key]).trim()) return String(properties[key]).trim();
   }
+
+  const ucsId = resolveUcsId(properties);
+  if (ucsId) return `id_ucs_${ucsId}.txt`;
+
   return "";
+}
+
+export function resolveUcsId(properties) {
+  if (!properties || typeof properties !== "object") return "";
+  const keys = ["id_ucs", "ID_UCS", "ucs_id", "UCS_ID", "UCS", "Code_UCS", "code_ucs", "ucs"];
+  for (const key of keys) {
+    const normalized = normalizeUcsId(properties[key]);
+    if (normalized) return normalized;
+  }
+  return "";
+}
+
+function normalizeUcsId(value) {
+  if (value == null) return "";
+  const normalized = String(value).trim();
+  if (!normalized) return "";
+  const match = normalized.match(/(\d+)/);
+  return match ? match[1] : "";
 }

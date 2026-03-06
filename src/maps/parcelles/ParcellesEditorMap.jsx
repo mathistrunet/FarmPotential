@@ -49,7 +49,9 @@ import {
   fetchSoilTypeMappings,
   loadSoilTypeRows,
   loadSoilTypeLookupBySourceFile,
+  loadSoilTypeLookupByUcsId,
   resolveFileUcs,
+  resolveUcsId,
   saveSoilTypeMappings,
   SOIL_RULE_ATTRIBUTES,
 } from "../../services/soilTypeMapping";
@@ -1010,7 +1012,10 @@ export default function ParcellesEditorMap() {
       throw new Error("Active la couche Carte des sols France avant de lancer le mapping.");
     }
 
-    const lookup = await loadSoilTypeLookupBySourceFile();
+    const [lookupBySourceFile, lookupByUcsId] = await Promise.all([
+      loadSoilTypeLookupBySourceFile(),
+      loadSoilTypeLookupByUcsId(),
+    ]);
 
     return features.map((feature, index) => {
       const areaM2 = featureAreaM2(feature) ?? 0;
@@ -1021,8 +1026,13 @@ export default function ParcellesEditorMap() {
       }
       const point = map.project([center[0], center[1]]);
       const soilFeature = map.queryRenderedFeatures(point, { layers: ["soils-rrp-fill"] })?.[0];
-      const fileUcs = resolveFileUcs(soilFeature?.properties || {});
-      const soilRow = fileUcs ? lookup.get(fileUcs.toLowerCase()) || null : null;
+      const soilProps = soilFeature?.properties || {};
+      const fileUcs = resolveFileUcs(soilProps);
+      const ucsId = resolveUcsId(soilProps);
+      const soilRow =
+        (fileUcs && lookupBySourceFile.get(fileUcs.toLowerCase())) ||
+        (ucsId && lookupByUcsId.get(ucsId)) ||
+        null;
       return { index, feature, soilRow, surfaceHa };
     });
   }, [features, mapRef, rrpVisible]);
