@@ -10,7 +10,7 @@ import {
   computeSoilIndicators,
   parseSoilGridsProperties,
 } from "../src/services/soilgrids.js";
-import { SoilGridsClient } from "./soilgrids/SoilGridsClient.mjs";
+import { SoilGridsClient, SoilGridsError } from "./soilgrids/SoilGridsClient.mjs";
 import { SoilGridsCacheRepository } from "./soilgrids/SoilGridsCacheRepository.mjs";
 import { resolveParcelPoint } from "./soilgrids/geometry.mjs";
 
@@ -21,7 +21,7 @@ const SOIL_MAPPING_FILE = path.join(DATA_DIR, "soil-type-mappings.json");
 const POINT_STRATEGY = process.env.SOILGRIDS_POINT_STRATEGY || "centroid";
 const CALC_VERSION = "v1.0.0";
 
-const soilClient = new SoilGridsClient({ timeoutMs: 10_000, retries: 2 });
+const soilClient = new SoilGridsClient({ timeoutMs: 15_000, retries: 2 });
 const soilCacheRepository = new SoilGridsCacheRepository({ dataDir: DATA_DIR, ttlDays: 30 });
 const inflightSoilRequests = new Map();
 const rateLimitWindow = [];
@@ -174,8 +174,14 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200);
       res.end(JSON.stringify({ ...result.payload, cacheHit: result.cache }));
     } catch (error) {
-      log("SOILGRIDS_ERROR", { parcelId, message: error?.message || String(error) });
-      res.writeHead(503);
+      const statusCode = error instanceof SoilGridsError ? error.statusCode : 500;
+      log("SOILGRIDS_ERROR", {
+        parcelId,
+        statusCode,
+        code: error?.code,
+        message: error?.message || String(error),
+      });
+      res.writeHead(statusCode);
       res.end(JSON.stringify({ error: error?.message || "SoilGrids unavailable." }));
     }
     return;
