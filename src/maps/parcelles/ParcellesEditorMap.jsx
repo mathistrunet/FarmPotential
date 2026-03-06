@@ -44,13 +44,16 @@ import {
 } from "../../services/parcellesBackend";
 import { useParcelles } from "./useParcelles";
 import {
-  buildSoilCombinationLabel,
+  applySequentialSoilMapping,
+  normalizeSoilTypeConfiguration,
   fetchSoilTypeMappings,
   loadSoilTypeRows,
   loadSoilTypeLookupBySourceFile,
   resolveFileUcs,
   saveSoilTypeMappings,
+  SOIL_RULE_ATTRIBUTES,
 } from "../../services/soilTypeMapping";
+import { featureAreaM2 } from "../../utils/geometry";
 
 const EARTH_RADIUS = 6378137;
 const DRAW_LAYER_IDS = [
@@ -189,6 +192,8 @@ export default function ParcellesEditorMap() {
   const [soilMappingsLoading, setSoilMappingsLoading] = useState(false);
   const [soilMappingsSaving, setSoilMappingsSaving] = useState(false);
   const [soilTypesFilling, setSoilTypesFilling] = useState(false);
+  const [soilMappingApplying, setSoilMappingApplying] = useState(false);
+  const [soilMappingParcelCandidates, setSoilMappingParcelCandidates] = useState([]);
   const [compact, setCompact] = useState(false);
   const [rrpVisible, setRrpVisible] = useState(false);
   const [rrpOpacity, setRrpOpacity] = useState(DEFAULT_FILL_OPACITY);
@@ -981,36 +986,57 @@ export default function ParcellesEditorMap() {
     };
   }, []);
 
-  const handleSaveStructureMappings = useCallback(async (structure, mappings) => {
+  const handleSaveStructureMappings = useCallback(async (structure, configuration) => {
     const next = {
       ...soilMappingsByStructure,
-      [structure]: Object.fromEntries(
-        Object.entries(mappings || {}).filter(([, value]) => String(value || "").trim())
-      ),
+      [structure]: normalizeSoilTypeConfiguration(configuration),
     };
     setSoilMappingsSaving(true);
     try {
       await saveSoilTypeMappings(next);
       setSoilMappingsByStructure(next);
-      alert("Mapping des types de sol enregistré.");
+      alert("Configuration de mapping des types de sol enregistrée.");
     } catch (error) {
       console.warn(error);
-      alert("Impossible d'enregistrer le mapping des types de sol.");
+      alert("Impossible d'enregistrer la configuration de mapping des types de sol.");
     } finally {
       setSoilMappingsSaving(false);
     }
   }, [soilMappingsByStructure]);
+
+  const resolveParcelsWithSoilRows = useCallback(async () => {
+    const map = mapRef.current;
+    if (!map || !rrpVisible || !map.getLayer("soils-rrp-fill")) {
+      throw new Error("Active la couche Carte des sols France avant de lancer le mapping.");
+    }
+
+    const lookup = await loadSoilTypeLookupBySourceFile();
+
+    return features.map((feature, index) => {
+      const areaM2 = featureAreaM2(feature) ?? 0;
+      const surfaceHa = areaM2 / 10000;
+      const center = centroid(feature).geometry?.coordinates;
+      if (!Array.isArray(center) || center.length < 2) {
+        return { index, feature, soilRow: null, surfaceHa };
+      }
+      const point = map.project([center[0], center[1]]);
+      const soilFeature = map.queryRenderedFeatures(point, { layers: ["soils-rrp-fill"] })?.[0];
+      const fileUcs = resolveFileUcs(soilFeature?.properties || {});
+      const soilRow = fileUcs ? lookup.get(fileUcs.toLowerCase()) || null : null;
+      return { index, feature, soilRow, surfaceHa };
+    });
+  }, [features, mapRef, rrpVisible]);
 
   const handleFillSoilTypes = useCallback(async () => {
     if (!features.length) {
       alert("Aucune parcelle à remplir.");
       return;
     }
-    const structures = Object.keys(soilMappingsByStructure || {}).filter(
-      (name) => Object.keys(soilMappingsByStructure[name] || {}).length > 0
+    const structures = Object.keys(soilMappingsByStructure || {}).filter((name) =>
+      (soilMappingsByStructure[name]?.soilTypes || []).length > 0
     );
     if (!structures.length) {
-      alert("Aucune structure avec mapping type de sol enregistré.");
+      alert("Aucune structure avec configuration de mapping type de sol enregistrée.");
       return;
     }
     const selectedStructure = window.prompt(
@@ -1018,52 +1044,106 @@ export default function ParcellesEditorMap() {
       structures[0]
     );
     if (!selectedStructure) return;
-    const mapping = soilMappingsByStructure[selectedStructure];
-    if (!mapping) {
-      alert("Structure inconnue ou mapping vide.");
-      return;
-    }
-    const map = mapRef.current;
-    if (!map || !rrpVisible || !map.getLayer("soils-rrp-fill")) {
-      alert("Active la couche Carte des sols France avant de remplir.");
+    const configuration = soilMappingsByStructure[selectedStructure];
+    if (!configuration) {
+      alert("Structure inconnue ou configuration vide.");
       return;
     }
 
     setSoilTypesFilling(true);
     try {
-      const lookup = await loadSoilTypeLookupBySourceFile();
+      const parcelCandidates = await resolveParcelsWithSoilRows();
+      const { assignments } = applySequentialSoilMapping(parcelCandidates, configuration);
+
       const nextFeatures = [...features];
-      let filledCount = 0;
+      let assignedCount = 0;
+      assignments.forEach((assignment, index) => {
+        if (!assignment?.soilTypeName) return;
+        nextFeatures[index] = {
+          ...nextFeatures[index],
+          properties: {
+            ...(nextFeatures[index]?.properties || {}),
+            assolia_soil_type: assignment.soilTypeName,
+            type_sol: assignment.soilTypeName,
+          },
+        };
+        assignedCount += 1;
+      });
 
-      for (let idx = 0; idx < nextFeatures.length; idx += 1) {
-        const feature = nextFeatures[idx];
-        if (!feature?.geometry) continue;
-        const center = centroid(feature).geometry?.coordinates;
-        if (!Array.isArray(center) || center.length < 2) continue;
-        const point = map.project([center[0], center[1]]);
-        const soilFeature = map.queryRenderedFeatures(point, { layers: ["soils-rrp-fill"] })?.[0];
-        if (!soilFeature?.properties) continue;
-        const fileUcs = resolveFileUcs(soilFeature.properties);
-        if (!fileUcs) continue;
-        const soilRow = lookup.get(fileUcs.toLowerCase());
-        if (!soilRow) continue;
-        const combination = buildSoilCombinationLabel(soilRow);
-        const mappedType = mapping[combination];
-        if (!mappedType || !String(mappedType).trim()) continue;
-
-        const nextProps = { ...(feature.properties || {}), type_sol: String(mappedType).trim() };
-        nextFeatures[idx] = { ...feature, properties: nextProps };
-        filledCount += 1;
-      }
       setFeatures(nextFeatures);
-      alert(`${filledCount} parcelle(s) remplie(s) pour la structure ${selectedStructure}.`);
+      alert(`${assignedCount} parcelle(s) affectée(s) via le mapping séquentiel (${selectedStructure}).`);
     } catch (error) {
       console.warn(error);
-      alert("Le remplissage des types de sol a échoué.");
+      alert(error?.message || "Le remplissage des types de sol a échoué.");
     } finally {
       setSoilTypesFilling(false);
     }
-  }, [features, mapRef, rrpVisible, setFeatures, soilMappingsByStructure]);
+  }, [features, resolveParcelsWithSoilRows, setFeatures, soilMappingsByStructure]);
+
+  useEffect(() => {
+    let cancelled = false;
+    resolveParcelsWithSoilRows()
+      .then((candidates) => {
+        if (!cancelled) setSoilMappingParcelCandidates(candidates);
+      })
+      .catch(() => {
+        if (!cancelled) setSoilMappingParcelCandidates([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [resolveParcelsWithSoilRows]);
+
+  const soilAttributeOptions = useMemo(() => {
+    const options = {};
+    SOIL_RULE_ATTRIBUTES.forEach((attributeName) => {
+      options[attributeName] = [];
+    });
+    soilTypeRows.forEach((row) => {
+      SOIL_RULE_ATTRIBUTES.forEach((attributeName) => {
+        const value = String(row?.[attributeName] || "").trim();
+        if (!value || /^na$/i.test(value)) return;
+        if (!options[attributeName].includes(value)) options[attributeName].push(value);
+      });
+    });
+    SOIL_RULE_ATTRIBUTES.forEach((attributeName) => {
+      options[attributeName].sort((a, b) => a.localeCompare(b));
+    });
+    return options;
+  }, [soilTypeRows]);
+
+  const handleApplySoilMappingConfiguration = useCallback(async (configuration, structure) => {
+    setSoilMappingApplying(true);
+    try {
+      const parcelCandidates = await resolveParcelsWithSoilRows();
+      const { assignments, remainingIndices } = applySequentialSoilMapping(parcelCandidates, configuration);
+
+      const nextFeatures = [...features];
+      let assignedCount = 0;
+      assignments.forEach((assignment, index) => {
+        if (!assignment?.soilTypeName) return;
+        nextFeatures[index] = {
+          ...nextFeatures[index],
+          properties: {
+            ...(nextFeatures[index]?.properties || {}),
+            assolia_soil_type: assignment.soilTypeName,
+            type_sol: assignment.soilTypeName,
+          },
+        };
+        assignedCount += 1;
+      });
+      setFeatures(nextFeatures);
+      alert(
+        `${assignedCount} parcelle(s) affectée(s) pour ${structure || "la structure"}. ` +
+        `${remainingIndices.size} parcelle(s) restent non affectée(s).`
+      );
+    } catch (error) {
+      console.warn(error);
+      alert(error?.message || "Application du mapping impossible.");
+    } finally {
+      setSoilMappingApplying(false);
+    }
+  }, [features, resolveParcelsWithSoilRows, setFeatures]);
 
   // ---- Styles de la barre d’outils bas
   const bottomBarHeight = compact ? 56 : 64;
@@ -1515,11 +1595,14 @@ export default function ParcellesEditorMap() {
 
         {activeTab === "mapping-sols" && (
           <SoilTypeMappingPanel
-            soilCombinations={soilTypeRows}
             mappingsByStructure={soilMappingsByStructure}
             onSaveStructureMappings={handleSaveStructureMappings}
             loading={soilMappingsLoading}
             saving={soilMappingsSaving}
+            parcelCandidates={soilMappingParcelCandidates}
+            attributeOptions={soilAttributeOptions}
+            onApplyMapping={handleApplySoilMappingConfiguration}
+            applying={soilMappingApplying}
           />
         )}
 
