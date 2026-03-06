@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   applySequentialSoilMapping,
+  buildDetectedSoilCombinations,
   buildMappingCsv,
   parseMappingCsv,
 } from "./soilTypeMapping";
 
 describe("soilTypeMapping sequential engine", () => {
-  it("applique les règles dans l'ordre puis le résiduel", () => {
+  it("applique les combinaisons visuelles, puis les règles, puis le résiduel", () => {
     const parcels = [
       { soilRow: { profondeur: "profond", texture: "limoneux" }, surfaceHa: 1 },
       { soilRow: { profondeur: "profond", texture: "sableux" }, surfaceHa: 2 },
@@ -18,9 +19,14 @@ describe("soilTypeMapping sequential engine", () => {
         {
           name: "Sol profond",
           residual: false,
+          combinationKeys: ["limoneux||profond||__NULL__||__NULL__||__NULL__||__NULL__"],
+          attributes: {},
+        },
+        {
+          name: "Sol sableux",
+          residual: false,
           attributes: {
-            profondeur: { include: ["profond"], exclude: [], nullMode: "ANY" },
-            texture: { include: [], exclude: ["sableux"], nullMode: "ANY" },
+            texture: { include: ["sableux"], exclude: [], nullMode: "ANY" },
           },
         },
         {
@@ -34,9 +40,22 @@ describe("soilTypeMapping sequential engine", () => {
     const { assignments, remainingIndices } = applySequentialSoilMapping(parcels, configuration);
 
     expect(assignments[0]?.soilTypeName).toBe("Sol profond");
-    expect(assignments[1]?.soilTypeName).toBe("Autres sols");
+    expect(assignments[1]?.soilTypeName).toBe("Sol sableux");
     expect(assignments[2]?.soilTypeName).toBe("Autres sols");
     expect(remainingIndices.size).toBe(0);
+  });
+
+  it("détecte les combinaisons présentes triées par surface", () => {
+    const combinations = buildDetectedSoilCombinations([
+      { soilRow: { texture: "argileux", profondeur: "profond" }, surfaceHa: 4 },
+      { soilRow: { texture: "limoneux", profondeur: "profond" }, surfaceHa: 1 },
+      { soilRow: { texture: "argileux", profondeur: "profond" }, surfaceHa: 2 },
+    ]);
+
+    expect(combinations).toHaveLength(2);
+    expect(combinations[0].row.texture).toBe("argileux");
+    expect(combinations[0].surfaceHa).toBe(6);
+    expect(combinations[1].row.texture).toBe("limoneux");
   });
 
   it("importe et exporte le CSV de configuration", () => {
@@ -45,6 +64,9 @@ describe("soilTypeMapping sequential engine", () => {
         {
           name: "Terrefort",
           residual: false,
+          color: "#123456",
+          description: "Sols argileux",
+          combinationKeys: ["argileux||profond||__NULL__||__NULL__||__NULL__||__NULL__"],
           attributes: {
             texture: { include: ["argileux", "limono-argileux"], exclude: [], nullMode: "ANY" },
             ph_classe: { include: [], exclude: [], nullMode: "IS_NOT_NULL" },
@@ -58,6 +80,11 @@ describe("soilTypeMapping sequential engine", () => {
 
     expect(parsed.soilTypes).toHaveLength(1);
     expect(parsed.soilTypes[0].name).toBe("Terrefort");
+    expect(parsed.soilTypes[0].color).toBe("#123456");
+    expect(parsed.soilTypes[0].description).toBe("Sols argileux");
+    expect(parsed.soilTypes[0].combinationKeys).toEqual([
+      "argileux||profond||__NULL__||__NULL__||__NULL__||__NULL__",
+    ]);
     expect(parsed.soilTypes[0].attributes.texture.include).toEqual(["argileux", "limono-argileux"]);
     expect(parsed.soilTypes[0].attributes.ph_classe.nullMode).toBe("IS_NOT_NULL");
   });

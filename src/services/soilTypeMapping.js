@@ -89,6 +89,11 @@ function normalizeSoilTypeRule(rule = {}) {
     id: rule.id || `soil-type-${Math.random().toString(36).slice(2, 8)}`,
     name: String(rule.name || "").trim(),
     residual: Boolean(rule.residual),
+    color: String(rule.color || "#94a3b8").trim() || "#94a3b8",
+    description: String(rule.description || "").trim(),
+    combinationKeys: Array.isArray(rule.combinationKeys)
+      ? rule.combinationKeys.map((item) => String(item || "").trim()).filter(Boolean)
+      : [],
     attributes,
   };
 }
@@ -114,6 +119,37 @@ export function buildSoilCombinationLabel(row) {
   const topo = positionTopo ? `${hydro ? " " : ""}sur ${positionTopo}` : "";
   const ph = phClasse ? `${hydro || topo ? " " : ""}à tendance ${phClasse.toLowerCase()}` : "";
   return `${first}${hydro ? ` ${hydro}` : ""}${topo}${ph}`.replace(/\s+/g, " ").trim();
+}
+
+export function buildSoilCombinationKey(row) {
+  return SOIL_RULE_ATTRIBUTES.map((attributeName) => {
+    const value = norm(row?.[attributeName]);
+    return value || "__NULL__";
+  }).join("||");
+}
+
+export function buildDetectedSoilCombinations(parcels = []) {
+  const byKey = new Map();
+  parcels.forEach((parcel) => {
+    const soilRow = parcel?.soilRow || {};
+    const key = buildSoilCombinationKey(soilRow);
+    const current = byKey.get(key) || {
+      key,
+      row: SOIL_RULE_ATTRIBUTES.reduce((acc, attributeName) => {
+        acc[attributeName] = norm(soilRow?.[attributeName]);
+        return acc;
+      }, {}),
+      parcels: 0,
+      surfaceHa: 0,
+    };
+    current.parcels += 1;
+    current.surfaceHa += Number(parcel?.surfaceHa || 0);
+    byKey.set(key, current);
+  });
+
+  return [...byKey.values()]
+    .map((item) => ({ ...item, label: buildSoilCombinationLabel(item.row) }))
+    .sort((a, b) => b.surfaceHa - a.surfaceHa || b.parcels - a.parcels || a.label.localeCompare(b.label));
 }
 
 export async function loadSoilTypeRows() {
@@ -176,6 +212,12 @@ export function applySequentialSoilMapping(parcels, configuration) {
       remainingIndices.forEach((index) => {
         matchedIndices.push(index);
       });
+    } else if ((soilType.combinationKeys || []).length > 0) {
+      const keySet = new Set(soilType.combinationKeys);
+      remainingIndices.forEach((index) => {
+        const key = buildSoilCombinationKey(parcels[index]?.soilRow || {});
+        if (keySet.has(key)) matchedIndices.push(index);
+      });
     } else {
       remainingIndices.forEach((index) => {
         if (matchesSoilTypeRule(parcels[index].soilRow, soilType)) matchedIndices.push(index);
@@ -201,7 +243,7 @@ export function applySequentialSoilMapping(parcels, configuration) {
 
 export function buildMappingCsv(configuration) {
   const normalized = normalizeSoilTypeConfiguration(configuration);
-  const header = ["order", "soil_type", "residual", ...SOIL_RULE_ATTRIBUTES.flatMap((name) => [
+  const header = ["order", "soil_type", "residual", "color", "description", "combination_keys", ...SOIL_RULE_ATTRIBUTES.flatMap((name) => [
     `${name}_in`,
     `${name}_not_in`,
     `${name}_null`,
@@ -213,6 +255,9 @@ export function buildMappingCsv(configuration) {
       String(index + 1),
       soilType.name,
       soilType.residual ? "1" : "0",
+      soilType.color || "",
+      soilType.description || "",
+      (soilType.combinationKeys || []).join("~~~"),
       ...SOIL_RULE_ATTRIBUTES.flatMap((attributeName) => {
         const attributeRule = soilType.attributes?.[attributeName] || {};
         return [
@@ -259,11 +304,17 @@ export function parseMappingCsv(text) {
 
     const name = values[indexByHeader.get("soil_type")] || "";
     const residualRaw = values[indexByHeader.get("residual")] || "0";
+    const color = values[indexByHeader.get("color")] || "#94a3b8";
+    const description = values[indexByHeader.get("description")] || "";
+    const combinationKeysRaw = values[indexByHeader.get("combination_keys")] || "";
 
     return {
       id: `imported-soil-type-${rowIndex + 1}`,
       name: String(name).trim(),
       residual: residualRaw === "1" || /^true$/i.test(residualRaw),
+      color,
+      description,
+      combinationKeys: combinationKeysRaw.split("~~~").map((item) => item.trim()).filter(Boolean),
       attributes,
     };
   }).filter((item) => item.name);
