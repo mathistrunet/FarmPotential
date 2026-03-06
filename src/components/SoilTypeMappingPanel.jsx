@@ -45,13 +45,6 @@ function createSoilType(name = "") {
   };
 }
 
-function parseList(raw) {
-  return String(raw || "")
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
 function formatHa(value) {
   if (!Number.isFinite(value)) return "0.00";
   return value.toFixed(2);
@@ -59,6 +52,85 @@ function formatHa(value) {
 
 function valueLabel(v) {
   return v ? v : "NULL";
+}
+
+function ModalitiesMultiSelect({
+  label,
+  values = [],
+  options = [],
+  onChange,
+}) {
+  const normalizedOptions = useMemo(
+    () => [...new Set((options || []).filter((option) => option != null && option !== ""))],
+    [options]
+  );
+  const normalizedValues = useMemo(
+    () => [...new Set((values || []).filter((value) => value != null && value !== ""))],
+    [values]
+  );
+
+  const allSelected = normalizedOptions.length > 0 && normalizedValues.length === normalizedOptions.length;
+
+  const toggleOption = (option, checked) => {
+    if (checked) {
+      onChange([...normalizedValues, option]);
+      return;
+    }
+    onChange(normalizedValues.filter((value) => value !== option));
+  };
+
+  const summary = normalizedValues.length
+    ? `${normalizedValues.length} sélectionnée(s)`
+    : "Aucune modalité";
+
+  return (
+    <div style={{ display: "grid", gap: 4 }}>
+      <span style={{ fontSize: 12, fontWeight: 600 }}>{label}</span>
+      <details style={{ border: "1px solid #d1d5db", borderRadius: 6, padding: 6, background: "#fff" }}>
+        <summary style={{ cursor: "pointer", fontSize: 12, color: "#334155" }}>{summary}</summary>
+        <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <button
+              type="button"
+              onClick={() => onChange(normalizedOptions)}
+              style={{ ...buttonStyle, fontSize: 11, padding: "2px 6px" }}
+              disabled={!normalizedOptions.length || allSelected}
+            >
+              Tout cocher
+            </button>
+            <button
+              type="button"
+              onClick={() => onChange([])}
+              style={{ ...buttonStyle, fontSize: 11, padding: "2px 6px" }}
+              disabled={!normalizedValues.length}
+            >
+              Tout décocher
+            </button>
+          </div>
+
+          {!normalizedOptions.length ? (
+            <span style={{ fontSize: 12, color: "#64748b" }}>Aucune modalité détectée.</span>
+          ) : (
+            <div style={{ maxHeight: 180, overflow: "auto", border: "1px solid #f1f5f9", borderRadius: 6, padding: 6 }}>
+              {normalizedOptions.map((option) => {
+                const checked = normalizedValues.includes(option);
+                return (
+                  <label key={option} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, padding: "2px 0" }}>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(event) => toggleOption(option, event.target.checked)}
+                    />
+                    {option}
+                  </label>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </details>
+    </div>
+  );
 }
 
 export default function SoilTypeMappingPanel({
@@ -291,11 +363,11 @@ export default function SoilTypeMappingPanel({
                         <div style={{ fontWeight: 600, marginBottom: 6 }}>{ATTRIBUTE_LABELS[attributeName]}</div>
                         <div style={{ display: "grid", gap: 6 }}>
                           <label style={{ fontSize: 12 }}>
-                            IN
-                            <input
-                              value={(rule.include || []).join(", ")}
-                              onChange={(e) => {
-                                const include = parseList(e.target.value);
+                            <ModalitiesMultiSelect
+                              label="IN"
+                              values={rule.include || []}
+                              options={attributeOptions?.[attributeName] || []}
+                              onChange={(include) => {
                                 setSoilType(index, (prev) => ({
                                   ...prev,
                                   attributes: {
@@ -304,16 +376,14 @@ export default function SoilTypeMappingPanel({
                                   },
                                 }));
                               }}
-                              list={`soil-options-${attributeName}`}
-                              style={{ width: "100%", marginTop: 4, padding: "4px 6px", border: "1px solid #d1d5db", borderRadius: 4 }}
                             />
                           </label>
                           <label style={{ fontSize: 12 }}>
-                            NOT IN
-                            <input
-                              value={(rule.exclude || []).join(", ")}
-                              onChange={(e) => {
-                                const exclude = parseList(e.target.value);
+                            <ModalitiesMultiSelect
+                              label="NOT IN"
+                              values={rule.exclude || []}
+                              options={attributeOptions?.[attributeName] || []}
+                              onChange={(exclude) => {
                                 setSoilType(index, (prev) => ({
                                   ...prev,
                                   attributes: {
@@ -322,7 +392,6 @@ export default function SoilTypeMappingPanel({
                                   },
                                 }));
                               }}
-                              style={{ width: "100%", marginTop: 4, padding: "4px 6px", border: "1px solid #d1d5db", borderRadius: 4 }}
                             />
                           </label>
                           <label style={{ fontSize: 12 }}>
@@ -346,11 +415,6 @@ export default function SoilTypeMappingPanel({
                               <option value="IS_NOT_NULL">IS NOT NULL</option>
                             </select>
                           </label>
-                          <datalist id={`soil-options-${attributeName}`}>
-                            {(attributeOptions?.[attributeName] || []).map((option) => (
-                              <option key={option} value={option} />
-                            ))}
-                          </datalist>
                         </div>
                       </div>
                     );
