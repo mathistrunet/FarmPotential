@@ -117,3 +117,11 @@ Run ESLint on the project with:
 ```bash
 npm run lint
 ```
+
+## SoilGrids (point GPS)
+- Endpoint interne: `GET /api/parcels/{parcelId}/soilgrids?refresh=true|false&depth_profile=0-5cm,5-15cm,...`
+- Source: SoilGrids v2 `properties/query` (résolution ~250m).
+- Cache backend: `data/parcel-soilgrids-cache.json` avec TTL par défaut de 30 jours (modifiable dans `SoilGridsCacheRepository`).
+- Stratégie du point: `SOILGRIDS_POINT_STRATEGY=centroid|inside_point` (fallback automatique bbox center si géométrie invalide).
+- Le backend stocke aussi `feature.properties.soilgridsPoint` (lat/lon/strategy/timestamp) pour traçabilité.
+- Les indicateurs dérivés (texture, MO, porosité, RU, drainage, profondeur cible) sont heuristiques et affichés comme estimations.
