@@ -4,6 +4,8 @@ import {
   buildDetectedSoilCombinations,
   buildMappingCsv,
   parseMappingCsv,
+  resolveFileUcs,
+  resolveUcsId,
 } from "./soilTypeMapping";
 
 describe("soilTypeMapping sequential engine", () => {
@@ -87,5 +89,14 @@ describe("soilTypeMapping sequential engine", () => {
     ]);
     expect(parsed.soilTypes[0].attributes.texture.include).toEqual(["argileux", "limono-argileux"]);
     expect(parsed.soilTypes[0].attributes.ph_classe.nullMode).toBe("IS_NOT_NULL");
+  });
+
+  it("résout file_ucs depuis id_ucs quand la carte ne fournit pas file_ucs", () => {
+    expect(resolveUcsId({ id_ucs: 9984 })).toBe("9984");
+    expect(resolveUcsId({ UCS: "09984" })).toBe("09984");
+    expect(resolveUcsId({})).toBe("");
+
+    expect(resolveFileUcs({ id_ucs: 9984 })).toBe("id_ucs_9984.txt");
+    expect(resolveFileUcs({ file_ucs: "id_ucs_9984.txt" })).toBe("id_ucs_9984.txt");
   });
 });
