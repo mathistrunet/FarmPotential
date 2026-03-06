@@ -87,6 +87,38 @@ const normalizeYearValue = (value) => {
 };
 const DRAW_LAYER_VARIANTS = ["", ".cold", ".hot"];
 
+function buildSoilProbePoints(feature) {
+  const probes = [];
+  const register = (coordinates) => {
+    if (!Array.isArray(coordinates) || coordinates.length < 2) return;
+    const [lng, lat] = coordinates;
+    if (!Number.isFinite(lng) || !Number.isFinite(lat)) return;
+    const key = `${lng.toFixed(7)}:${lat.toFixed(7)}`;
+    if (!probes.some((probe) => probe.key === key)) {
+      probes.push({ key, coordinates: [lng, lat] });
+    }
+  };
+
+  register(centroid(feature).geometry?.coordinates);
+  const polygonCoordinates =
+    feature?.geometry?.type === "Polygon"
+      ? [feature.geometry.coordinates]
+      : feature?.geometry?.type === "MultiPolygon"
+        ? feature.geometry.coordinates
+        : [];
+
+  polygonCoordinates.forEach((polygon) => {
+    const firstRing = polygon?.[0] || [];
+    if (!firstRing.length) return;
+    const sampleIndexes = [0, Math.floor(firstRing.length / 3), Math.floor((firstRing.length * 2) / 3)];
+    sampleIndexes.forEach((index) => {
+      register(firstRing[index]);
+    });
+  });
+
+  return probes;
+}
+
 function projectLngLatTo3857(lng, lat) {
   const rad = Math.PI / 180;
   const clampedLat = Math.max(Math.min(lat, 89.999999), -89.999999);
@@ -1020,20 +1052,32 @@ export default function ParcellesEditorMap() {
     return features.map((feature, index) => {
       const areaM2 = featureAreaM2(feature) ?? 0;
       const surfaceHa = areaM2 / 10000;
-      const center = centroid(feature).geometry?.coordinates;
-      if (!Array.isArray(center) || center.length < 2) {
+      const probePoints = buildSoilProbePoints(feature);
+      if (!probePoints.length) {
         return { index, feature, soilRow: null, surfaceHa };
       }
-      const point = map.project([center[0], center[1]]);
-      const soilFeature = map.queryRenderedFeatures(point, { layers: ["soils-rrp-fill"] })?.[0];
-      const soilProps = soilFeature?.properties || {};
-      const fileUcs = resolveFileUcs(soilProps);
-      const ucsId = resolveUcsId(soilProps);
-      const soilRow =
-        (fileUcs && lookupBySourceFile.get(fileUcs.toLowerCase())) ||
-        (ucsId && lookupByUcsId.get(ucsId)) ||
-        null;
-      return { index, feature, soilRow, surfaceHa };
+
+      let detectedSoilRow = null;
+      for (const probe of probePoints) {
+        const point = map.project([probe.coordinates[0], probe.coordinates[1]]);
+        const rendered = map.queryRenderedFeatures(point, { layers: ["soils-rrp-fill"] }) || [];
+        for (const candidate of rendered) {
+          const soilProps = candidate?.properties || {};
+          const fileUcs = resolveFileUcs(soilProps);
+          const ucsId = resolveUcsId(soilProps);
+          const row =
+            (fileUcs && lookupBySourceFile.get(fileUcs.toLowerCase())) ||
+            (ucsId && lookupByUcsId.get(ucsId)) ||
+            null;
+          if (row) {
+            detectedSoilRow = row;
+            break;
+          }
+        }
+        if (detectedSoilRow) break;
+      }
+
+      return { index, feature, soilRow: detectedSoilRow, surfaceHa };
     });
   }, [features, mapRef, rrpVisible]);
 
