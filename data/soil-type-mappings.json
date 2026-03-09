@@ -1,0 +1,218 @@
+{
+  "mappings": {
+    "Arterris": {
+      "soilTypes": [
+        {
+          "id": "soil-type-1772803599510-vzgo9",
+          "name": "Sol profond",
+          "residual": false,
+          "color": "#196ce1",
+          "description": "",
+          "combinationKeys": [],
+          "attributes": {
+            "texture": {
+              "include": [
+                "argileux",
+                "argilo-limoneux",
+                "argilo-limono-sableux",
+                "argilo-sableux",
+                "argilo-sablo-limoneux",
+                "limoneux",
+                "limono-argileux",
+                "limono-argilo-sableux",
+                "limono-sableux",
+                "limono-sablo-argileux",
+                "sablo-argileux",
+                "sableux",
+                "sablo-argilo-limoneux",
+                "sablo-limoneux",
+                "sablo-limono-argileux"
+              ],
+              "exclude": [],
+              "nullMode": "ANY"
+            },
+            "profondeur": {
+              "include": [
+                "moyen",
+                "profond",
+                "superficiel",
+                "tres profond"
+              ],
+              "exclude": [],
+              "nullMode": "ANY"
+            },
+            "position_topo": {
+              "include": [
+                "bas de versant",
+                "bas-fond/vallee",
+                "bord de cours d'eau",
+                "haut de versant",
+                "plaine",
+                "plateau",
+                "versant"
+              ],
+              "exclude": [],
+              "nullMode": "ANY"
+            },
+            "hydromorphie": {
+              "include": [
+                "draine",
+                "hydromorphe"
+              ],
+              "exclude": [],
+              "nullMode": "ANY"
+            },
+            "ph_classe": {
+              "include": [
+                "Acide",
+                "Basique",
+                "Neutre"
+              ],
+              "exclude": [],
+              "nullMode": "ANY"
+            },
+            "cailloux": {
+              "include": [
+                "caillouteux",
+                "pierres/blocs",
+                "silex"
+              ],
+              "exclude": [],
+              "nullMode": "ANY"
+            }
+          }
+        },
+        {
+          "id": "soil-type-1772803719502-tjj8o",
+          "name": "Coteau superficiel",
+          "residual": false,
+          "color": "#e15519",
+          "description": "",
+          "combinationKeys": [],
+          "attributes": {
+            "texture": {
+              "include": [],
+              "exclude": [],
+              "nullMode": "ANY"
+            },
+            "profondeur": {
+              "include": [
+                "superficiel"
+              ],
+              "exclude": [],
+              "nullMode": "ANY"
+            },
+            "position_topo": {
+              "include": [
+                "haut de versant;versant"
+              ],
+              "exclude": [],
+              "nullMode": "ANY"
+            },
+            "hydromorphie": {
+              "include": [],
+              "exclude": [],
+              "nullMode": "ANY"
+            },
+            "ph_classe": {
+              "include": [],
+              "exclude": [],
+              "nullMode": "ANY"
+            },
+            "cailloux": {
+              "include": [],
+              "exclude": [],
+              "nullMode": "ANY"
+            }
+          }
+        },
+        {
+          "id": "soil-type-1772803775978-xi010",
+          "name": "Boulbène légère",
+          "residual": false,
+          "color": "#d6e31c",
+          "description": "",
+          "combinationKeys": [],
+          "attributes": {
+            "texture": {
+              "include": [
+                "sablo-limoneux;sableux"
+              ],
+              "exclude": [],
+              "nullMode": "ANY"
+            },
+            "profondeur": {
+              "include": [],
+              "exclude": [],
+              "nullMode": "ANY"
+            },
+            "position_topo": {
+              "include": [],
+              "exclude": [],
+              "nullMode": "ANY"
+            },
+            "hydromorphie": {
+              "include": [],
+              "exclude": [
+                "hydromorphe"
+              ],
+              "nullMode": "ANY"
+            },
+            "ph_classe": {
+              "include": [],
+              "exclude": [],
+              "nullMode": "ANY"
+            },
+            "cailloux": {
+              "include": [],
+              "exclude": [],
+              "nullMode": "ANY"
+            }
+          }
+        },
+        {
+          "id": "soil-type-1772803863930-w6jsx",
+          "name": "Terrefort moyen",
+          "residual": false,
+          "color": "#048631",
+          "description": "",
+          "combinationKeys": [
+            "__NULL__||__NULL__||__NULL__||__NULL__||__NULL__||__NULL__"
+          ],
+          "attributes": {
+            "texture": {
+              "include": [],
+              "exclude": [],
+              "nullMode": "IS_NULL"
+            },
+            "profondeur": {
+              "include": [],
+              "exclude": [],
+              "nullMode": "IS_NULL"
+            },
+            "position_topo": {
+              "include": [],
+              "exclude": [],
+              "nullMode": "IS_NULL"
+            },
+            "hydromorphie": {
+              "include": [],
+              "exclude": [],
+              "nullMode": "IS_NULL"
+            },
+            "ph_classe": {
+              "include": [],
+              "exclude": [],
+              "nullMode": "IS_NULL"
+            },
+            "cailloux": {
+              "include": [],
+              "exclude": [],
+              "nullMode": "IS_NULL"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

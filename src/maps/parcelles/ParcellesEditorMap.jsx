@@ -44,16 +44,10 @@ import {
 } from "../../services/parcellesBackend";
 import { useParcelles } from "./useParcelles";
 import {
-  applySequentialSoilMapping,
-  normalizeSoilTypeConfiguration,
-  fetchSoilTypeMappings,
-  loadSoilTypeRows,
   loadSoilTypeLookupBySourceFile,
   loadSoilTypeLookupByUcsId,
   resolveFileUcs,
   resolveUcsId,
-  saveSoilTypeMappings,
-  SOIL_RULE_ATTRIBUTES,
 } from "../../services/soilTypeMapping";
 import { featureAreaM2 } from "../../utils/geometry";
 
@@ -221,12 +215,6 @@ export default function ParcellesEditorMap() {
   const [sideExpanded, setSideExpanded] = useState(false); // largeur étendue pour le tableau
   const [activeTab, setActiveTab] = useState("parcelles"); // "parcelles" | "calques" | "mapping-sols"
   const [parcelleViewMode, setParcelleViewMode] = useState("cards"); // "cards" | "table"
-  const [soilTypeRows, setSoilTypeRows] = useState([]);
-  const [soilMappingsByStructure, setSoilMappingsByStructure] = useState({});
-  const [soilMappingsLoading, setSoilMappingsLoading] = useState(false);
-  const [soilMappingsSaving, setSoilMappingsSaving] = useState(false);
-  const [soilTypesFilling, setSoilTypesFilling] = useState(false);
-  const [soilMappingApplying, setSoilMappingApplying] = useState(false);
   const [soilMappingParcelCandidates, setSoilMappingParcelCandidates] = useState([]);
   const [compact, setCompact] = useState(false);
   const [rrpVisible, setRrpVisible] = useState(false);
@@ -1000,48 +988,10 @@ export default function ParcellesEditorMap() {
     }
   };
 
-  useEffect(() => {
-    let cancelled = false;
-    setSoilMappingsLoading(true);
-    Promise.all([loadSoilTypeRows(), fetchSoilTypeMappings()])
-      .then(([rows, mappingsPayload]) => {
-        if (cancelled) return;
-        setSoilTypeRows(rows);
-        setSoilMappingsByStructure(mappingsPayload?.mappings || {});
-      })
-      .catch((error) => {
-        console.warn("[SOIL_MAPPING_INIT_FAILED]", error);
-      })
-      .finally(() => {
-        if (!cancelled) setSoilMappingsLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const handleSaveStructureMappings = useCallback(async (structure, configuration) => {
-    const next = {
-      ...soilMappingsByStructure,
-      [structure]: normalizeSoilTypeConfiguration(configuration),
-    };
-    setSoilMappingsSaving(true);
-    try {
-      await saveSoilTypeMappings(next);
-      setSoilMappingsByStructure(next);
-      alert("Configuration de mapping des types de sol enregistrée.");
-    } catch (error) {
-      console.warn(error);
-      alert("Impossible d'enregistrer la configuration de mapping des types de sol.");
-    } finally {
-      setSoilMappingsSaving(false);
-    }
-  }, [soilMappingsByStructure]);
-
   const resolveParcelsWithSoilRows = useCallback(async () => {
     const map = mapRef.current;
     if (!map || !rrpVisible || !map.getLayer("soils-rrp-fill")) {
-      throw new Error("Active la couche Carte des sols France avant de lancer le mapping.");
+      throw new Error("Active la couche Carte des sols France avant de visualiser les sols.");
     }
 
     const [lookupBySourceFile, lookupByUcsId] = await Promise.all([
@@ -1081,59 +1031,6 @@ export default function ParcellesEditorMap() {
     });
   }, [features, mapRef, rrpVisible]);
 
-  const handleFillSoilTypes = useCallback(async () => {
-    if (!features.length) {
-      alert("Aucune parcelle à remplir.");
-      return;
-    }
-    const structures = Object.keys(soilMappingsByStructure || {}).filter((name) =>
-      (soilMappingsByStructure[name]?.soilTypes || []).length > 0
-    );
-    if (!structures.length) {
-      alert("Aucune structure avec configuration de mapping type de sol enregistrée.");
-      return;
-    }
-    const selectedStructure = window.prompt(
-      `Choisir une structure parmi :\n${structures.join("\n")}`,
-      structures[0]
-    );
-    if (!selectedStructure) return;
-    const configuration = soilMappingsByStructure[selectedStructure];
-    if (!configuration) {
-      alert("Structure inconnue ou configuration vide.");
-      return;
-    }
-
-    setSoilTypesFilling(true);
-    try {
-      const parcelCandidates = await resolveParcelsWithSoilRows();
-      const { assignments } = applySequentialSoilMapping(parcelCandidates, configuration);
-
-      const nextFeatures = [...features];
-      let assignedCount = 0;
-      assignments.forEach((assignment, index) => {
-        if (!assignment?.soilTypeName) return;
-        nextFeatures[index] = {
-          ...nextFeatures[index],
-          properties: {
-            ...(nextFeatures[index]?.properties || {}),
-            assolia_soil_type: assignment.soilTypeName,
-            type_sol: assignment.soilTypeName,
-          },
-        };
-        assignedCount += 1;
-      });
-
-      setFeatures(nextFeatures);
-      alert(`${assignedCount} parcelle(s) affectée(s) via le mapping séquentiel (${selectedStructure}).`);
-    } catch (error) {
-      console.warn(error);
-      alert(error?.message || "Le remplissage des types de sol a échoué.");
-    } finally {
-      setSoilTypesFilling(false);
-    }
-  }, [features, resolveParcelsWithSoilRows, setFeatures, soilMappingsByStructure]);
-
   useEffect(() => {
     let cancelled = false;
     resolveParcelsWithSoilRows()
@@ -1147,57 +1044,6 @@ export default function ParcellesEditorMap() {
       cancelled = true;
     };
   }, [resolveParcelsWithSoilRows]);
-
-  const soilAttributeOptions = useMemo(() => {
-    const options = {};
-    SOIL_RULE_ATTRIBUTES.forEach((attributeName) => {
-      options[attributeName] = [];
-    });
-    soilTypeRows.forEach((row) => {
-      SOIL_RULE_ATTRIBUTES.forEach((attributeName) => {
-        const value = String(row?.[attributeName] || "").trim();
-        if (!value || /^na$/i.test(value)) return;
-        if (!options[attributeName].includes(value)) options[attributeName].push(value);
-      });
-    });
-    SOIL_RULE_ATTRIBUTES.forEach((attributeName) => {
-      options[attributeName].sort((a, b) => a.localeCompare(b));
-    });
-    return options;
-  }, [soilTypeRows]);
-
-  const handleApplySoilMappingConfiguration = useCallback(async (configuration, structure) => {
-    setSoilMappingApplying(true);
-    try {
-      const parcelCandidates = await resolveParcelsWithSoilRows();
-      const { assignments, remainingIndices } = applySequentialSoilMapping(parcelCandidates, configuration);
-
-      const nextFeatures = [...features];
-      let assignedCount = 0;
-      assignments.forEach((assignment, index) => {
-        if (!assignment?.soilTypeName) return;
-        nextFeatures[index] = {
-          ...nextFeatures[index],
-          properties: {
-            ...(nextFeatures[index]?.properties || {}),
-            assolia_soil_type: assignment.soilTypeName,
-            type_sol: assignment.soilTypeName,
-          },
-        };
-        assignedCount += 1;
-      });
-      setFeatures(nextFeatures);
-      alert(
-        `${assignedCount} parcelle(s) affectée(s) pour ${structure || "la structure"}. ` +
-        `${remainingIndices.size} parcelle(s) restent non affectée(s).`
-      );
-    } catch (error) {
-      console.warn(error);
-      alert(error?.message || "Application du mapping impossible.");
-    } finally {
-      setSoilMappingApplying(false);
-    }
-  }, [features, resolveParcelsWithSoilRows, setFeatures]);
 
   // ---- Styles de la barre d’outils bas
   const bottomBarHeight = compact ? 56 : 64;
@@ -1442,7 +1288,7 @@ export default function ParcellesEditorMap() {
                 cursor: "pointer",
               }}
             >
-              Mapping sols
+              Sols presentes
             </button>
           </div>
 
@@ -1636,8 +1482,6 @@ export default function ParcellesEditorMap() {
               viewMode={parcelleViewMode}
               csvValues={csvValues}
               onCsvValuesChange={setCsvValues}
-              onFillSoilTypes={handleFillSoilTypes}
-              isFillingSoilTypes={soilTypesFilling}
             />
 
             <p style={{ fontSize: 12, color: "#777", marginTop: 10 }}>
@@ -1649,14 +1493,9 @@ export default function ParcellesEditorMap() {
 
         {activeTab === "mapping-sols" && (
           <SoilTypeMappingPanel
-            mappingsByStructure={soilMappingsByStructure}
-            onSaveStructureMappings={handleSaveStructureMappings}
-            loading={soilMappingsLoading}
-            saving={soilMappingsSaving}
             parcelCandidates={soilMappingParcelCandidates}
-            attributeOptions={soilAttributeOptions}
-            onApplyMapping={handleApplySoilMappingConfiguration}
-            applying={soilMappingApplying}
+            parcelCount={features.length}
+            rrpVisible={rrpVisible}
           />
         )}
 
