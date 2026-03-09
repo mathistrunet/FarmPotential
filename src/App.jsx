@@ -191,7 +191,6 @@ function AppContent() {
           >
             Calques
           </div>
-        </div>
 
         {/* RPG (autonome) */}
         <RpgFeature mapRef={mapRef} drawRef={drawRef} />
@@ -345,7 +344,6 @@ function AppContent() {
             </button>
           </div>
         )}
-      </div>
 
       {/* Bouton flottant pour ouvrir le panneau quand il est fermé */}
       {!sideOpen && (
@@ -404,7 +402,9 @@ function AppContent() {
             selectFeatureOnMap={selectFeatureOnMap}
             compact={compact}
           />
-        </>
+        </div>
+      </div>
+      </>
       ) : (
         <Suspense fallback={<div style={{ padding: 24 }}>Chargement de l'éditeur…</div>}>
           <ParcellesEditorMap />
