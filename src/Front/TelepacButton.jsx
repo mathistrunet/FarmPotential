@@ -1,10 +1,8 @@
 // src/Front/TelepacButton.jsx
 import React, { useRef, useState } from "react";
 import { parseTelepacXmlToFeatures, buildTelepacXML } from "../services/telepacXml";
-import { parseParcellesCsvToFeatures } from "../services/parcellesCsv";
-import {
-  resolveOverlappingParcels,
-} from "../utils/overlapResolution";
+import { parseShapefileZipToFeatures } from "../services/shapefileZip";
+import { buildParcelShapefileZip } from "../services/parcelleShapefile";
 
 /** Icônes légères inline (gardées) */
 const iconStyle = { width: 18, height: 18, display: "inline-block", verticalAlign: "-3px" };
@@ -133,7 +131,7 @@ export default function ImportTelepacButton({
   compact = false,
   buttonStyle,
   disabled = false,
-  fileAccept = ".xml,.csv",
+  fileAccept = ".xml,.zip",
   // mode = "append", Si on veut réactiver la fonction replace à l'import d'un parcellaire
   zoomOnImport = true,
   labelImport,
@@ -165,53 +163,17 @@ export default function ImportTelepacButton({
     if (!file) return;
     setLoading(true);
     try {
-      const isCsv =
-        file.type === "text/csv" || file.name.toLowerCase().endsWith(".csv");
-      let cultureYearOffset = 0;
-      let importYear = null;
-      if (!isCsv) {
-        const { offset, meta } = await resolveTelepacCultureOffset(
-          file,
-          baseCultureYearRef
-        );
-        if (!Number.isFinite(offset)) {
-          alert(
-            "Colonne de cultures invalide. Import Télépac annulé."
-          );
-          return;
-        }
-        cultureYearOffset = offset;
-        importYear = resolveXmlYear(file, meta?.year ?? null);
-        onImportMeta?.(meta);
+      let feats;
+      const name = file.name?.toLowerCase() ?? "";
+      if (name.endsWith(".zip")) {
+        feats = await parseShapefileZipToFeatures(file);
+      } else if (name.endsWith(".xml")) {
+        feats = await parseTelepacXmlToFeatures(file);
       } else {
-        const fileYear = resolveCsvYear(file);
-        if (!fileYear) {
-          alert("Année invalide. Import annulé.");
-          return;
-        }
-        if (baseCultureYearRef.current == null) {
-          baseCultureYearRef.current = fileYear;
-        }
-        if (fileYear > baseCultureYearRef.current) {
-          alert(
-            `Le fichier est plus récent que l'année de référence (${baseCultureYearRef.current}). Import annulé.`
-          );
-          return;
-        }
-        cultureYearOffset = baseCultureYearRef.current - fileYear;
-        importYear = fileYear;
+        throw new Error("FORMAT_INVALIDE");
       }
-      const feats = isCsv
-        ? await parseParcellesCsvToFeatures(file, { cultureYearOffset, structureName })
-        : await parseTelepacXmlToFeatures(file, { cultureYearOffset });
-      if (Number.isFinite(importYear)) {
-        feats.forEach((feature) => {
-          feature.properties = {
-            ...(feature.properties || {}),
-            annee: importYear,
-            import_year: importYear,
-          };
-        });
+      if (!feats || feats.length === 0) {
+        throw new Error("IMPORT_VIDE");
       }
       const draw = drawRef?.current,
         map = mapRef?.current;
@@ -301,7 +263,7 @@ export default function ImportTelepacButton({
       console.error(err);
       onError?.(err);
       alert(
-        `Impossible de lire ce fichier.${code} Vérifie qu’il s’agit bien d’un export Télépac ou CSV.`
+        "Impossible de lire ce fichier. Utilise un export Télépac (.xml) ou un shapefile zippé (.zip)."
       );
     } finally {
       setLoading(false);
@@ -315,12 +277,12 @@ export default function ImportTelepacButton({
       <button
         onClick={() => !disabled && !loading && fileInputRef.current?.click()}
         style={btn}
-        title="Importer un XML Télépac ou CSV"
+        title="Importer un XML Télépac ou un shapefile zippé"
         disabled={disabled || loading}
       >
         <IconUpload />{" "}
         {compact ? null : (
-          <span>{labelImport || (loading ? "Import..." : "Importer XML/CSV")}</span>
+          <span>{labelImport || (loading ? "Import..." : "Importer fichier")}</span>
         )}
       </button>
       <input
@@ -405,6 +367,99 @@ export function ExportTelepacButton({
     >
       <IconDownload />{" "}
       {compact ? null : <span>{labelExport || (loading ? "Export..." : "Exporter XML")}</span>}
+    </button>
+  );
+}
+
+export function ExportShapefileButton({
+  features = [],
+  setFeatures,
+  compact = false,
+  buttonStyle,
+  disabled = false,
+  labelExport,
+  filenamePrefix = "parcellaire_",
+  onError,
+}) {
+  const [loading, setLoading] = useState(false);
+
+  const btnDefault = {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 8,
+    padding: compact ? "6px 8px" : "8px 12px",
+    borderRadius: 8,
+    background: "#15803d",
+    color: "#fff",
+    border: "none",
+    cursor: disabled || loading ? "not-allowed" : "pointer",
+    opacity: disabled || loading ? 0.7 : 1,
+    fontSize: 14,
+  };
+  const btn = { ...btnDefault, ...(buttonStyle || {}) };
+
+  async function exportShapefile() {
+    if (!features.length) {
+      alert("Dessine ou importe au moins une parcelle.");
+      return;
+    }
+
+    const firstProps = features[0]?.properties || {};
+    const defaultName = (firstProps.RAIS_SOCIA || firstProps.rais_soc || "").toString();
+    const exploitationName = window.prompt(
+      "Nom de l'exploitation (sera exporté en majuscules)",
+      defaultName.toUpperCase()
+    );
+    if (exploitationName == null) return;
+    const trimmedName = exploitationName.trim();
+    if (!trimmedName) {
+      alert("Le nom de l'exploitation est obligatoire pour l'export shapefile.");
+      return;
+    }
+
+    const defaultYear = (firstProps.CAMPAGNE || new Date().getFullYear()).toString();
+    const campagneInput = window.prompt("Campagne (année)", defaultYear);
+    const campagneValue = (campagneInput == null ? defaultYear : campagneInput).trim() || defaultYear;
+
+    setLoading(true);
+    try {
+      const { blob, updatedFeatures } = await buildParcelShapefileZip(features, {
+        raisSoc: trimmedName,
+        campagne: campagneValue,
+      });
+      if (typeof setFeatures === "function") {
+        setFeatures(updatedFeatures);
+      }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${filenamePrefix}${Date.now()}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error(err);
+      onError?.(err);
+      if (err?.message === "RAIS_SOCIA_REQUIRED") {
+        alert("Renseigne un nom d'exploitation pour l'export shapefile.");
+      } else {
+        alert("Échec de l'export shapefile.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <button
+      onClick={exportShapefile}
+      style={btn}
+      title="Exporter les parcelles en shapefile (.zip)"
+      disabled={disabled || loading}
+    >
+      <IconDownload />{" "}
+      {compact ? null : (
+        <span>{labelExport || (loading ? "Export..." : "Exporter SHP")}</span>
+      )}
     </button>
   );
 }

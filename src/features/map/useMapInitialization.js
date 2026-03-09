@@ -48,68 +48,29 @@ const resolveYearColor = (year) => {
 export function useMapInitialization() {
   const mapRef = useRef(null);
   const drawRef = useRef(null);
-  const pendingFeaturesRef = useRef(null);
-  const drawListenersRef = useRef(null);
-  const [features, setFeatures] = useState([]);
+  const [features, setFeaturesState] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
-  const [mapInitError, setMapInitError] = useState(null);
-  const [drawReady, setDrawReady] = useState(false);
+  const syncingDrawRef = useRef(false);
   const ensureRaster = useRasterLayers();
 
-  const syncFeaturesFromDraw = useCallback((draw) => {
-    if (!draw || typeof draw.getAll !== "function") return;
-    let data;
-    try {
-      data = draw.getAll();
-    } catch (error) {
-      console.warn("[DRAW_READ_FAILED] Impossible de lire les parcelles depuis Mapbox Draw.", error);
-      return;
-    }
-    const polys = (data && data.features ? data.features : [])
-      .filter(
-        (f) => f.geometry?.type === "Polygon" || f.geometry?.type === "MultiPolygon"
-      )
-      .map((f) => ({ ...f, properties: f.properties || {} }));
-    polys.forEach((feature) => {
-      if (!feature.id) return;
-      const currentYear = normalizeYearValue(feature.properties?.annee);
-      const importYear = normalizeYearValue(feature.properties?.import_year);
-      const resolvedYear = currentYear ?? importYear ?? null;
-      if (currentYear == null && importYear != null) {
-        draw.setFeatureProperty(feature.id, "annee", importYear);
-      } else if (feature.properties?.annee !== currentYear) {
-        draw.setFeatureProperty(feature.id, "annee", currentYear);
-      }
-      if (!feature.properties?.color) {
-        const nextColor = resolveYearColor(resolvedYear);
-        if (nextColor) {
-          draw.setFeatureProperty(feature.id, "color", nextColor);
+  const setFeatures = useCallback((nextValue) => {
+    setFeaturesState((prev) => {
+      const next = typeof nextValue === "function" ? nextValue(prev) : nextValue;
+      const safeNext = Array.isArray(next) ? next : [];
+
+      const draw = drawRef.current;
+      if (draw && !syncingDrawRef.current) {
+        syncingDrawRef.current = true;
+        try {
+          draw.set({ type: "FeatureCollection", features: safeNext });
+        } finally {
+          syncingDrawRef.current = false;
         }
       }
-    });
-    setFeatures(polys);
-  }, []);
 
-  const setDrawFeatures = useCallback(
-    (collection) => {
-      if (!collection) return;
-      const safeCollection = {
-        type: "FeatureCollection",
-        features: (collection.features || []).map((feature) => ({
-          ...feature,
-          properties: feature.properties || {},
-        })),
-      };
-      const draw = drawRef.current;
-      if (!draw) {
-        pendingFeaturesRef.current = safeCollection;
-        return;
-      }
-      draw.set(safeCollection);
-      syncFeaturesFromDraw(draw);
-    },
-    [syncFeaturesFromDraw]
-  );
+      return safeNext;
+    });
+  }, []);
 
   const selectFeatureOnMap = useCallback((id, fit = false) => {
     const map = mapRef.current;
@@ -446,8 +407,14 @@ export function useMapInitialization() {
       map.addControl(draw, "top-left");
       setDrawReady(true);
 
-      const updateList = () => syncFeaturesFromDraw(drawRef.current);
-      updateList();
+      const updateList = () => {
+        if (syncingDrawRef.current) return;
+        const data = draw.getAll();
+        const polys = (data && data.features ? data.features : [])
+          .filter((f) => f.geometry?.type === "Polygon")
+          .map((f) => ({ ...f, properties: f.properties || {} }));
+        setFeaturesState(polys);
+      };
 
       if (pendingFeaturesRef.current) {
         draw.set(pendingFeaturesRef.current);

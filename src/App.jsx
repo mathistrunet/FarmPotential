@@ -9,11 +9,12 @@ import { codeFromLabel, labelFromCode } from "./utils/cultureLabels";
 
 const ParcellesEditorMap = lazy(() => import("./maps/parcelles/ParcellesEditorMap"));
 
-const VIEWER_DEFAULT_FILTERS = {
-  cultures: [],
-  cultureField: "cultureN",
-  ilot: "",
-};
+// ✅ composant RPG autonome (chemin conservé)
+import RpgFeature from "./Front/useRpgLayer";
+// ✅ composant Dessin autonome (chemin conservé)
+import DrawToolbar from "./Front/DrawToolbar";
+// ✅ Import/Export Télépac (chemin conservé)
+import ImportTelepacButton, { ExportTelepacButton, ExportShapefileButton } from "./Front/TelepacButton";
 
 function AppContent() {
   const { parcellesCollection } = useParcelles();
@@ -188,51 +189,48 @@ function AppContent() {
               gap: 8,
             }}
           >
-            <div style={{ fontWeight: 600 }}>Filtres parcelles</div>
-            <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <span style={{ fontSize: 12, color: "#475569" }}>Cultures</span>
-              <select
-                value={cultureYear}
-                onChange={(event) => {
-                  const nextField = event.target.value || "cultureN";
-                  setViewerFilters((prev) => ({
-                    ...prev,
-                    cultureField: nextField,
-                    cultures: [],
-                  }));
-                }}
-                style={{
-                  border: "1px solid #d1d5db",
-                  borderRadius: 6,
-                  padding: "6px 8px",
-                  fontSize: 12,
-                }}
-              >
-                {cultureYearOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-              <input
-                type="text"
-                placeholder="Blé, Maïs"
-                value={cultureValue}
-                onChange={(event) => {
-                  const raw = event.target.value
-                    .split(",")
-                    .map((value) => value.trim())
-                    .filter(Boolean)
-                    .map((value) => codeFromLabel(value) || value);
-                  setViewerFilters((prev) => ({ ...prev, cultures: raw }));
-                }}
-                style={{
-                  border: "1px solid #d1d5db",
-                  borderRadius: 6,
-                  padding: "6px 8px",
-                  fontSize: 12,
-                }}
-              />
+            Calques
+          </button>
+        </div>
+
+        {/* RPG (autonome) */}
+        <RpgFeature mapRef={mapRef} drawRef={drawRef} />
+
+        {/* Contenu onglet “Parcelles” */}
+        {activeTab === "parcelles" && (
+          <>
+            <p style={{ color: "#666", marginTop: 0 }}>
+              • “Importer XML Télépac” pour charger un export (XML ou shapefile .zip).
+              <br />
+              • “Dessiner un polygone” pour ajouter une parcelle.
+              <br />• “Exporter XML Télépac” ou “Exporter SHP” pour récupérer le
+              parcellaire.
+            </p>
+
+            <ParcelleEditor
+              features={features}
+              setFeatures={setFeatures}
+              selectedId={selectedId}
+              onSelect={(id) => selectFeatureOnMap(id, true)}
+            />
+
+            <p style={{ fontSize: 12, color: "#777", marginTop: 10 }}>
+              Astuce : clique une fiche pour surligner la parcelle sur la carte
+              (et inversement).
+            </p>
+          </>
+        )}
+
+        {/* Calques (hors sols en ligne ; on garde les rasters/basemaps locaux ou tiers) */}
+        {activeTab === "calques" && (
+          <div style={{ marginTop: 6 }}>
+            <span
+              style={{ cursor: "default", fontWeight: 600, padding: "6px 0" }}
+            >
+              Calques
+            </span>
+            <div style={{ marginTop: 8 }}>
+              <RasterToggles mapRef={mapRef} />
               <div
                 style={{
                   maxHeight: 140,
@@ -346,12 +344,65 @@ function AppContent() {
               Réinitialiser les filtres
             </button>
           </div>
-          <ParcellesViewerMap
-            filters={viewerFilters}
-            colorBy={colorBy}
-            palette={mapPalette}
-            data={viewerCollection}
-            isActive={mapMode === "viewer"}
+        )}
+      </div>
+
+      {/* Bouton flottant pour ouvrir le panneau quand il est fermé */}
+      {!sideOpen && (
+        <button
+          onClick={() => setSideOpen(true)}
+          title="Déplier le panneau latéral"
+          style={{
+            position: "absolute",
+            top: 12,
+            right: 12,
+            zIndex: 15,
+            padding: "8px 10px",
+            borderRadius: 8,
+            border: "1px solid #ddd",
+            background: "#fff",
+            cursor: "pointer",
+            boxShadow: "0 2px 10px rgba(0,0,0,0.08)",
+          }}
+        >
+          ▶
+        </button>
+      )}
+
+      {/* Barre d’outils bas */}
+      <div style={barBase}>
+        {/* Import / Export Télépac */}
+        <div style={groupStyle}>
+          <ImportTelepacButton
+            mapRef={mapRef}
+            drawRef={drawRef}
+            setFeatures={setFeatures}
+            selectFeatureOnMap={selectFeatureOnMap}
+            compact={compact}
+            buttonStyle={btn}
+          />
+          <ExportTelepacButton
+            features={features}
+            compact={compact}
+            buttonStyle={{ ...btn, background: "#111", color: "#fff", border: "none" }}
+          />
+          <ExportShapefileButton
+            features={features}
+            setFeatures={setFeatures}
+            compact={compact}
+            buttonStyle={{ ...btn, background: "#15803d", color: "#fff", border: "none" }}
+          />
+        </div>
+
+        {/* Dessin */}
+        <div style={{ ...groupStyle, borderRight: "none" }}>
+          <DrawToolbar
+            mapRef={mapRef}
+            drawRef={drawRef}
+            features={features}
+            setFeatures={setFeatures}
+            selectFeatureOnMap={selectFeatureOnMap}
+            compact={compact}
           />
         </>
       ) : (

@@ -11,1072 +11,192 @@ import { featureAreaM2 } from "../utils/geometry";
 import { resolveOverlappingParcels } from "../utils/overlapResolution";
 import { fetchRpgGeoJSON, getCultureLabel } from "../services/rpg";
 
-const CULTURE_FIELDS = [
-  {
-    field: "cultureN",
-    label: "Culture N",
-    propKey: "cultureN",
-    placeholders: ["cultureN", "code", "CULTURE"],
-    syncCode: true,
-    rpgOffset: 0,
-  },
-  {
-    field: "cultureN_1",
-    label: "CultureN+1",
-    propKey: "cultureN_1",
-    placeholders: ["cultureN_1", "cultureN1", "cultureN+1", "culture_prec"],
-    rpgOffset: 1,
-  },
-];
-
-const TABLE_CULTURE_FIELDS = [
-  {
-    ...CULTURE_FIELDS.find((field) => field.field === "cultureN_1"),
-    label: "CultureN+1",
-  },
-  ...CULTURE_FIELDS.filter((field) => field.field !== "cultureN_1"),
-];
-
-const TABLE_CELL_PADDING = "4px 6px";
-const RPG_FIRST_AVAILABLE_YEAR = 2024;
-
-function normalizePart(raw) {
-  if (raw == null) return "";
-  return String(raw).trim();
-}
-
-function buildParcelleValue(ilot, numero) {
-  const ilotPart = normalizePart(ilot);
-  const numeroPart = normalizePart(numero);
-  return `${ilotPart}.${numeroPart}`;
-}
-
-function parseParcelleInput(rawValue) {
-  const str = rawValue == null ? "" : String(rawValue);
-  const [first, ...rest] = str.split(".");
-  return {
-    ilot: first ?? "",
-    numero: rest.length > 0 ? rest.join(".") : "",
-  };
-}
-
-function normalizeDisplayValue(raw) {
-  if (raw == null) return "";
-  const str = String(raw).trim();
-  if (!str) return "";
-  const label = labelFromCode(str);
-  if (label) return label;
-  const labelFromUpper = labelFromCode(str.toUpperCase());
-  if (labelFromUpper) return labelFromUpper;
-  return str;
-}
-
-function getCultureWarning(value) {
-  const raw = value == null ? "" : String(value);
-  const trimmed = raw.trim();
-  if (!trimmed) return null;
-  const len = trimmed.replace(/\s+/g, "").length;
+function computeCultureWarning(raw) {
+  const value = (raw ?? "").trim();
+  if (value === "") return null;
+  const len = value.replace(/\s+/g, "").length;
   if (len < 3) return null;
   if (len === 3) {
-    const asCode = trimmed.toUpperCase();
-    if (!labelFromCode(asCode)) {
-      return `“${asCode}” n’est pas un code culture reconnu.`;
+    const asCode = value.toUpperCase();
+    const known = !!labelFromCode(asCode);
+    if (!known) {
+      return { type: "code", value: asCode };
     }
     return null;
   }
-  if (!codeFromLabel(trimmed)) {
-    return `“${trimmed}” n’est pas un nom de culture reconnu.`;
+  const knownByLabel = !!codeFromLabel(value);
+  if (!knownByLabel) {
+    return { type: "label", value };
   }
   return null;
 }
 
-function updateBounds(bounds, position) {
-  if (!Array.isArray(position) || position.length < 2) return bounds;
-  const [lon, lat] = position;
-  if (!Number.isFinite(lon) || !Number.isFinite(lat)) return bounds;
-  const next = bounds || [lon, lat, lon, lat];
-  next[0] = Math.min(next[0], lon);
-  next[1] = Math.min(next[1], lat);
-  next[2] = Math.max(next[2], lon);
-  next[3] = Math.max(next[3], lat);
-  return next;
-}
-
-function bboxFromGeometry(geometry) {
-  if (!geometry?.coordinates) return null;
-  let bounds = null;
-  const visit = (coords) => {
-    if (!Array.isArray(coords)) return;
-    if (typeof coords[0] === "number") {
-      bounds = updateBounds(bounds, coords);
-      return;
-    }
-    coords.forEach((entry) => visit(entry));
-  };
-  visit(geometry.coordinates);
-  return bounds;
-}
-
-function mergeBbox(a, b) {
-  if (!a) return b;
-  if (!b) return a;
-  return [
-    Math.min(a[0], b[0]),
-    Math.min(a[1], b[1]),
-    Math.max(a[2], b[2]),
-    Math.max(a[3], b[3]),
-  ];
-}
-
-function pickFirstValue(props, keys) {
-  if (!props) return "";
-  for (const key of keys) {
-    if (props[key] != null && String(props[key]).trim() !== "") {
-      return props[key];
-    }
+function parseBioFlag(value) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value === 1;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true" || normalized === "1" || normalized === "oui") return true;
+    if (normalized === "false" || normalized === "0" || normalized === "non") return false;
   }
-  return "";
+  return false;
 }
 
-function resolveTypeSol(props) {
-  return pickFirstValue(props, ["type_sol", "typeSol", "type_de_sol", "sol"]);
-}
-
-function parseParcelleBioValue(rawValue) {
-  if (rawValue == null) return false;
-  const normalized = String(rawValue).trim().toLowerCase();
-  if (!normalized) return false;
-  return ["1", "true", "oui", "yes", "y"].includes(normalized);
-}
-
-function formatParcelleBioValue(checked) {
-  return checked ? "Oui" : "Non";
-}
-
-export default function ParcelleEditor({
-  features,
-  visibleFeatures,
-  setFeatures,
-  selectedId,
-  onSelect,
-  drawRef,
-  viewMode = "cards",
-  csvValues,
-  onCsvValuesChange,
-  onFillNames,
-  isFillingNames = false,
-  readOnly = false,
-}) {
+export default function ParcelleEditor({ features, setFeatures, selectedId, onSelect }) {
   const options = entriesCodebook();
   const rowsRef = useRef(new Map());
-  const parcelleInputRefs = useRef(new Map());
-  const [typed, setTyped] = useState({});
-  const [editingParcelleId, setEditingParcelleId] = useState(null);
-  const [rpgLoadingField, setRpgLoadingField] = useState(null);
-  const visibleFeatureSet = useMemo(() => {
-    if (!visibleFeatures) return null;
-    return new Set(visibleFeatures);
-  }, [visibleFeatures]);
-  const isReadOnly = Boolean(readOnly);
+  const [viewMode, setViewMode] = useState("card");
+  const [typed, setTyped] = useState({ current: {}, prev: {}, prev2: {} });
+
+  const registerRowRef = (idKey) => (el) => {
+    if (!rowsRef.current) rowsRef.current = new Map();
+    if (el) {
+      rowsRef.current.set(idKey, el);
+    } else {
+      rowsRef.current.delete(idKey);
+    }
+  };
 
   useEffect(() => {
-    if (!selectedId) return;
-    const el = rowsRef.current.get(selectedId);
+    if (selectedId == null) return;
+    const el = rowsRef.current.get(String(selectedId));
     if (el?.scrollIntoView) {
       el.scrollIntoView({ block: "center", behavior: "smooth" });
       el.classList.add("row-selected");
       setTimeout(() => el.classList.remove("row-selected"), 700);
     }
-  }, [selectedId]);
-
-  useEffect(() => {
-    if (editingParcelleId == null) return;
-    const input = parcelleInputRefs.current.get(editingParcelleId);
-    if (input?.focus) {
-      input.focus();
-      if (input.select) input.select();
-    }
-  }, [editingParcelleId]);
-
-  useEffect(() => {
-    if (viewMode !== "cards") {
-      setEditingParcelleId(null);
-    }
-  }, [viewMode]);
-
-  useEffect(() => {
-    if (isReadOnly) {
-      setEditingParcelleId(null);
-    }
-  }, [isReadOnly]);
+  }, [selectedId, viewMode]);
 
   useEffect(() => {
     setTyped((prev) => {
-      const next = {};
+      const ids = features.map((f, idx) => String(f.id ?? idx));
+      const prune = (map) => {
+        const out = {};
+        ids.forEach((id) => {
+          if (map && map[id] != null) out[id] = map[id];
+        });
+        return out;
+      };
+      const next = {
+        current: prune(prev.current),
+        prev: prune(prev.prev),
+        prev2: prune(prev.prev2),
+      };
       features.forEach((f, idx) => {
-        const id = f.id || idx;
-        const prevRow = prev[id] || {};
+        const idKey = ids[idx];
         const props = f.properties || {};
-        next[id] = CULTURE_FIELDS.reduce((acc, field) => {
-          if (prevRow[field.field] !== undefined) {
-            acc[field.field] = prevRow[field.field];
-            return acc;
-          }
-          const rawValue = pickFirstValue(props, field.placeholders);
-          acc[field.field] = normalizeDisplayValue(rawValue);
-          return acc;
-        }, {});
+        if (next.current[idKey] == null) {
+          const code = (props.code ?? props.code_culture ?? "").toString().trim().toUpperCase();
+          const label = labelFromCode(code);
+          next.current[idKey] = label || code || "";
+        }
+        if (next.prev[idKey] == null) {
+          const prevCode = (props.culture_prec ?? props.CULT_PREC ?? "").toString().trim().toUpperCase();
+          const labelPrev = labelFromCode(prevCode);
+          next.prev[idKey] = labelPrev || prevCode || "";
+        }
+        if (next.prev2[idKey] == null) {
+          const prev2Code = (props.culture_prec2 ?? props.CULT_PREC2 ?? "").toString().trim().toUpperCase();
+          const labelPrev2 = labelFromCode(prev2Code);
+          next.prev2[idKey] = labelPrev2 || prev2Code || "";
+        }
       });
       return next;
     });
   }, [features]);
 
-  const datalistId = "cultures-master-list";
+  function updateCultureField(fieldKey, feature, idKey, rawValue, targetKeys) {
+    const value = rawValue ?? "";
+    const trimmed = value.trim();
+    const props = { ...(feature.properties || {}) };
+    let display = value;
+    let changed = false;
 
-  const updateParcelleParts = (index, rawValue, { enforceNumero = false } = {}) => {
-    if (isReadOnly) return;
-    const { ilot, numero } = parseParcelleInput(rawValue);
-    const nextIlot = normalizePart(ilot);
-    let nextNumero = normalizePart(numero);
-    if (enforceNumero && !nextNumero) {
-      nextNumero = "1";
+    if (trimmed === "") {
+      targetKeys.forEach((key) => {
+        if (props[key] !== undefined) delete props[key];
+      });
+      display = "";
+      changed = true;
+    } else {
+      const exactCode = codeFromLabel(trimmed);
+      if (exactCode) {
+        targetKeys.forEach((key) => {
+          props[key] = exactCode;
+        });
+        display = labelFromCode(exactCode) || exactCode;
+        changed = true;
+      } else if (/^[A-Za-z0-9]{2,10}$/.test(trimmed)) {
+        const upper = trimmed.toUpperCase();
+        targetKeys.forEach((key) => {
+          props[key] = upper;
+        });
+        display = upper;
+        changed = true;
+      }
     }
 
-    const nextFeatures = [...features];
-    const feature = nextFeatures[index];
-    if (!feature) return;
-
-    const prevProps = feature.properties || {};
-    const prevIlot = normalizePart(prevProps.ilot_numero);
-    const prevNumero = normalizePart(prevProps.numero);
-
-    if (prevIlot === nextIlot && prevNumero === nextNumero) {
-      return;
-    }
-
-    const nextProps = { ...prevProps };
-    if (nextIlot) nextProps.ilot_numero = nextIlot;
-    else delete nextProps.ilot_numero;
-    if (nextNumero) nextProps.numero = nextNumero;
-    else delete nextProps.numero;
-
-    nextFeatures[index] = { ...feature, properties: nextProps };
-    setFeatures(nextFeatures);
-  };
-
-  const updateNomValue = (index, rawValue, { trim = false } = {}) => {
-    if (isReadOnly) return;
-    const nextFeatures = [...features];
-    const feature = nextFeatures[index];
-    if (!feature) return;
-
-    const nextProps = { ...(feature.properties || {}) };
-    const nextValue = trim ? rawValue.trim() : rawValue;
-    if (nextValue) nextProps.nom = nextValue;
-    else delete nextProps.nom;
-
-    const prevValue = feature.properties?.nom;
-    if (prevValue === nextProps.nom) return;
-
-    nextFeatures[index] = { ...feature, properties: nextProps };
-    setFeatures(nextFeatures);
-  };
-
-  const handleCultureChange = (id, index, field, rawValue) => {
-    if (isReadOnly) return;
-    const config = CULTURE_FIELDS.find((item) => item.field === field);
-    if (!config) return;
-    const trimmed = rawValue.trim();
-    let displayValue = rawValue;
-
-    const nextFeatures = [...features];
-    const feature = nextFeatures[index];
-    if (feature) {
-      const propKey = config.propKey;
-      const nextProps = { ...(feature.properties || {}) };
-      let shouldUpdate = false;
-
-      if (!trimmed) {
-        displayValue = "";
-        if (propKey in nextProps) {
-          delete nextProps[propKey];
-          shouldUpdate = true;
-        }
-        if (config.syncCode && "code" in nextProps) {
-          delete nextProps.code;
-          shouldUpdate = true;
-        }
-      } else {
-        const exactCode = codeFromLabel(trimmed);
-        if (exactCode) {
-          nextProps[propKey] = exactCode;
-          if (config.syncCode) nextProps.code = exactCode;
-          displayValue = labelFromCode(exactCode) || exactCode;
-          shouldUpdate = true;
-        } else if (/^[A-Za-z0-9]{2,10}$/.test(trimmed)) {
-          const upper = trimmed.toUpperCase();
-          nextProps[propKey] = upper;
-          if (config.syncCode) nextProps.code = upper;
-          displayValue = upper;
-          shouldUpdate = true;
-        }
-      }
-
-      if (shouldUpdate) {
-        nextFeatures[index] = { ...feature, properties: nextProps };
-        setFeatures(nextFeatures);
-      }
+    if (changed) {
+      feature.properties = props;
+      setFeatures([...features]);
     }
 
     setTyped((prev) => ({
       ...prev,
-      [id]: { ...(prev[id] || {}), [field]: displayValue },
+      [fieldKey]: { ...prev[fieldKey], [idKey]: display },
     }));
-  };
-
-  const updateTypeSol = (index, rawValue, { trim = false } = {}) => {
-    if (isReadOnly) return;
-    const nextFeatures = [...features];
-    const feature = nextFeatures[index];
-    if (!feature) return;
-
-    const nextProps = { ...(feature.properties || {}) };
-    const nextValue = trim ? rawValue.trim() : rawValue;
-    if (nextValue) nextProps.type_sol = nextValue;
-    else delete nextProps.type_sol;
-
-    const prevValue = feature.properties?.type_sol;
-    if (prevValue === nextProps.type_sol) return;
-
-    nextFeatures[index] = { ...feature, properties: nextProps };
-    setFeatures(nextFeatures);
-  };
-
-  const updateParcelleBio = (index, checked) => {
-    if (isReadOnly) return;
-    const nextFeatures = [...features];
-    const feature = nextFeatures[index];
-    if (!feature) return;
-
-    const nextProps = { ...(feature.properties || {}) };
-    nextProps.parcelle_bio = formatParcelleBioValue(checked);
-
-    if (feature.properties?.parcelle_bio === nextProps.parcelle_bio) return;
-
-    nextFeatures[index] = { ...feature, properties: nextProps };
-    setFeatures(nextFeatures);
-  };
-
-  const updateFeatureProperty = (index, propKey, rawValue, { trim = false } = {}) => {
-    if (isReadOnly) return;
-    const nextFeatures = [...features];
-    const feature = nextFeatures[index];
-    if (!feature) return;
-
-    const nextProps = { ...(feature.properties || {}) };
-    const nextValue = trim ? String(rawValue ?? "").trim() : rawValue;
-    if (nextValue) nextProps[propKey] = nextValue;
-    else delete nextProps[propKey];
-
-    if (feature.properties?.[propKey] === nextProps[propKey]) return;
-
-    nextFeatures[index] = { ...feature, properties: nextProps };
-    setFeatures(nextFeatures);
-
-    const draw = drawRef?.current;
-    if (draw && feature.id) {
-      draw.setFeatureProperty(feature.id, propKey, nextProps[propKey] || undefined);
-    }
-  };
-
-  const syncFeaturesFromDraw = () => {
-    const draw = drawRef?.current;
-    if (!draw) return;
-    const arr = draw.getAll()?.features ?? [];
-    const polys = arr.filter(
-      (f) => f.geometry?.type === "Polygon" || f.geometry?.type === "MultiPolygon"
-    );
-    setFeatures(polys);
-  };
-
-  const handleRecheckOverlaps = () => {
-    const draw = drawRef?.current;
-    if (!draw) return;
-    resolveOverlappingParcels(draw, { mode: "warn" });
-    syncFeaturesFromDraw();
-  };
-
-  const renderWarning = (value) => {
-    const message = getCultureWarning(value);
-    if (!message) return null;
-    return (
-      <div style={{ fontSize: 11, color: "#a00", marginTop: 4 }}>{message}</div>
-    );
-  };
-
-  const handleFillRpgColumn = async (fieldConfig) => {
-    if (isReadOnly) return;
-    if (!fieldConfig || !Number.isFinite(fieldConfig.rpgOffset)) return;
-    if (rpgLoadingField) return;
-    setRpgLoadingField(fieldConfig.field);
-
-    try {
-      const updates = new Map();
-      const yearGroups = new Map();
-      const targetYear =
-        RPG_FIRST_AVAILABLE_YEAR - Math.max(fieldConfig.rpgOffset - 2, 0);
-
-      if (Number.isFinite(targetYear)) {
-        yearGroups.set(
-          targetYear,
-          features.map((feature, index) => ({ feature, index }))
-        );
-      }
-
-      if (!yearGroups.size) {
-        alert(
-          "Aucune parcelle n'a d'année de référence pour remplir cette colonne."
-        );
-        return;
-      }
-
-      for (const [targetYear, group] of yearGroups.entries()) {
-        let combinedBbox = null;
-        group.forEach(({ feature }) => {
-          const bbox = bboxFromGeometry(feature.geometry);
-          combinedBbox = mergeBbox(combinedBbox, bbox);
-        });
-        if (!combinedBbox) continue;
-
-        let rpgData = null;
-        try {
-          rpgData = await fetchRpgGeoJSON(targetYear, combinedBbox);
-        } catch (error) {
-          console.error("Erreur RPG", error);
-          alert(
-            `Impossible de charger le RPG ${targetYear}. Vérifie la connexion et réessaie.`
-          );
-          return;
-        }
-
-        const rpgFeatures = Array.isArray(rpgData?.features)
-          ? rpgData.features
-          : [];
-        if (!rpgFeatures.length) continue;
-
-        group.forEach(({ feature, index }) => {
-          const point = centroid(feature);
-          const match = rpgFeatures.find((rpgFeature) =>
-            booleanPointInPolygon(point, rpgFeature)
-          );
-          if (!match) return;
-          const { label, code } = getCultureLabel(match.properties || {});
-          const rawValue = code || label || "";
-          if (!rawValue) return;
-          updates.set(index, rawValue);
-        });
-      }
-
-      if (!updates.size) {
-        alert("Aucun précédent RPG détecté pour cette colonne.");
-        return;
-      }
-
-      const nextFeatures = [...features];
-      let nextTyped = { ...typed };
-      updates.forEach((rawValue, index) => {
-        const feature = nextFeatures[index];
-        if (!feature) return;
-        const id = feature.id || index;
-        const nextProps = { ...(feature.properties || {}) };
-        nextProps[fieldConfig.propKey] = rawValue;
-        if (fieldConfig.syncCode) nextProps.code = rawValue;
-        nextFeatures[index] = { ...feature, properties: nextProps };
-        nextTyped = {
-          ...nextTyped,
-          [id]: {
-            ...(nextTyped[id] || {}),
-            [fieldConfig.field]: normalizeDisplayValue(rawValue),
-          },
-        };
-        const draw = drawRef?.current;
-        if (draw && feature.id) {
-          draw.setFeatureProperty(feature.id, fieldConfig.propKey, rawValue);
-          if (fieldConfig.syncCode) {
-            draw.setFeatureProperty(feature.id, "code", rawValue);
-          }
-        }
-      });
-
-      setFeatures(nextFeatures);
-      setTyped(nextTyped);
-    } finally {
-      setRpgLoadingField(null);
-    }
-  };
-
-  if (viewMode === "table") {
-    return (
-      <div style={{ marginTop: 12 }}>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-            gap: 12,
-            marginBottom: 12,
-          }}
-        >
-          <label style={{ fontSize: 12, display: "flex", flexDirection: "column", gap: 4 }}>
-            Secteur
-            <input
-              type="text"
-              value={csvValues?.secteur ?? ""}
-              onChange={(e) =>
-                onCsvValuesChange?.({
-                  ...(csvValues || {}),
-                  secteur: e.target.value,
-                })
-              }
-              placeholder="Secteur"
-              style={{
-                padding: "6px 8px",
-                borderRadius: 6,
-                border: "1px solid #d1d5db",
-                fontSize: 12,
-              }}
-            />
-          </label>
-          <label style={{ fontSize: 12, display: "flex", flexDirection: "column", gap: 4 }}>
-            Exploitation (nom)
-            <input
-              type="text"
-              value={csvValues?.exploitation ?? ""}
-              onChange={(e) =>
-                onCsvValuesChange?.({
-                  ...(csvValues || {}),
-                  exploitation: e.target.value,
-                })
-              }
-              placeholder="Nom de l'exploitation"
-              style={{
-                padding: "6px 8px",
-                borderRadius: 6,
-                border: "1px solid #d1d5db",
-                fontSize: 12,
-              }}
-            />
-          </label>
-          <label style={{ fontSize: 12, display: "flex", flexDirection: "column", gap: 4 }}>
-            Numero pacage
-            <input
-              type="text"
-              value={csvValues?.codeExploitation ?? ""}
-              onChange={(e) =>
-                onCsvValuesChange?.({
-                  ...(csvValues || {}),
-                  codeExploitation: e.target.value,
-                })
-              }
-              placeholder="Numero pacage"
-              style={{
-                padding: "6px 8px",
-                borderRadius: 6,
-                border: "1px solid #d1d5db",
-                fontSize: 12,
-              }}
-            />
-          </label>
-        </div>
-        <div style={{ overflowX: "auto" }}>
-          <table
-            style={{
-              width: "100%",
-              minWidth: 1520,
-              borderCollapse: "collapse",
-              border: "1px solid #e5e7eb",
-              borderRadius: 12,
-              overflow: "hidden",
-              tableLayout: "fixed",
-            }}
-          >
-            <thead style={{ background: "#f3f4f6" }}>
-              <tr>
-                <th
-                  style={{
-                    textAlign: "left",
-                    padding: TABLE_CELL_PADDING,
-                    fontSize: 12,
-                    width: 90,
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  Parcelle
-                </th>
-                <th
-                  style={{
-                    textAlign: "left",
-                    padding: TABLE_CELL_PADDING,
-                    fontSize: 12,
-                    width: 200,
-                  }}
-                >
-                  Nom
-                </th>
-                <th
-                  style={{
-                    textAlign: "right",
-                    padding: TABLE_CELL_PADDING,
-                    fontSize: 12,
-                    width: 80,
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  Surface (ha)
-                </th>
-                <th
-                  style={{
-                    textAlign: "center",
-                    padding: TABLE_CELL_PADDING,
-                    fontSize: 12,
-                    width: 80,
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  Année
-                </th>
-                <th
-                  style={{
-                    textAlign: "center",
-                    padding: TABLE_CELL_PADDING,
-                    fontSize: 12,
-                    width: 110,
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  Parcelle Bio
-                </th>
-                <th
-                  style={{
-                    textAlign: "center",
-                    padding: TABLE_CELL_PADDING,
-                    fontSize: 12,
-                    width: 150,
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  Alertes import
-                </th>
-                {TABLE_CULTURE_FIELDS.map((field) => (
-                  <th
-                    key={field.field}
-                    style={{
-                      textAlign: "left",
-                      padding: TABLE_CELL_PADDING,
-                      fontSize: 12,
-                      width: 150,
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {field.label}
-                  </th>
-                ))}
-                <th
-                  style={{
-                    textAlign: "left",
-                    padding: TABLE_CELL_PADDING,
-                    fontSize: 12,
-                    width: 160,
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  Type de sol
-                </th>
-              </tr>
-              <tr>
-                <th style={{ padding: TABLE_CELL_PADDING }} />
-                <th style={{ padding: TABLE_CELL_PADDING, textAlign: "left" }}>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onFillNames?.();
-                    }}
-                    disabled={isReadOnly || isFillingNames}
-                    style={{
-                      padding: "3px 8px",
-                      borderRadius: 6,
-                      border: "1px solid #d1d5db",
-                      background: "#fff",
-                      fontSize: 11,
-                      cursor: isReadOnly || isFillingNames ? "not-allowed" : "pointer",
-                      opacity: isReadOnly || isFillingNames ? 0.6 : 1,
-                    }}
-                  >
-                    {isFillingNames ? "Chargement..." : "Remplir"}
-                  </button>
-                </th>
-                <th style={{ padding: TABLE_CELL_PADDING }} />
-                <th style={{ padding: TABLE_CELL_PADDING }} />
-                <th style={{ padding: TABLE_CELL_PADDING }} />
-                <th style={{ padding: TABLE_CELL_PADDING }}>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleRecheckOverlaps();
-                    }}
-                    disabled={isReadOnly}
-                    style={{
-                      padding: "3px 8px",
-                      borderRadius: 6,
-                      border: "1px solid #d1d5db",
-                      background: "#fff",
-                      fontSize: 11,
-                      cursor: isReadOnly ? "not-allowed" : "pointer",
-                      opacity: isReadOnly ? 0.6 : 1,
-                    }}
-                  >
-                    Revérifier
-                  </button>
-                </th>
-                {TABLE_CULTURE_FIELDS.map((field) => {
-                  const isRpgFillable = field.rpgOffset >= 2;
-                  return (
-                    <th
-                      key={`${field.field}-fill`}
-                      style={{
-                        padding: TABLE_CELL_PADDING,
-                        textAlign: "left",
-                      }}
-                    >
-                      {isRpgFillable ? (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleFillRpgColumn(field);
-                          }}
-                          disabled={rpgLoadingField != null || isReadOnly}
-                          style={{
-                            padding: "3px 8px",
-                            borderRadius: 6,
-                            border: "1px solid #d1d5db",
-                            background: "#fff",
-                            fontSize: 11,
-                            cursor:
-                              rpgLoadingField || isReadOnly ? "not-allowed" : "pointer",
-                            opacity: rpgLoadingField || isReadOnly ? 0.6 : 1,
-                          }}
-                        >
-                          {rpgLoadingField === field.field
-                            ? "Chargement..."
-                            : "Remplir (RPG)"}
-                        </button>
-                      ) : null}
-                    </th>
-                  );
-                })}
-                <th style={{ padding: TABLE_CELL_PADDING, textAlign: "left" }}></th>
-              </tr>
-            </thead>
-            <tbody>
-              {features.map((f, idx) => {
-                const id = f.id || idx;
-                const typedRow = typed[id] || {};
-                const ilot = (f.properties?.ilot_numero ?? "").toString().trim();
-                const num = (f.properties?.numero ?? "").toString().trim();
-                const parcelleValue = buildParcelleValue(ilot, num);
-                const parcelleName = (f.properties?.nom ?? "").toString();
-                const typeSolValue = resolveTypeSol(f.properties || "");
-                const parcelleBioRaw =
-                  f.properties?.parcelle_bio ??
-                  f.properties?.bio ??
-                  f.properties?.parcelleBio ??
-                  f.properties?.parcelle_bio_label;
-                const parcelleBioChecked = parseParcelleBioValue(parcelleBioRaw);
-                const area = featureAreaM2(f);
-                const surfaceHa = area != null ? area / 10000 : null;
-                const yearValue =
-                  f.properties?.annee ??
-                  f.properties?.import_year ??
-                  "";
-                const selected = selectedId === id;
-                return (
-                  <tr
-                    key={id}
-                    ref={(el) => {
-                      if (el) rowsRef.current.set(id, el);
-                      else rowsRef.current.delete(id);
-                    }}
-                    onClick={() => onSelect?.(id)}
-                    style={{
-                      background: selected ? "#e0ecff" : idx % 2 === 0 ? "#fff" : "#f9fafb",
-                      cursor: "pointer",
-                      borderBottom: "1px solid #e5e7eb",
-                    }}
-                  >
-                    <td
-                      style={{
-                        padding: TABLE_CELL_PADDING,
-                        minWidth: 80,
-                        width: 90,
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      <input
-                        value={parcelleValue}
-                        onChange={(e) => {
-                          updateParcelleParts(idx, e.target.value);
-                        }}
-                        onBlur={(e) => updateParcelleParts(idx, e.target.value, { enforceNumero: true })}
-                        onClick={(e) => e.stopPropagation()}
-                        placeholder="Îlot.Numéro"
-                        disabled={isReadOnly}
-                        style={{
-                          width: "100%",
-                          padding: "2px 4px",
-                          borderRadius: 4,
-                          border: "1px solid #d1d5db",
-                          fontSize: 12,
-                          fontWeight: 600,
-                          textAlign: "center",
-                          background: isReadOnly ? "#f3f4f6" : "#fff",
-                        }}
-                      />
-                    </td>
-                    <td
-                      style={{
-                        padding: TABLE_CELL_PADDING,
-                        minWidth: 140,
-                        width: 200,
-                        whiteSpace: "normal",
-                        verticalAlign: "top",
-                      }}
-                    >
-                      <input
-                        value={parcelleName}
-                        onChange={(e) => updateNomValue(idx, e.target.value)}
-                        onBlur={(e) => updateNomValue(idx, e.target.value, { trim: true })}
-                        onClick={(e) => e.stopPropagation()}
-                        placeholder="Nom personnalisé"
-                        disabled={isReadOnly}
-                        style={{
-                          width: "100%",
-                          padding: "3px 6px",
-                          borderRadius: 4,
-                          border: "1px solid #d1d5db",
-                          fontSize: 12,
-                          background: isReadOnly ? "#f3f4f6" : "#fff",
-                        }}
-                      />
-                    </td>
-                    <td
-                      style={{
-                        padding: TABLE_CELL_PADDING,
-                        textAlign: "right",
-                        fontSize: 12,
-                        color: "#374151",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {surfaceHa != null && !Number.isNaN(surfaceHa)
-                        ? surfaceHa.toFixed(2)
-                        : "–"}
-                    </td>
-                    <td
-                      style={{
-                        padding: TABLE_CELL_PADDING,
-                        textAlign: "center",
-                        width: 80,
-                      }}
-                    >
-                      <input
-                        type="number"
-                        value={yearValue}
-                        onChange={(e) =>
-                          updateFeatureProperty(idx, "annee", e.target.value, {
-                            trim: true,
-                          })
-                        }
-                        onClick={(e) => e.stopPropagation()}
-                        placeholder="Année"
-                        disabled={isReadOnly}
-                        style={{
-                          width: "100%",
-                          padding: "2px 4px",
-                          borderRadius: 4,
-                          border: "1px solid #d1d5db",
-                          fontSize: 12,
-                          textAlign: "center",
-                          background: isReadOnly ? "#f3f4f6" : "#fff",
-                        }}
-                      />
-                    </td>
-                    <td
-                      style={{
-                        padding: TABLE_CELL_PADDING,
-                        textAlign: "center",
-                        width: 110,
-                      }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={parcelleBioChecked}
-                        onChange={(e) => updateParcelleBio(idx, e.target.checked)}
-                        onClick={(e) => e.stopPropagation()}
-                        aria-label="Parcelle bio"
-                        disabled={isReadOnly}
-                      />
-                    </td>
-                    <td
-                      style={{
-                        padding: TABLE_CELL_PADDING,
-                        textAlign: "center",
-                        width: 150,
-                      }}
-                    >
-                      {f.properties?.overlap_warning ? (
-                        <span
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: 4,
-                            padding: "2px 6px",
-                            borderRadius: 999,
-                            background: "#fee2e2",
-                            color: "#991b1b",
-                            fontSize: 11,
-                            fontWeight: 600,
-                          }}
-                        >
-                          ⚠️ Chevauchement
-                        </span>
-                      ) : null}
-                      {f.properties?.import_mismatch ? (
-                        <span
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: 4,
-                            padding: "2px 6px",
-                            borderRadius: 999,
-                            background: "#ffedd5",
-                            color: "#9a3412",
-                            fontSize: 11,
-                            fontWeight: 600,
-                            marginLeft: f.properties?.overlap_warning ? 6 : 0,
-                          }}
-                        >
-                          ⚠️ Import
-                        </span>
-                      ) : null}
-                      {!f.properties?.overlap_warning && !f.properties?.import_mismatch
-                        ? "—"
-                        : null}
-                    </td>
-                    {TABLE_CULTURE_FIELDS.map((field) => (
-                      <td
-                        key={field.field}
-                        style={{
-                          padding: TABLE_CELL_PADDING,
-                          minWidth: 140,
-                          width: 150,
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        <div style={{ display: "flex", flexDirection: "column" }}>
-                          <input
-                            list={datalistId}
-                            value={typedRow[field.field] ?? ""}
-                            onChange={(e) => handleCultureChange(id, idx, field.field, e.target.value)}
-                            onClick={(e) => e.stopPropagation()}
-                            placeholder="Nom ou code…"
-                            disabled={isReadOnly}
-                            style={{
-                              width: "100%",
-                              padding: "3px 6px",
-                              borderRadius: 4,
-                              border: "1px solid #d1d5db",
-                              fontSize: 12,
-                              background: isReadOnly ? "#f3f4f6" : "#fff",
-                            }}
-                          />
-                          {renderWarning(typedRow[field.field])}
-                        </div>
-                      </td>
-                    ))}
-                    <td
-                      style={{
-                        padding: TABLE_CELL_PADDING,
-                        minWidth: 140,
-                        width: 160,
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      <input
-                        value={typeSolValue}
-                        onChange={(e) => updateTypeSol(idx, e.target.value)}
-                        onBlur={(e) => updateTypeSol(idx, e.target.value, { trim: true })}
-                        onClick={(e) => e.stopPropagation()}
-                        placeholder="Type de sol"
-                        disabled={isReadOnly}
-                        style={{
-                          width: "100%",
-                          padding: "3px 6px",
-                          borderRadius: 4,
-                          border: "1px solid #d1d5db",
-                          fontSize: 12,
-                          background: isReadOnly ? "#f3f4f6" : "#fff",
-                        }}
-                      />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        <datalist id={datalistId}>
-          {options.map(([c, l]) => (
-            <option key={c} value={l}>{c}</option>
-          ))}
-        </datalist>
-      </div>
-    );
   }
 
-  return (
-    <div style={{ marginTop: 12 }}>
-      {features.map((f, idx) => {
-        if (visibleFeatureSet && !visibleFeatureSet.has(f)) return null;
-        const id = f.id || idx;
-        const typedRow = typed[id] || {};
-        const knownLabel = typedRow.cultureN ?? "";
-        const displayValue = knownLabel ?? "";
-        const displayPrevious = typedRow.cultureN_1 ?? "";
-        const listId = datalistId;
-        const selected = selectedId === id;
-        const ilot = normalizePart(f.properties?.ilot_numero);
-        const num = normalizePart(f.properties?.numero);
-        const rawParcelleValue = buildParcelleValue(ilot, num);
-        const hasParcelleParts = Boolean(ilot || num);
-        const parcelleValue = hasParcelleParts ? rawParcelleValue : "";
-        const parcelleNameRaw = f.properties?.nom;
-        const parcelleName = parcelleNameRaw == null ? "" : String(parcelleNameRaw);
-        const displayTitle = normalizePart(parcelleName)
-          || (hasParcelleParts ? rawParcelleValue : "");
-        const isEditingParcelle = editingParcelleId === id;
+  const viewToggleStyle = (mode) => ({
+    padding: "6px 10px",
+    borderRadius: 6,
+    border: "1px solid #d1d5db",
+    background: viewMode === mode ? "#2563eb" : "#fff",
+    color: viewMode === mode ? "#fff" : "#1f2937",
+    cursor: "pointer",
+    fontSize: 13,
+    fontWeight: viewMode === mode ? 600 : 500,
+    transition: "background .15s ease, color .15s ease",
+  });
 
-        const area = featureAreaM2(f);
-        const surfaceHa = area != null ? area / 10000 : null;
+  const renderCultureWarning = (raw) => {
+    const warn = computeCultureWarning(raw);
+    if (!warn) return null;
+    return (
+      <div style={{ fontSize: 12, color: "#a00", marginTop: 4 }}>
+        “{warn.value}” n’est pas un {warn.type === "code" ? <b>code culture</b> : <b>nom de culture</b>} reconnu.
+      </div>
+    );
+  };
+
+  const renderCardView = () => (
+    <>
+      {features.map((f, idx) => {
+        const rawId = f.id ?? idx;
+        const idKey = String(rawId);
+        const props = f.properties || {};
+        const listId = `cultures-list-${idKey}`;
+        const selected = String(selectedId) === idKey;
+
+        const cultureDisplay = typed.current[idKey] ?? "";
+        const culturePrevDisplay = typed.prev[idKey] ?? "";
+
+        const ilot = (props.ilot_numero ?? "").toString().trim();
+        const num = (props.numero ?? "").toString().trim();
+        const titre = ilot && num ? `${ilot}.${num}` : ilot || num || "";
+
+        const ring = f.geometry?.coordinates?.[0];
+        const surfaceHa = ring ? ringAreaM2(ring) / 10000 : null;
+
+        const codeExploit = props.code_exploitation ?? props.CODE_EXPLO ?? "";
+        const nomParcelle = props.nom_parcelle ?? props.NOM_PARCEL ?? "";
+        const typeSol = props.type_sol ?? props.TYPE_SOL ?? "";
+
         return (
           <div
-            key={id}
-            ref={(el) => {
-              if (el) rowsRef.current.set(id, el);
-              else rowsRef.current.delete(id);
-            }}
-            onClick={() => onSelect?.(id)}
+            key={idKey}
+            ref={registerRowRef(idKey)}
+            onClick={() => onSelect?.(rawId)}
             style={{
               border: selected ? "2px solid #2563eb" : "1px solid #ddd",
               boxShadow: selected ? "0 0 0 2px rgba(37,99,235,0.15)" : "none",
@@ -1085,78 +205,12 @@ export default function ParcelleEditor({
               marginTop: 8,
               cursor: "pointer",
               transition: "box-shadow .15s ease, border-color .15s ease",
+              background: "#fff",
             }}
             title="Cliquer pour sélectionner la parcelle sur la carte"
-            >
-              <div
-                style={{
-                  fontWeight: 600,
-                  marginBottom: 6,
-                display: "flex",
-                flexWrap: "wrap",
-                gap: 6,
-                alignItems: "baseline",
-              }}
-            >
-              <span>Parcelle</span>
-              {isEditingParcelle ? (
-                <input
-                  ref={(el) => {
-                    if (el) parcelleInputRefs.current.set(id, el);
-                    else parcelleInputRefs.current.delete(id);
-                  }}
-                  value={parcelleValue}
-                  onClick={(e) => e.stopPropagation()}
-                  onChange={(e) => updateParcelleParts(idx, e.target.value)}
-                  onBlur={(e) => {
-                    updateParcelleParts(idx, e.target.value, { enforceNumero: true });
-                    setEditingParcelleId(null);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      updateParcelleParts(idx, e.currentTarget.value, { enforceNumero: true });
-                      setEditingParcelleId(null);
-                    } else if (e.key === "Escape") {
-                      e.currentTarget.value = parcelleValue;
-                      setEditingParcelleId(null);
-                    }
-                  }}
-                  disabled={isReadOnly}
-                  style={{
-                    minWidth: 80,
-                    padding: "2px 6px",
-                    borderRadius: 6,
-                    border: "1px solid #ccc",
-                    fontWeight: 600,
-                    background: isReadOnly ? "#f3f4f6" : "#fff",
-                  }}
-                />
-              ) : (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setEditingParcelleId(id);
-                  }}
-                  disabled={isReadOnly}
-                  style={{
-                    border: "none",
-                    background: "transparent",
-                    padding: "2px 6px",
-                    borderRadius: 6,
-                    cursor: isReadOnly ? "default" : "text",
-                    fontWeight: 600,
-                    color: isReadOnly ? "#6b7280" : "inherit",
-                  }}
-                >
-                  {parcelleValue || id}
-                </button>
-              )}
-              {displayTitle && displayTitle !== parcelleValue && (
-                <span style={{ color: "#4b5563", fontWeight: 500 }}>
-                  {displayTitle}
-                </span>
-              )}
+          >
+            <div style={{ fontWeight: 600, marginBottom: 6 }}>
+              Parcelle {titre || nomParcelle || rawId}
             </div>
             {surfaceHa != null && !Number.isNaN(surfaceHa) && (
               <div style={{ fontSize: 12, color: "#555", marginBottom: 6 }}>
@@ -1202,75 +256,396 @@ export default function ParcelleEditor({
               </div>
             )}
 
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
-              <label style={{ fontSize: 12, flex: "1 1 140px" }}>
-                Nom (optionnel)
+            <label style={{ fontSize: 12, display: "block", marginBottom: 6 }}>
+              Nom de la parcelle
+              <input
+                value={nomParcelle}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  const nextProps = {
+                    ...props,
+                    nom_parcelle: val,
+                    NOM_PARCEL: val,
+                  };
+                  if (val) {
+                    nextProps.nom_affiche = val;
+                  }
+                  f.properties = nextProps;
+                  setFeatures([...features]);
+                }}
+                onClick={(e) => e.stopPropagation()}
+                placeholder="Ex. Parcelle 1"
+                style={{
+                  width: "100%",
+                  padding: "4px 6px",
+                  border: "1px solid #ccc",
+                  borderRadius: 4,
+                  marginTop: 2,
+                }}
+              />
+            </label>
+
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 6 }}>
+              <label style={{ fontSize: 12, flex: "1 1 120px" }}>
+                Îlot
                 <input
-                  value={parcelleName}
-                  onChange={(e) => updateNomValue(idx, e.target.value)}
-                  onBlur={(e) => updateNomValue(idx, e.target.value, { trim: true })}
-                  onClick={(e) => e.stopPropagation()}
-                  placeholder="Nom personnalisé"
-                  disabled={isReadOnly}
-                  style={{
-                    width: "100%",
-                    padding: "6px 8px",
-                    border: "1px solid #ccc",
-                    borderRadius: 6,
-                    background: isReadOnly ? "#f3f4f6" : "#fff",
+                  value={props.ilot_numero ?? ""}
+                  onChange={(e) => {
+                    f.properties = { ...props, ilot_numero: e.target.value };
+                    setFeatures([...features]);
                   }}
+                  onClick={(e) => e.stopPropagation()}
+                  placeholder="Ex. 9"
+                  style={{ width: "100%", padding: "4px 6px", border: "1px solid #ccc", borderRadius: 4, marginTop: 2 }}
+                />
+              </label>
+
+              <label style={{ fontSize: 12, flex: "1 1 140px" }}>
+                N° parcelle
+                <input
+                  value={props.numero ?? ""}
+                  onChange={(e) => {
+                    f.properties = { ...props, numero: e.target.value };
+                    setFeatures([...features]);
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  placeholder="Ex. 1"
+                  style={{ width: "100%", padding: "4px 6px", border: "1px solid #ccc", borderRadius: 4, marginTop: 2 }}
+                />
+              </label>
+
+              <label style={{ fontSize: 12, flex: "1 1 150px" }}>
+                Code exploitation
+                <input
+                  value={codeExploit}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    f.properties = {
+                      ...props,
+                      code_exploitation: val,
+                      CODE_EXPLO: val,
+                    };
+                    setFeatures([...features]);
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  placeholder="Ex. 1234"
+                  style={{ width: "100%", padding: "4px 6px", border: "1px solid #ccc", borderRadius: 4, marginTop: 2 }}
+                />
+              </label>
+
+              <label style={{ fontSize: 12, flex: "1 1 150px" }}>
+                Type de sol
+                <input
+                  value={typeSol}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    f.properties = {
+                      ...props,
+                      type_sol: val,
+                      TYPE_SOL: val,
+                    };
+                    setFeatures([...features]);
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  placeholder="Ex. Argile"
+                  style={{ width: "100%", padding: "4px 6px", border: "1px solid #ccc", borderRadius: 4, marginTop: 2 }}
                 />
               </label>
             </div>
 
-            <label style={{ fontSize: 12, display: "block", marginBottom: 10 }}>
-              Culture N (Assolia)
+            <label style={{ fontSize: 12, display: "block", marginBottom: 6 }}>
+              Culture (Assolia)
               <input
                 list={listId}
-                value={displayValue}
-                onChange={(e) => handleCultureChange(id, idx, "cultureN", e.target.value)}
+                value={cultureDisplay}
+                onChange={(e) => {
+                  updateCultureField("current", f, idKey, e.target.value, ["code", "code_culture", "CP_CULTU"]);
+                }}
                 onClick={(e) => e.stopPropagation()}
                 placeholder="Tapez le nom (ou le code)…"
-                disabled={isReadOnly}
-                style={{
-                  width: "90%",
-                  padding: "6px 8px",
-                  border: "1px solid #ccc",
-                  borderRadius: 6,
-                  background: isReadOnly ? "#f3f4f6" : "#fff",
-                }}
+                style={{ width: "90%", padding: "6px 8px", border: "1px solid #ccc", borderRadius: 6, marginTop: 2 }}
               />
-              {renderWarning(displayValue)}
+              {renderCultureWarning(cultureDisplay)}
             </label>
 
             <label style={{ fontSize: 12, display: "block" }}>
-              CultureN+1
+              Culture N-1
               <input
-                list={listId}
-                value={displayPrevious}
-                onChange={(e) => handleCultureChange(id, idx, "cultureN_1", e.target.value)}
-                onClick={(e) => e.stopPropagation()}
-                placeholder="Tapez le nom (ou le code)…"
-                disabled={isReadOnly}
-                style={{
-                  width: "90%",
-                  padding: "6px 8px",
-                  border: "1px solid #ccc",
-                  borderRadius: 6,
-                  background: isReadOnly ? "#f3f4f6" : "#fff",
+                list={`${listId}-prev`}
+                value={culturePrevDisplay}
+                onChange={(e) => {
+                  updateCultureField("prev", f, idKey, e.target.value, ["culture_prec", "CULT_PREC"]);
                 }}
+                onClick={(e) => e.stopPropagation()}
+                placeholder="Code ou nom"
+                style={{ width: "90%", padding: "6px 8px", border: "1px solid #ccc", borderRadius: 6, marginTop: 2 }}
               />
-              {renderWarning(displayPrevious)}
+              {renderCultureWarning(culturePrevDisplay)}
             </label>
 
+            <datalist id={listId}>
+              {options.map(([c, l]) => (
+                <option key={c} value={l}>
+                  {c}
+                </option>
+              ))}
+            </datalist>
+            <datalist id={`${listId}-prev`}>
+              {options.map(([c, l]) => (
+                <option key={c} value={l}>
+                  {c}
+                </option>
+              ))}
+            </datalist>
           </div>
         );
       })}
-      <datalist id={datalistId}>
-        {options.map(([c, l]) => (
-          <option key={c} value={l}>{c}</option>
-        ))}
-      </datalist>
+    </>
+  );
+
+  const renderTableView = () => {
+    const headerStyle = {
+      padding: "8px 6px",
+      borderBottom: "1px solid #e5e7eb",
+      background: "#f3f4f6",
+      fontSize: 12,
+      textTransform: "uppercase",
+      letterSpacing: "0.02em",
+      textAlign: "left",
+      color: "#374151",
+    };
+
+    return (
+      <div style={{ marginTop: 8, overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 760 }}>
+          <thead>
+            <tr>
+              <th style={headerStyle}>Îlot</th>
+              <th style={headerStyle}>N° parcelle</th>
+              <th style={headerStyle}>Nom</th>
+              <th style={headerStyle}>Code explo.</th>
+              <th style={headerStyle}>Surface (ha)</th>
+              <th style={headerStyle}>Bio</th>
+              <th style={headerStyle}>Culture N</th>
+              <th style={headerStyle}>Culture N-1</th>
+              <th style={headerStyle}>Culture N-2</th>
+              <th style={headerStyle}>Type de sol</th>
+            </tr>
+          </thead>
+          <tbody>
+            {features.map((f, idx) => {
+              const rawId = f.id ?? idx;
+              const idKey = String(rawId);
+              const props = f.properties || {};
+              const selected = String(selectedId) === idKey;
+              const listId = `cultures-table-${idKey}`;
+
+              const ring = f.geometry?.coordinates?.[0];
+              const surfaceHa = ring ? ringAreaM2(ring) / 10000 : null;
+              const isBio = parseBioFlag(
+                props.isOrganic ?? props.conduite_bio ?? props.bio ?? props.BIO
+              );
+
+              const rowStyle = {
+                background: selected ? "#eef2ff" : idx % 2 === 0 ? "#fff" : "#f9fafb",
+                cursor: "pointer",
+              };
+
+              const cultureDisplay = typed.current[idKey] ?? "";
+              const culturePrevDisplay = typed.prev[idKey] ?? "";
+              const culturePrev2Display = typed.prev2[idKey] ?? "";
+
+              return (
+                <tr
+                  key={idKey}
+                  ref={registerRowRef(idKey)}
+                  onClick={() => onSelect?.(rawId)}
+                  style={rowStyle}
+                >
+                  <td style={{ padding: "6px", borderBottom: "1px solid #e5e7eb" }}>
+                    <input
+                      value={props.ilot_numero ?? ""}
+                      onChange={(e) => {
+                        f.properties = { ...props, ilot_numero: e.target.value };
+                        setFeatures([...features]);
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ width: "100%", padding: "4px", border: "1px solid #d1d5db", borderRadius: 4 }}
+                    />
+                  </td>
+                  <td style={{ padding: "6px", borderBottom: "1px solid #e5e7eb" }}>
+                    <input
+                      value={props.numero ?? ""}
+                      onChange={(e) => {
+                        f.properties = { ...props, numero: e.target.value };
+                        setFeatures([...features]);
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ width: "100%", padding: "4px", border: "1px solid #d1d5db", borderRadius: 4 }}
+                    />
+                  </td>
+                  <td style={{ padding: "6px", borderBottom: "1px solid #e5e7eb" }}>
+                    <input
+                      value={props.nom_parcelle ?? props.NOM_PARCEL ?? ""}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        f.properties = {
+                          ...props,
+                          nom_parcelle: val,
+                          NOM_PARCEL: val,
+                          nom_affiche: val || props.nom_affiche,
+                        };
+                        setFeatures([...features]);
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ width: "100%", padding: "4px", border: "1px solid #d1d5db", borderRadius: 4 }}
+                    />
+                  </td>
+                  <td style={{ padding: "6px", borderBottom: "1px solid #e5e7eb" }}>
+                    <input
+                      value={props.code_exploitation ?? props.CODE_EXPLO ?? ""}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        f.properties = {
+                          ...props,
+                          code_exploitation: val,
+                          CODE_EXPLO: val,
+                        };
+                        setFeatures([...features]);
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ width: "100%", padding: "4px", border: "1px solid #d1d5db", borderRadius: 4 }}
+                    />
+                  </td>
+                  <td style={{ padding: "6px", borderBottom: "1px solid #e5e7eb", fontSize: 13 }}>
+                    {surfaceHa != null && !Number.isNaN(surfaceHa) ? surfaceHa.toFixed(2) : "-"}
+                  </td>
+                  <td style={{ padding: "6px", borderBottom: "1px solid #e5e7eb" }}>
+                    <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+                      <input
+                        type="checkbox"
+                        checked={isBio}
+                        onChange={(e) => {
+                          const next = e.target.checked;
+                          const updated = { ...props };
+                          if (next) {
+                            updated.conduite_bio = true;
+                            updated.isOrganic = true;
+                            if (!updated.organicType) {
+                              updated.organicType = "AB";
+                            }
+                          } else {
+                            delete updated.conduite_bio;
+                            delete updated.isOrganic;
+                            delete updated.organicType;
+                          }
+                          f.properties = updated;
+                          setFeatures([...features]);
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                      <span>AB</span>
+                    </label>
+                  </td>
+                  <td style={{ padding: "6px", borderBottom: "1px solid #e5e7eb" }}>
+                    <input
+                      list={listId}
+                      value={cultureDisplay}
+                      onChange={(e) => {
+                        updateCultureField("current", f, idKey, e.target.value, ["code", "code_culture", "CP_CULTU"]);
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ width: "100%", padding: "4px", border: "1px solid #d1d5db", borderRadius: 4 }}
+                    />
+                    <datalist id={listId}>
+                      {options.map(([c, l]) => (
+                        <option key={c} value={l}>
+                          {c}
+                        </option>
+                      ))}
+                    </datalist>
+                  </td>
+                  <td style={{ padding: "6px", borderBottom: "1px solid #e5e7eb" }}>
+                    <input
+                      list={`${listId}-prev`}
+                      value={culturePrevDisplay}
+                      onChange={(e) => {
+                        updateCultureField("prev", f, idKey, e.target.value, ["culture_prec", "CULT_PREC"]);
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ width: "100%", padding: "4px", border: "1px solid #d1d5db", borderRadius: 4 }}
+                    />
+                    <datalist id={`${listId}-prev`}>
+                      {options.map(([c, l]) => (
+                        <option key={c} value={l}>
+                          {c}
+                        </option>
+                      ))}
+                    </datalist>
+                  </td>
+                  <td style={{ padding: "6px", borderBottom: "1px solid #e5e7eb" }}>
+                    <input
+                      list={`${listId}-prev2`}
+                      value={culturePrev2Display}
+                      onChange={(e) => {
+                        updateCultureField("prev2", f, idKey, e.target.value, ["culture_prec2", "CULT_PREC2"]);
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ width: "100%", padding: "4px", border: "1px solid #d1d5db", borderRadius: 4 }}
+                    />
+                    <datalist id={`${listId}-prev2`}>
+                      {options.map(([c, l]) => (
+                        <option key={c} value={l}>
+                          {c}
+                        </option>
+                      ))}
+                    </datalist>
+                  </td>
+                  <td style={{ padding: "6px", borderBottom: "1px solid #e5e7eb" }}>
+                    <input
+                      value={props.type_sol ?? props.TYPE_SOL ?? ""}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        f.properties = {
+                          ...props,
+                          type_sol: val,
+                          TYPE_SOL: val,
+                        };
+                        setFeatures([...features]);
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ width: "100%", padding: "4px", border: "1px solid #d1d5db", borderRadius: 4 }}
+                    />
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
+
+  return (
+    <div style={{ marginTop: 12 }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+        <button
+          type="button"
+          onClick={() => setViewMode("card")}
+          style={viewToggleStyle("card")}
+        >
+          Vue fiche
+        </button>
+        <button
+          type="button"
+          onClick={() => setViewMode("table")}
+          style={viewToggleStyle("table")}
+        >
+          Vue tableau
+        </button>
+      </div>
+
+      {viewMode === "card" ? renderCardView() : renderTableView()}
     </div>
   );
 }

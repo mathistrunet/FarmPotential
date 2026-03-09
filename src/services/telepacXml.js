@@ -1,6 +1,7 @@
 // src/services/telepacXml.js
 import { toLambert93, toWgs84 } from "../utils/proj";
 import { ringToGml, ringAreaM2 } from "../utils/geometry";
+import { telepacMesParcellesImporter } from "../lib/importers";
 
 function normalizeNumero(value) {
   return value == null ? "" : String(value).trim();
@@ -28,86 +29,17 @@ function stableIlotReference(pacage, ilotNumero) {
   return `${prefix}${suffix}`;
 }
 
-function normalizeIlotReference(value, pacage, ilotNumero) {
-  const digits = normalizeDigits(value);
-  if (digits.length >= 12) return digits.slice(0, 12);
-  if (digits.length > 0) return digits.padStart(12, "0");
-  return stableIlotReference(pacage, ilotNumero);
-}
-
-function firstProperty(properties, keys) {
-  for (const key of keys) {
-    const value = normalizeNumero(properties?.[key]);
-    if (value) return value;
+function isTruthyBoolean(value) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value === 1;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    return normalized === "true" || normalized === "1" || normalized === "oui";
   }
-  return "";
+  return false;
 }
 
-function inferProducerMeta(features) {
-  let pacage = "";
-  let siret = "";
-  let exploitation = "";
-  let email = "";
-  let commune = "";
-
-  features.forEach((feature) => {
-    const props = feature?.properties || {};
-    if (!pacage) {
-      pacage = normalizeDigits(
-        firstProperty(props, ["numero_pacage", "numero-pacage", "pacage", "code_exploitation", "codeExploitation"])
-      );
-    }
-    if (!siret) {
-      siret = normalizeDigits(firstProperty(props, ["siret", "SIRET"]));
-    }
-    if (!exploitation) {
-      exploitation = firstProperty(props, ["exploitation", "nom_exploitation", "raison_sociale", "structureName"]);
-    }
-    if (!email) {
-      email = firstProperty(props, ["courriel", "email", "mail"]);
-    }
-    if (!commune) {
-      commune = normalizeDigits(firstProperty(props, ["code_insee", "commune", "insee", "codeCommune"]));
-    }
-  });
-
-  return {
-    pacage: (pacage || "000000000").slice(0, 9),
-    siret: (siret || "00000000000000").slice(0, 14),
-    exploitation: exploitation || "Exploitation",
-    email,
-    communeSiege: (commune || "00000").slice(0, 5),
-  };
-}
-
-function getFirstOuterRing(feature) {
-  if (!feature || !feature.geometry) return null;
-  const { type, coordinates } = feature.geometry;
-  if (!coordinates) return null;
-  if (type === "Polygon") return coordinates[0] || null;
-  if (type === "MultiPolygon") return coordinates[0]?.[0] || null;
-  return null;
-}
-
-function getAllOuterRings(feature) {
-  if (!feature || !feature.geometry) return [];
-  const { type, coordinates } = feature.geometry;
-  if (!coordinates) return [];
-  if (type === "Polygon") return coordinates[0] ? [coordinates[0]] : [];
-  if (type === "MultiPolygon")
-    return coordinates
-      .map((poly) => poly?.[0])
-      .filter((ring) => Array.isArray(ring) && ring.length > 0);
-  return [];
-}
-
-function readCultureCodeFromProperty(props, cultureColumn) {
-  if (!cultureColumn) return normalizeNumero(props.code);
-  const rawValue = normalizeNumero(props?.[cultureColumn]);
-  return rawValue ? rawValue.toUpperCase() : "";
-}
-
-export function buildTelepacXML(features, options = {}) {
+export function buildTelepacXML(features) {
   const NS = "urn:x-telepac:fr.gouv.agriculture.telepac:echange-producteur";
   const GML = "http://www.opengis.net/gml";
   const esc = (s) => xmlEscape(s);
@@ -129,56 +61,63 @@ export function buildTelepacXML(features, options = {}) {
     const ilotNumero = normalizeNumero(feature?.properties?.ilot_numero);
     if (ilotNumero) usedIlotNumbers.add(ilotNumero);
   });
+  const pad = 0.002; // ~200 m
+  const ilotCoords = [
+    [minX - pad, minY - pad],
+    [maxX + pad, minY - pad],
+    [maxX + pad, maxY + pad],
+    [minX - pad, maxY + pad],
+    [minX - pad, minY - pad],
+  ]
+    .map(([lon, lat]) => `${lon.toFixed(6)},${lat.toFixed(6)}`)
+    .join(" ");
+  const numeroIlot =
+    (features[0]?.properties?.ilot_numero ?? "1").toString().trim() || "1";
 
-  let nextAutoIlot = 1;
-  const allocateIlotNumero = () => {
-    while (usedIlotNumbers.has(String(nextAutoIlot))) nextAutoIlot += 1;
-    const numero = String(nextAutoIlot);
-    usedIlotNumbers.add(numero);
-    nextAutoIlot += 1;
-    return numero;
-  };
+  let xml = `<?xml version="1.0" encoding="ISO-8859-1"?>\n`;
+  xml += `<producteurs xmlns="${NS}" xmlns:gml="${GML}">`;
+  xml += `<producteur>`;
+  xml += `<demandeur certificat-environnemental="false" dossier-sans-demande-aides="false"></demandeur>`;
+  xml += `<rpg>`;
+  xml += `<ilot numero-ilot="${numeroIlot}">`;
+  xml += `<geometrie><gml:Polygon><gml:outerBoundaryIs><gml:LinearRing><gml:coordinates>${ilotCoords}</gml:coordinates></gml:LinearRing></gml:outerBoundaryIs></gml:Polygon></geometrie>`;
+  xml += `<parcelles>`;
 
-  const ilotMap = new Map();
-  const orderedIlots = [];
-
-  features.forEach((feature, index) => {
-    if (!feature || !feature.geometry) return;
-    const props = feature.properties || {};
-    let ilotNumero = normalizeNumero(props.ilot_numero);
-    if (!ilotNumero) ilotNumero = allocateIlotNumero();
-
-    let ilot = ilotMap.get(ilotNumero);
-    if (!ilot) {
-      ilot = { numero: ilotNumero, parcelles: [], nextAutoNumero: 1 };
-      ilotMap.set(ilotNumero, ilot);
-      orderedIlots.push(ilot);
+  for (let i = 0; i < features.length; i++) {
+    const f = features[i];
+    const props = f.properties || {};
+    let numero = 0
+    for (let i = 0; i < features.length; i++) {
+      const f = features[i];
+      const props = f.properties || {};
+      const rawNumero = (props.numero ?? "").toString().trim();
+      numero = rawNumero !== "" ? rawNumero : String(autoNumero++);
     }
+    const code = (props.code || "").trim() || "JAC"; // Mets automatiquement le code culture JAC quand on exporte une parcelle sans code culture
+    const gmlCoords = ringToGml(f.geometry.coordinates[0]);
+    const ares = Math.round(ringAreaM2(f.geometry.coordinates[0]) / 100); //surface arrondie et transformée en ares
+    const conduiteBioSource =
+      props.isOrganic ?? props.conduite_bio ?? props.bio ?? props.BIO ?? null;
+    const conduiteBio = isTruthyBoolean(conduiteBioSource);
+    const organicTypeSource =
+      props.organicType ?? props.type_conduite_bio ?? props["type-conduite-bio"] ?? null;
+    const organicType = organicTypeSource ? String(organicTypeSource).trim() : "";
 
-    let numeroParcelle = normalizeNumero(props.numero);
-    if (!numeroParcelle) {
-      numeroParcelle = String(ilot.nextAutoNumero);
-      ilot.nextAutoNumero += 1;
-    } else {
-      const parsed = parseInt(numeroParcelle, 10);
-      if (!Number.isNaN(parsed)) {
-        ilot.nextAutoNumero = Math.max(ilot.nextAutoNumero, parsed + 1);
-      }
+    xml += `<parcelle>`;
+    xml += `<descriptif-parcelle numero-parcelle="${esc(numero)}">`;
+    xml += `<culture-principale>`;
+    xml += `<code-culture>${esc(code)}</code-culture>`;
+    xml += `</culture-principale>`;
+    if (conduiteBio) {
+      const typeAttr = organicType || "AB";
+      xml += `<agri-bio conduite-bio="true" type-conduite-bio="${esc(
+        typeAttr
+      )}" conduite-maraichage="false" />`;
     }
-
-    ilot.parcelles.push({ feature, numero: numeroParcelle, index });
-  });
-
-  let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
-  xml += `<producteurs xmlns="${NS}" xmlns:gml="${GML}">\n`;
-  xml += `  <producteur numero-pacage="${meta.pacage}" campagne="Courante" fichier-xsd="Echanges-producteur-export-2025-V1">\n`;
-  xml += `    <demandeur certificat-environnemental="false" dossier-sans-demande-aides="false">\n`;
-  xml += `      <identification-societe>\n`;
-  xml += `        <exploitation>${esc(meta.exploitation)}</exploitation>\n`;
-  xml += `      </identification-societe>\n`;
-  xml += `      <siret>${meta.siret}</siret>\n`;
-  if (meta.email) {
-    xml += `      <courriel>${esc(meta.email)}</courriel>\n`;
+    xml += `</descriptif-parcelle>`;
+    xml += `<geometrie><gml:Polygon><gml:outerBoundaryIs><gml:LinearRing><gml:coordinates>${gmlCoords}</gml:coordinates></gml:LinearRing></gml:outerBoundaryIs></gml:Polygon></geometrie>`;
+    xml += `<surface-admissible>${ares}</surface-admissible>`;
+    xml += `</parcelle>`;
   }
   xml += `    </demandeur>\n`;
   xml += `    <rpg>\n`;
@@ -267,27 +206,86 @@ export function buildTelepacXML(features, options = {}) {
   return xml;
 }
 
+function normalisePropertiesFromMesParcelles(feature) {
+  const properties = { ...(feature?.properties || {}) };
+  const ilotNumero = properties.ilot ?? properties.ilot_numero ?? null;
+  const parcelleNumero = properties.parcelle ?? properties.numero ?? null;
+  const code = properties.code ?? properties.code_culture ?? null;
 
-function buildTelepacCultureProps(code, offset) {
-  if (!code) return {};
-  const safeOffset = Number.isFinite(offset) ? Math.max(0, Math.trunc(offset)) : 0;
-  if (safeOffset === 0) {
-    return { cultureN: code, code };
+  if (properties.source == null) {
+    properties.source = "telepac-mesparcelles-xml";
   }
-  return { [`cultureN_${safeOffset}`]: code };
+  if (ilotNumero != null && properties.ilot_numero == null) {
+    properties.ilot_numero = ilotNumero;
+  }
+  if (parcelleNumero != null && properties.numero == null) {
+    properties.numero = parcelleNumero;
+  }
+  if (code != null && properties.code == null) {
+    properties.code = code;
+  }
+
+  if (properties.conduite_bio != null && properties.isOrganic == null) {
+    properties.isOrganic = properties.conduite_bio;
+  }
+  if (properties.organicType == null && properties.type_conduite_bio != null) {
+    properties.organicType = properties.type_conduite_bio;
+  }
+
+  if (ilotNumero != null || parcelleNumero != null) {
+    const label =
+      ilotNumero != null && parcelleNumero != null
+        ? `${ilotNumero}-${parcelleNumero}`
+        : `${parcelleNumero ?? ilotNumero}`;
+    if (label) {
+      properties.nom_affiche = label;
+    }
+  }
+
+  return properties;
 }
 
-export async function parseTelepacXmlToFeatures(file, options = {}) {
-  const cultureYearOffset = Number.isFinite(options.cultureYearOffset)
-    ? options.cultureYearOffset
-    : 0;
-  const text = await new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onerror = () => reject(r.error);
-    r.onload = () => resolve(r.result);
-    r.readAsText(file, "ISO-8859-1");
-  });
+function normaliseMesParcellesFeatures(collection) {
+  const out = [];
+  if (!collection?.features) return out;
 
+  for (const feature of collection.features) {
+    if (!feature || !feature.geometry) continue;
+
+    const baseProps = normalisePropertiesFromMesParcelles(feature);
+    if (feature.geometry.type === "Polygon") {
+      out.push({
+        type: "Feature",
+        geometry: {
+          type: "Polygon",
+          coordinates: feature.geometry.coordinates,
+        },
+        properties: baseProps,
+      });
+      continue;
+    }
+
+    if (feature.geometry.type === "MultiPolygon") {
+      feature.geometry.coordinates.forEach((coords, index) => {
+        out.push({
+          type: "Feature",
+          geometry: { type: "Polygon", coordinates: coords },
+          properties: { ...baseProps, _multipolygon_index: index },
+        });
+      });
+      continue;
+    }
+
+    console.warn(
+      "TELEPAC_XML: Unsupported geometry from Mes Parcelles importer",
+      feature.geometry?.type
+    );
+  }
+
+  return out;
+}
+
+function parseLegacyTelepacXml(text) {
   const parser = new DOMParser();
   const xml = parser.parseFromString(text, "application/xml");
   const isError = xml.getElementsByTagName("parsererror").length > 0;
@@ -312,20 +310,20 @@ export async function parseTelepacXmlToFeatures(file, options = {}) {
   for (let i = 0; i < parcelles.length; i++) {
     const p = parcelles[i];
 
-    // 🔹 Récupération de l'îlot parent
-    const parcellesNode = p.parentNode; // <parcelles>
-    const ilotNode = parcellesNode && parcellesNode.parentNode; // <ilot>
+    const parcellesNode = p.parentNode;
+    const ilotNode = parcellesNode && parcellesNode.parentNode;
     const ilot_numero =
       (ilotNode &&
         ilotNode.getAttribute &&
         ilotNode.getAttribute("numero-ilot")) ||
       "";
 
-    // Variables
     let numero = "";
     let code = "";
+    let conduiteBio;
+    let hasConduiteBio = false;
+    let organicType = null;
 
-    // Lecture du descriptif de parcelle
     const desc = p.getElementsByTagName("descriptif-parcelle")[0];
     if (desc) {
       const numAttr = desc.getAttribute("numero-parcelle");
@@ -335,9 +333,21 @@ export async function parseTelepacXmlToFeatures(file, options = {}) {
         const codeNode = cp.getElementsByTagName("code-culture")[0];
         if (codeNode) code = codeNode.textContent.trim().toUpperCase();
       }
+
+      const agriBioNode = desc.getElementsByTagName("agri-bio")[0];
+      if (agriBioNode) {
+        const conduiteAttr = agriBioNode.getAttribute("conduite-bio");
+        if (conduiteAttr != null) {
+          hasConduiteBio = true;
+          conduiteBio = isTruthyBoolean(conduiteAttr);
+        }
+        const typeAttr = agriBioNode.getAttribute("type-conduite-bio");
+        if (typeAttr) {
+          organicType = typeAttr.trim();
+        }
+      }
     }
 
-    // Surface admissible
     let surfaceA;
     const surfNode = p.getElementsByTagName("surface-admissible")[0];
     if (surfNode) {
@@ -345,7 +355,6 @@ export async function parseTelepacXmlToFeatures(file, options = {}) {
       if (!isNaN(val)) surfaceA = val;
     }
 
-    // Lecture des coordonnées GML -> WGS84
     const ringWgs = [];
     const coordNode = p.getElementsByTagNameNS
       ? p.getElementsByTagNameNS(GML, "coordinates")[0]
@@ -361,14 +370,10 @@ export async function parseTelepacXmlToFeatures(file, options = {}) {
       }
     }
 
-    // 🔹 Construction du nom à afficher façon Assolia (ilot-parcelle)
     const nom_affiche =
       ilot_numero && numero ? `${ilot_numero}-${numero}` : numero;
 
-    // Ajout de la feature
-    const cultureProps = buildTelepacCultureProps(code, cultureYearOffset);
-
-    features.push({
+    const feature = {
       type: "Feature",
       properties: {
         numero,
@@ -377,9 +382,63 @@ export async function parseTelepacXmlToFeatures(file, options = {}) {
         ...cultureProps,
         ...(pacage ? { code_exploitation: pacage } : {}),
         ...(surfaceA !== undefined ? { surface_admissible: surfaceA } : {}),
+        ...(hasConduiteBio ? { conduite_bio: conduiteBio, isOrganic: conduiteBio } : {}),
+        ...(organicType ? { organicType } : {}),
       },
       geometry: { type: "Polygon", coordinates: [ringWgs] },
+    };
+
+    features.push(feature);
+  }
+
+  return features;
+}
+
+export async function parseTelepacXmlToFeatures(file) {
+  let arrayBuffer;
+  if (file?.arrayBuffer) {
+    try {
+      arrayBuffer = await file.arrayBuffer();
+    } catch (err) {
+      console.warn("TELEPAC_XML: Failed to read arrayBuffer, falling back to FileReader", err);
+    }
+  }
+
+  if (!arrayBuffer) {
+    arrayBuffer = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(reader.error);
+      reader.onload = () => resolve(reader.result);
+      reader.readAsArrayBuffer(file);
     });
   }
-  return features;
+
+  try {
+    const mesParcelles = await telepacMesParcellesImporter.read(arrayBuffer);
+    const mesParcellesFeatures = normaliseMesParcellesFeatures(mesParcelles);
+    if (mesParcellesFeatures.length > 0) {
+      return mesParcellesFeatures;
+    }
+  } catch (err) {
+    console.warn("TELEPAC_XML: Mes Parcelles importer failed, falling back to legacy parser", err);
+  }
+
+  let text;
+  try {
+    text = new TextDecoder("iso-8859-1").decode(arrayBuffer);
+  } catch (err) {
+    console.warn("TELEPAC_XML: ISO-8859-1 TextDecoder unavailable, using FileReader", err);
+    text = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(reader.error);
+      reader.onload = () => resolve(reader.result);
+      reader.readAsText(file, "ISO-8859-1");
+    });
+  }
+
+  const legacyFeatures = parseLegacyTelepacXml(text);
+  if (!legacyFeatures.length) {
+    throw new Error("TELEPAC_XML: structure invalide (aucun ilot/parcelle)");
+  }
+  return legacyFeatures;
 }
