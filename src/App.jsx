@@ -16,6 +16,12 @@ import DrawToolbar from "./Front/DrawToolbar";
 // ✅ Import/Export Télépac (chemin conservé)
 import ImportTelepacButton, { ExportTelepacButton, ExportShapefileButton } from "./Front/TelepacButton";
 
+const VIEWER_DEFAULT_FILTERS = {
+  cultures: [],
+  ilot: "",
+  cultureField: "cultureN",
+};
+
 function AppContent() {
   const { parcellesCollection } = useParcelles();
   const [mapMode, setMapMode] = useState("editor");

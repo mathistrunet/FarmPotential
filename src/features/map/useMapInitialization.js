@@ -48,10 +48,32 @@ const resolveYearColor = (year) => {
 export function useMapInitialization() {
   const mapRef = useRef(null);
   const drawRef = useRef(null);
+  const pendingFeaturesRef = useRef(null);
+  const drawListenersRef = useRef(null);
   const [features, setFeaturesState] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
+  const [mapInitError, setMapInitError] = useState(null);
+  const [drawReady, setDrawReady] = useState(false);
   const syncingDrawRef = useRef(false);
   const ensureRaster = useRasterLayers();
+
+  const syncFeaturesFromDraw = useCallback((drawInstance) => {
+    const draw = drawInstance || drawRef.current;
+    if (!draw || syncingDrawRef.current) return;
+    syncingDrawRef.current = true;
+    try {
+      const data = draw.getAll();
+      const polys = (data && data.features ? data.features : [])
+        .filter((feature) => feature.geometry?.type === "Polygon")
+        .map((feature) => ({
+          ...feature,
+          properties: feature.properties || {},
+        }));
+      setFeaturesState(polys);
+    } finally {
+      syncingDrawRef.current = false;
+    }
+  }, []);
 
   const setFeatures = useCallback((nextValue) => {
     setFeaturesState((prev) => {
@@ -71,6 +93,28 @@ export function useMapInitialization() {
       return safeNext;
     });
   }, []);
+
+  const setDrawFeatures = useCallback(
+    (collection) => {
+      const safeCollection =
+        collection && collection.type === "FeatureCollection"
+          ? {
+              type: "FeatureCollection",
+              features: Array.isArray(collection.features)
+                ? collection.features
+                : [],
+            }
+          : { type: "FeatureCollection", features: [] };
+      const draw = drawRef.current;
+      if (!draw) {
+        pendingFeaturesRef.current = safeCollection;
+        return;
+      }
+      draw.set(safeCollection);
+      syncFeaturesFromDraw(draw);
+    },
+    [syncFeaturesFromDraw]
+  );
 
   const selectFeatureOnMap = useCallback((id, fit = false) => {
     const map = mapRef.current;

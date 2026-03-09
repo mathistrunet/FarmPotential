@@ -7,7 +7,7 @@ import {
   labelFromCode,
   codeFromLabel,
 } from "../utils/cultureLabels";
-import { featureAreaM2 } from "../utils/geometry";
+import { featureAreaM2, ringAreaM2 } from "../utils/geometry";
 import { resolveOverlappingParcels } from "../utils/overlapResolution";
 import { fetchRpgGeoJSON, getCultureLabel } from "../services/rpg";
 

@@ -19,7 +19,25 @@ function decodeInput(input: string | ArrayBuffer): string {
     return input;
   }
 
-  return new TextDecoder('utf-8').decode(input);
+  const bytes = new Uint8Array(input);
+  const head = bytes.slice(0, Math.min(bytes.length, 300));
+  let headText = '';
+  for (let i = 0; i < head.length; i += 1) {
+    const code = head[i];
+    headText += code >= 32 && code <= 126 ? String.fromCharCode(code) : ' ';
+  }
+  const match = headText.match(/encoding\s*=\s*["']([^"']+)["']/i);
+  const encoding = match?.[1]?.trim().toLowerCase() || 'utf-8';
+
+  try {
+    return new TextDecoder(encoding).decode(input);
+  } catch {
+    try {
+      return new TextDecoder('iso-8859-1').decode(input);
+    } catch {
+      return new TextDecoder('utf-8').decode(input);
+    }
+  }
 }
 
 function childElementsByLocalName(parent: Nullable<Element>, localName: string): Element[] {
@@ -303,7 +321,9 @@ export async function readTelepacMesParcellesXml(input: string | ArrayBuffer): P
     const pacage = producteur.getAttribute('numero-pacage') ?? '';
     const rpg = firstChildByLocalName(producteur, 'rpg');
     const ilotsContainer = firstChildByLocalName(rpg, 'ilots');
-    const ilots = childElementsByLocalName(ilotsContainer, 'ilot');
+    const ilots = ilotsContainer
+      ? childElementsByLocalName(ilotsContainer, 'ilot')
+      : childElementsByLocalName(rpg, 'ilot');
     ilotCount += ilots.length;
 
     ilots.forEach((ilot) => {

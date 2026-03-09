@@ -37,6 +37,8 @@ export default function SoilTypeMappingPanel({
   parcelCandidates = [],
   parcelCount = 0,
   rrpVisible = false,
+  loading = false,
+  onRefresh,
 }) {
   const detectedCombinations = useMemo(
     () => buildDetectedSoilCombinations(parcelCandidates),
@@ -92,6 +94,26 @@ export default function SoilTypeMappingPanel({
         regroupements ci-dessous sont bases sur les attributs RRP visibles sur
         la carte.
       </p>
+      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        <button
+          type="button"
+          onClick={() => onRefresh?.()}
+          disabled={loading}
+          style={{
+            padding: "6px 10px",
+            borderRadius: 6,
+            border: "1px solid #e2e8f0",
+            background: loading ? "#e2e8f0" : "#f8fafc",
+            color: "#0f172a",
+            cursor: loading ? "not-allowed" : "pointer",
+            fontSize: 12,
+            fontWeight: 600,
+          }}
+          title="Recharger les types de sols depuis la couche RRP"
+        >
+          {loading ? "Rechargement..." : "Recharger les sols"}
+        </button>
+      </div>
 
       <div
         style={{

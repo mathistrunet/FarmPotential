@@ -216,6 +216,9 @@ export default function ParcellesEditorMap() {
   const [activeTab, setActiveTab] = useState("parcelles"); // "parcelles" | "calques" | "mapping-sols"
   const [parcelleViewMode, setParcelleViewMode] = useState("cards"); // "cards" | "table"
   const [soilMappingParcelCandidates, setSoilMappingParcelCandidates] = useState([]);
+  const [soilMappingRefreshTick, setSoilMappingRefreshTick] = useState(0);
+  const [soilMappingLoading, setSoilMappingLoading] = useState(false);
+  const soilMappingDebugLoggedRef = useRef(false);
   const [compact, setCompact] = useState(false);
   const [rrpVisible, setRrpVisible] = useState(false);
   const [rrpOpacity, setRrpOpacity] = useState(DEFAULT_FILL_OPACITY);
@@ -993,6 +996,9 @@ export default function ParcellesEditorMap() {
     if (!map || !rrpVisible || !map.getLayer("soils-rrp-fill")) {
       throw new Error("Active la couche Carte des sols France avant de visualiser les sols.");
     }
+    if (loadingTiles || !polygonsShown) {
+      throw new Error("Donn?es sols en cours de chargement.");
+    }
 
     const [lookupBySourceFile, lookupByUcsId] = await Promise.all([
       loadSoilTypeLookupBySourceFile(),
@@ -1011,6 +1017,20 @@ export default function ParcellesEditorMap() {
       for (const probe of probePoints) {
         const point = map.project([probe.coordinates[0], probe.coordinates[1]]);
         const rendered = map.queryRenderedFeatures(point, { layers: ["soils-rrp-fill"] }) || [];
+        if (!soilMappingDebugLoggedRef.current && rendered.length) {
+          const sample = rendered[0];
+          const sampleProps = sample?.properties || {};
+          const sampleFileUcs = resolveFileUcs(sampleProps);
+          const sampleUcsId = resolveUcsId(sampleProps);
+          console.info("[SOIL_DEBUG] sample RRP feature properties", {
+            id: sample.id,
+            keys: Object.keys(sampleProps),
+            fileUcs: sampleFileUcs,
+            ucsId: sampleUcsId,
+            sampleProps,
+          });
+          soilMappingDebugLoggedRef.current = true;
+        }
         for (const candidate of rendered) {
           const soilProps = candidate?.properties || {};
           const fileUcs = resolveFileUcs(soilProps);
@@ -1032,18 +1052,34 @@ export default function ParcellesEditorMap() {
   }, [features, mapRef, rrpVisible]);
 
   useEffect(() => {
+    if (!rrpVisible) {
+      setSoilMappingParcelCandidates([]);
+      return undefined;
+    }
+    if (loadingTiles || !polygonsShown) {
+      return undefined;
+    }
     let cancelled = false;
+    setSoilMappingLoading(true);
     resolveParcelsWithSoilRows()
       .then((candidates) => {
         if (!cancelled) setSoilMappingParcelCandidates(candidates);
       })
       .catch(() => {
         if (!cancelled) setSoilMappingParcelCandidates([]);
+      })
+      .finally(() => {
+        if (!cancelled) setSoilMappingLoading(false);
       });
     return () => {
       cancelled = true;
     };
-  }, [resolveParcelsWithSoilRows]);
+  }, [resolveParcelsWithSoilRows, rrpVisible, loadingTiles, polygonsShown, soilMappingRefreshTick]);
+
+  const refreshSoilMapping = useCallback(() => {
+    soilMappingDebugLoggedRef.current = false;
+    setSoilMappingRefreshTick((prev) => prev + 1);
+  }, []);
 
   // ---- Styles de la barre d’outils bas
   const bottomBarHeight = compact ? 56 : 64;
@@ -1496,6 +1532,8 @@ export default function ParcellesEditorMap() {
             parcelCandidates={soilMappingParcelCandidates}
             parcelCount={features.length}
             rrpVisible={rrpVisible}
+            loading={soilMappingLoading || loadingTiles}
+            onRefresh={refreshSoilMapping}
           />
         )}
 
