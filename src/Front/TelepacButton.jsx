@@ -17,6 +17,111 @@ const IconDownload = () => (
   </svg>
 );
 
+function extractYearFromFilename(name) {
+  const matches = String(name || "").match(/(?:19|20)\d{2}/g);
+  if (!matches?.length) return null;
+  const year = Number.parseInt(matches[0], 10);
+  if (!Number.isFinite(year) || year < 1990 || year > 2100) return null;
+  return year;
+}
+
+function parseYearInput(value) {
+  if (value == null) return null;
+  const year = Number.parseInt(String(value).trim(), 10);
+  if (!Number.isFinite(year) || year < 1990 || year > 2100) return null;
+  return year;
+}
+
+function resolveCsvYear(file) {
+  const detected = extractYearFromFilename(file?.name || "");
+  if (detected != null) {
+    const confirmed = window.confirm(
+      `Le fichier "${file.name}" correspond-il à l'année ${detected} ?`
+    );
+    if (confirmed) return detected;
+  }
+  const input = window.prompt(
+    "Indique l'année du fichier importé (ex: 2023)."
+  );
+  return parseYearInput(input);
+}
+
+function resolveXmlYear(file, metaYear) {
+  if (Number.isFinite(metaYear)) return metaYear;
+  const detected = extractYearFromFilename(file?.name || "");
+  if (detected != null) return detected;
+  const lastModified =
+    file?.lastModified != null ? new Date(file.lastModified) : null;
+  const lastModifiedYear = lastModified ? lastModified.getFullYear() : null;
+  if (Number.isFinite(lastModifiedYear)) return lastModifiedYear;
+  return new Date().getFullYear();
+}
+
+function detectTelepacMeta(text) {
+  const pacageMatch = text.match(/numero-pacage="([^"]+)"/i);
+  const pacage = pacageMatch?.[1]?.trim() || null;
+  const campaignMatch = text.match(/campagne="([^"]+)"/i);
+  const campaign = campaignMatch?.[1]?.trim() || null;
+  const yearMatch = text.match(/fichier-xsd="[^"]*?((?:19|20)\d{2})[^"]*"/i);
+  const year = yearMatch ? Number.parseInt(yearMatch[1], 10) : null;
+  return {
+    pacage,
+    campaign: campaign ? campaign.toLowerCase() : null,
+    year: Number.isFinite(year) ? year : null,
+  };
+}
+
+function parseCultureColumnInput(value) {
+  if (value == null) return null;
+  const trimmed = String(value).trim().toLowerCase();
+  if (!trimmed) return null;
+  if (/^\d+$/.test(trimmed)) return Number.parseInt(trimmed, 10);
+  if (trimmed.startsWith("culturen")) {
+    const suffix = trimmed.replace(/^culturen[_-]?/, "");
+    if (!suffix) return 0;
+    if (/^\d+$/.test(suffix)) return Number.parseInt(suffix, 10);
+  }
+  return null;
+}
+
+async function readFileText(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error);
+    reader.onload = () => resolve(reader.result);
+    reader.readAsText(file, "ISO-8859-1");
+  });
+}
+
+async function resolveTelepacCultureOffset(file, baseCultureYearRef) {
+  const text = await readFileText(file);
+  const { campaign, year, pacage } = detectTelepacMeta(text);
+
+  let baseYear = baseCultureYearRef.current;
+  if (baseYear == null && year != null) {
+    if (campaign === "courante") baseYear = year + 1;
+    if (campaign === "precedente") baseYear = year + 2;
+    if (baseYear == null) baseYear = year + 1;
+    if (baseYear != null) baseCultureYearRef.current = baseYear;
+  }
+
+  if (year != null && baseYear != null) {
+    const offset = baseYear - year;
+    if (offset >= 0 && offset <= 6) return { offset, meta: { pacage, year } };
+  }
+
+  const input = window.prompt(
+    "Impossible de déterminer automatiquement la colonne des cultures. " +
+      "Indique la colonne cible (cultureN, cultureN1, cultureN2...) ou un numéro."
+  );
+  const parsed = parseCultureColumnInput(input);
+  return {
+    offset: Number.isFinite(parsed) ? parsed : null,
+    meta: { pacage, year },
+  };
+}
+
+
 
 export default function ImportTelepacButton({
   mapRef,
@@ -31,10 +136,13 @@ export default function ImportTelepacButton({
   zoomOnImport = true,
   labelImport,
   onImported,
+  onImportMeta,
   onError,
+  structureName,
 }) {
   const fileInputRef = useRef(null);
   const [loading, setLoading] = useState(false);
+  const baseCultureYearRef = useRef(null);
 
   const btnDefault = {
     display: "inline-flex",
@@ -50,7 +158,7 @@ export default function ImportTelepacButton({
   };
   const btn = { ...btnDefault, ...(buttonStyle || {}) };
 
-  async function onPickXmlFile(e) {
+  async function onPickFile(e) {
     const file = e.target.files?.[0];
     if (!file) return;
     setLoading(true);
@@ -79,15 +187,20 @@ export default function ImportTelepacButton({
 
       // Ajout des features
       // (on peut ajouter un FeatureCollection d’un coup mais on garde l’itératif robuste)
-      for (const ft of feats) draw.add(ft);
+      const toAdd = feats;
+      const mismatches = [];
+      for (const ft of toAdd) draw.add(ft);
+
+      resolveOverlappingParcels(draw, { mode: "warn" });
 
       // Zoom sur l’emprise (MultiPolygon pris en charge)
-      if (zoomOnImport && feats.length) {
+      const importedFeatures = draw.getAll()?.features ?? [];
+      if (zoomOnImport && importedFeatures.length) {
         let minLon = Infinity,
           minLat = Infinity,
           maxLon = -Infinity,
           maxLat = -Infinity;
-        for (const f of feats) {
+        for (const f of importedFeatures) {
           const t = f.geometry?.type;
           const coords =
             t === "Polygon"
@@ -119,14 +232,34 @@ export default function ImportTelepacButton({
 
       // Synchronise la liste et sélectionne la 1ʳᵉ
       const arr = draw.getAll()?.features ?? [];
-      const polys = arr.filter((f) => f.geometry?.type === "Polygon");
+      const polys = arr.filter(
+        (f) => f.geometry?.type === "Polygon" || f.geometry?.type === "MultiPolygon"
+      );
       setFeatures?.(polys);
       if (arr[0]?.id && typeof selectFeatureOnMap === "function") {
         selectFeatureOnMap(arr[0].id, false);
       }
 
+      if (mismatches.length) {
+        const topMismatches = mismatches.slice(0, 5);
+        const details = topMismatches
+          .map(
+            (entry) =>
+              `- ${entry.label} (similarité max ${(entry.maxSimilarity * 100).toFixed(1)}%)`
+          )
+          .join("\n");
+        alert(
+          "Certaines parcelles se chevauchent mais ne correspondent pas au seuil attendu (95%).\n" +
+            `Parcelles concernées: ${mismatches.length}.\n` +
+            "Elles sont surlignées en orange sur la carte : sélectionne-les pour décider si c'est la même parcelle ou deux parcelles distinctes.\n" +
+            details +
+            (mismatches.length > topMismatches.length ? "\n..." : "")
+        );
+      }
+
       onImported?.(feats);
     } catch (err) {
+      const code = err?.code ? ` [${err.code}]` : "";
       console.error(err);
       onError?.(err);
       alert(
@@ -156,7 +289,7 @@ export default function ImportTelepacButton({
         ref={fileInputRef}
         type="file"
         accept={fileAccept}
-        onChange={onPickXmlFile}
+        onChange={onPickFile}
         style={{ display: "none" }}
       />
     </>
@@ -209,7 +342,7 @@ export function ExportTelepacButton({
     setLoading(true);
     try {
       const xml = buildTelepacXML(features);
-      const blob = new Blob([xml], { type: "application/xml;charset=ISO-8859-1" });
+      const blob = new Blob([xml], { type: "application/xml;charset=UTF-8" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;

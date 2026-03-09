@@ -46,17 +46,26 @@ export function entriesCodebook() {
 export function detectCultureCode(props = {}) {
   const codeLike = [
     "CODE_CULTURE","CODE_CULTU","CULT_CODE","CODE","CODE_CULT",
-    "CODE_CULTUR","CULTURE_CODE","CD_CULT","CULT","code_culture","code_cult"
+    "CODE_CULTUR","CULTURE_CODE","CD_CULT","CULT","code_culture","code_cult",
+    "CULTURE","culture","cultureN","cultureN_1","culture_prec"
   ];
+  const looksLikeCode = (value) => {
+    if (value == null) return false;
+    const trimmed = String(value).trim();
+    if (!trimmed) return false;
+    const upper = trimmed.toUpperCase();
+    if (/^[A-Z0-9]{2,10}$/.test(upper)) return upper;
+    return false;
+  };
   for (const k of codeLike) {
-    const v = props[k];
-    if (v != null && String(v).trim() !== "") return String(v).trim().toUpperCase();
+    const code = looksLikeCode(props[k]);
+    if (code) return code;
   }
   for (const [k, v] of Object.entries(props)) {
     if (v == null) continue;
     if (/code.*cult|cult.*code|^code_.*cult/i.test(k)) {
-      const val = String(v).trim().toUpperCase();
-      if (/^[A-Z0-9]{2,10}$/.test(val)) return val;
+      const code = looksLikeCode(v);
+      if (code) return code;
     }
   }
   return null;
@@ -69,7 +78,8 @@ export function displayLabelFromProps(props = {}) {
 
   const DIRECT_KEYS = [
     "LIB_CULTURE","LIB_CULTU","LIBELLE_CULTURE","NOM_CULTURE","LIB_LONG","LIBELLE",
-    "CULTURE","culture","CULT_NOM","CULT_LIB","INTITULE","INTITULE_CULTURE"
+    "CULTURE","culture","CULT_NOM","CULT_LIB","INTITULE","INTITULE_CULTURE",
+    "cultureN","cultureN_1"
   ];
   for (const k of DIRECT_KEYS) {
     const v = props[k];

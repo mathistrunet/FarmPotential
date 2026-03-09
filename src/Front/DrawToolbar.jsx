@@ -1,6 +1,9 @@
 // src/features/draw/DrawToolbar.jsx
 import React, { useCallback, useEffect, useState } from "react";
-import { ringAreaM2 } from "../utils/geometry";
+import { featureAreaM2 } from "../utils/geometry";
+import { resolveOverlappingParcels } from "../utils/overlapResolution";
+import { mergeFeaturesByIds } from "../utils/parcelleFusion";
+import { splitParcelleByLine } from "../utils/parcelleSplit";
 
 
 /** Petite lib d’icônes inline, légères */
@@ -11,6 +14,19 @@ const IconSquare  = () => <svg viewBox="0 0 24 24" style={iconStyle}><rect x="5"
 const IconTrash   = () => <svg viewBox="0 0 24 24" style={iconStyle}><path d="M6 7h12l-1 13H7L6 7zm3-3h6l1 2H8l1-2z" fill="currentColor"/></svg>;
 const IconEdit    = () => <svg viewBox="0 0 24 24" style={iconStyle}><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" fill="currentColor"/></svg>;
 const IconCheck   = () => <svg viewBox="0 0 24 24" style={iconStyle}><path d="M9 16.2l-3.5-3.5L4 14.2l5 5 11-11-1.4-1.4z" fill="currentColor"/></svg>;
+const IconReset   = () => (
+  <svg viewBox="0 0 24 24" style={iconStyle}>
+    <path
+      d="M6 13a6 6 0 1 0 1.76-4.24L6 11V6h5L8.9 8.1A8 8 0 1 1 4 13h2z"
+      fill="currentColor"
+    />
+  </svg>
+);
+const IconSplit   = () => (
+  <svg viewBox="0 0 24 24" style={iconStyle}>
+    <path d="M4 7h16v2H4V7zm0 8h16v2H4v-2zM11 5h2v14h-2V5z" fill="currentColor" />
+  </svg>
+);
 const IconSelectBox = () => (
   <svg viewBox="0 0 24 24" style={iconStyle}>
     <rect
@@ -24,6 +40,85 @@ const IconSelectBox = () => (
     />
   </svg>
 );
+const SPLIT_GAP_WIDTH_METERS = 0.03;
+
+const IconMerge = () => (
+  <svg viewBox="0 0 24 24" style={iconStyle}>
+    <path d="M4 5h6v6H4V5zm10 0h6v6h-6V5zM9 8h6v2H9V8zM7 14h10v5H7v-5z" fill="currentColor" />
+  </svg>
+);
+
+function squaredDistance(a, b) {
+  const dx = a[0] - b[0];
+  const dy = a[1] - b[1];
+  return dx * dx + dy * dy;
+}
+
+function nearestPointOnSegment(point, a, b) {
+  const abx = b[0] - a[0];
+  const aby = b[1] - a[1];
+  const ab2 = abx * abx + aby * aby;
+  if (ab2 === 0) return { point: a, dist2: squaredDistance(point, a) };
+  const apx = point[0] - a[0];
+  const apy = point[1] - a[1];
+  const t = Math.max(0, Math.min(1, (apx * abx + apy * aby) / ab2));
+  const projected = [a[0] + (abx * t), a[1] + (aby * t)];
+  return { point: projected, dist2: squaredDistance(point, projected) };
+}
+
+function getPolygonOuterRings(feature) {
+  const geometry = feature?.geometry;
+  if (!geometry) return [];
+  if (geometry.type === "Polygon") {
+    return geometry.coordinates?.[0] ? [geometry.coordinates[0]] : [];
+  }
+  if (geometry.type === "MultiPolygon") {
+    return (geometry.coordinates || []).map((poly) => poly?.[0]).filter(Boolean);
+  }
+  return [];
+}
+
+function snapLineExtremitiesToParcelBorder(targetFeature, lineFeature) {
+  const lineCoords = lineFeature?.geometry?.coordinates;
+  if (!Array.isArray(lineCoords) || lineCoords.length < 2) return lineFeature;
+
+  const rings = getPolygonOuterRings(targetFeature);
+  if (!rings.length) return lineFeature;
+
+  const snapEndpoint = (inputPoint) => {
+    let bestPoint = inputPoint;
+    let bestDist2 = Number.POSITIVE_INFINITY;
+
+    rings.forEach((ring) => {
+      for (let i = 0; i < ring.length - 1; i += 1) {
+        const a = ring[i];
+        const b = ring[i + 1];
+        if (!a || !b) continue;
+        const candidate = nearestPointOnSegment(inputPoint, a, b);
+        if (candidate.dist2 < bestDist2) {
+          bestPoint = candidate.point;
+          bestDist2 = candidate.dist2;
+        }
+      }
+    });
+
+    return bestPoint;
+  };
+
+  const adjusted = lineCoords.map((coord) => [...coord]);
+  adjusted[0] = snapEndpoint(adjusted[0]);
+  adjusted[adjusted.length - 1] = snapEndpoint(
+    adjusted[adjusted.length - 1]
+  );
+
+  return {
+    ...lineFeature,
+    geometry: {
+      ...lineFeature.geometry,
+      coordinates: adjusted,
+    },
+  };
+}
 
 /**
  * Barre d'outils de dessin (autonome)
@@ -40,10 +135,13 @@ export default function DrawToolbar({
   features,
   setFeatures,
   selectFeatureOnMap,
+  onReset,
   compact = false,
   className
 }) {
   const [mode, setMode] = useState("simple_select");
+  const [splitTargetId, setSplitTargetId] = useState(null);
+  const [splitLineId, setSplitLineId] = useState(null);
 
   const btn = {
     display: "inline-flex", alignItems: "center", gap: 8,
@@ -173,7 +271,9 @@ export default function DrawToolbar({
     draw.trash?.();
     // Rafraîchir la liste après suppression
     const arr = draw.getAll()?.features ?? [];
-    const polys = arr.filter((f) => f.geometry?.type === "Polygon");
+    const polys = arr.filter(
+      (f) => f.geometry?.type === "Polygon" || f.geometry?.type === "MultiPolygon"
+    );
     setFeatures?.(polys);
   }
 
@@ -183,6 +283,165 @@ export default function DrawToolbar({
     if (!draw) return;
     const next = mode === "multiple_selection" ? "simple_select" : "multiple_selection";
     draw.changeMode(next);
+  }
+
+  function startSplitParcel() {
+    const draw = drawRef?.current;
+    if (!draw) return;
+    const selIds =
+      (draw.getSelectedIds?.() || (draw.getSelected?.().features || []).map((f) => f.id)) || [];
+    const targetId = selIds[0];
+    if (!targetId) {
+      alert("Sélectionne d'abord une parcelle à découper.");
+      return;
+    }
+    const target = draw.get?.(targetId);
+    if (!target || (target.geometry?.type !== "Polygon" && target.geometry?.type !== "MultiPolygon")) {
+      alert("La sélection doit être une parcelle polygonale.");
+      return;
+    }
+    if (splitLineId) {
+      draw.delete(splitLineId);
+      setSplitLineId(null);
+    }
+    setSplitTargetId(targetId);
+    draw.changeMode("draw_line_string");
+  }
+
+  function applySplitFromLine(lineFeature) {
+    const draw = drawRef?.current;
+    if (!draw || !splitTargetId) return false;
+    const target = draw.get?.(splitTargetId);
+    if (!target) return false;
+    const pieces = splitParcelleByLine(target, lineFeature, SPLIT_GAP_WIDTH_METERS);
+    if (pieces.length < 2) {
+      alert("Le tracé doit traverser la parcelle pour la découper en 2.");
+      return false;
+    }
+
+    draw.delete(splitTargetId);
+    pieces.forEach((polygonCoordinates) => {
+      draw.add({
+        type: "Feature",
+        properties: { ...(target.properties || {}) },
+        geometry: {
+          type: "Polygon",
+          coordinates: polygonCoordinates,
+        },
+      });
+    });
+    return true;
+  }
+
+  function cancelSplitParcel() {
+    const draw = drawRef?.current;
+    if (!draw) return;
+    if (splitLineId) {
+      draw.delete(splitLineId);
+    }
+    setSplitLineId(null);
+    setSplitTargetId(null);
+    draw.changeMode("simple_select");
+  }
+
+  function confirmSplitParcel() {
+    const draw = drawRef?.current;
+    if (!draw || !splitTargetId || !splitLineId) return;
+    const lineFeature = draw.get?.(splitLineId);
+    const targetFeature = draw.get?.(splitTargetId);
+    if (!lineFeature || !targetFeature) return;
+
+    const snappedLineFeature = snapLineExtremitiesToParcelBorder(targetFeature, lineFeature);
+    draw.setFeatureProperty?.(splitLineId, "split_preview", true);
+    draw.add({ ...snappedLineFeature, id: splitLineId });
+
+    const splitDone = applySplitFromLine(snappedLineFeature);
+    if (splitLineId) {
+      draw.delete(splitLineId);
+    }
+    setSplitLineId(null);
+    if (splitDone) {
+      setSplitTargetId(null);
+      draw.changeMode("simple_select");
+      refreshFromDraw();
+    }
+  }
+
+  const refreshFromDraw = useCallback(() => {
+    const draw = drawRef?.current;
+    if (!draw) return;
+    const arr = draw.getAll()?.features ?? [];
+    const polys = arr.filter(
+      (f) => f.geometry?.type === "Polygon" || f.geometry?.type === "MultiPolygon"
+    );
+    polys.forEach((f) => {
+      const area = featureAreaM2(f);
+      if (area != null) {
+        f.properties = { ...f.properties, surfaceHa: area / 10000 };
+      }
+    });
+    setFeatures?.(polys);
+  }, [drawRef, setFeatures]);
+
+  function resolveOverlaps() {
+    const draw = drawRef?.current;
+    if (!draw) return;
+    resolveOverlappingParcels(draw);
+    refreshFromDraw();
+  }
+
+  function mergeSelection() {
+    const draw = drawRef?.current;
+    if (!draw) return;
+
+    const selectedIds = draw.getSelectedIds?.() || [];
+    if (selectedIds.length < 2) {
+      alert("Sélectionnez au moins deux parcelles (mode multi-sélection), puis cliquez sur Fusionner.");
+      return;
+    }
+
+    const allFeatures = draw.getAll()?.features || [];
+    const selectedFeatures = allFeatures.filter((feature) =>
+      selectedIds.map(String).includes(String(feature.id))
+    );
+    const choices = selectedFeatures
+      .map((feature, index) => {
+        const name =
+          feature?.properties?.nom_affiche ||
+          feature?.properties?.parcelle ||
+          feature?.properties?.numero ||
+          feature.id;
+        return `${index + 1}. ${name}`;
+      })
+      .join("\n");
+    const answer = window.prompt(
+      `Quelle parcelle doit conserver ses données de tableau après fusion ?\n${choices}\n\nEntrez le numéro de la parcelle à conserver :`,
+      "1"
+    );
+    if (answer == null) return;
+
+    const keepIndex = Number(answer.trim()) - 1;
+    if (!Number.isInteger(keepIndex) || keepIndex < 0 || keepIndex >= selectedFeatures.length) {
+      alert("Choix invalide. Veuillez saisir un numéro de parcelle valide.");
+      return;
+    }
+
+    try {
+      const keepId = selectedFeatures[keepIndex].id;
+      const { feature, removedIds } = mergeFeaturesByIds(allFeatures, selectedIds, keepId);
+      draw.delete(selectedIds);
+      const addedIds = draw.add(feature);
+      refreshFromDraw();
+      const mergedId = Array.isArray(addedIds) && addedIds.length ? addedIds[0] : feature?.id;
+      if (mergedId) {
+        selectFeatureOnMap?.(mergedId, true);
+      }
+      if (removedIds.length) {
+        alert("Fusion effectuée : les autres lignes de parcelles ont été supprimées.");
+      }
+    } catch (error) {
+      alert(error?.message || "La fusion des parcelles a échoué.");
+    }
   }
 
   /**
@@ -196,19 +455,6 @@ export default function DrawToolbar({
     const draw = drawRef?.current;
     if (!map || !draw) return;
 
-    const refreshFromDraw = () => {
-      const arr = draw.getAll()?.features ?? [];
-      const polys = arr.filter((f) => f.geometry?.type === "Polygon");
-      polys.forEach((f) => {
-        const ring = f.geometry?.coordinates?.[0];
-        if (ring) {
-          const ha = ringAreaM2(ring) / 10000;
-          f.properties = { ...f.properties, surfaceHa: ha };
-        }
-      });
-      setFeatures?.(polys);
-    };
-
     const onMode = (e) => {
       const m = e?.mode || "simple_select";
       setMode(m);
@@ -219,19 +465,39 @@ export default function DrawToolbar({
       }
     };
 
-    map.on("draw.create", refreshFromDraw);
+    const onCreate = (event) => {
+      if (splitTargetId) {
+        const lineFeature = (event?.features || []).find((f) => f.geometry?.type === "LineString");
+        if (lineFeature?.id) {
+          setSplitLineId(lineFeature.id);
+          draw.setFeatureProperty?.(lineFeature.id, "split_preview", true);
+          draw.changeMode("direct_select", { featureId: lineFeature.id });
+          return;
+        }
+      }
+      refreshFromDraw();
+    };
+
+    map.on("draw.create", onCreate);
     map.on("draw.update", refreshFromDraw);
     map.on("draw.delete", refreshFromDraw);
     map.on("draw.modechange", onMode);
 
     return () => {
-      map.off("draw.create", refreshFromDraw);
+      map.off("draw.create", onCreate);
       map.off("draw.update", refreshFromDraw);
       map.off("draw.delete", refreshFromDraw);
       map.off("draw.modechange", onMode);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mapRef?.current, drawRef?.current, setFeatures, enlargeVertexHitbox]);
+  }, [
+    mapRef?.current,
+    drawRef?.current,
+    refreshFromDraw,
+    enlargeVertexHitbox,
+    splitTargetId,
+    splitLineId,
+  ]);
 
 
   return (
@@ -263,6 +529,44 @@ export default function DrawToolbar({
         <IconSelectBox /> {label("Multi-sélection")}
       </button>
 
+      <button onClick={resolveOverlaps} style={btn} title="Découper pour éviter les superpositions">
+        <IconSplit /> {label("Découper chevauchements")}
+      </button>
+
+      <button onClick={mergeSelection} style={btn} title="Fusionner les parcelles sélectionnées">
+        <IconMerge /> {label("Fusionner")}
+      </button>
+
+      <button
+        onClick={startSplitParcel}
+        style={{
+          ...btn,
+          background: splitTargetId ? "#eef6ff" : "#fff",
+        }}
+        title="Tracer la ligne de découpe de la parcelle sélectionnée"
+      >
+        <IconSplit /> {label(splitTargetId ? "Tracer découpe…" : "Découper parcelle")}
+      </button>
+
+      {splitTargetId && splitLineId && (
+        <>
+          <button
+            onClick={confirmSplitParcel}
+            style={{ ...btn, background: "#dcfce7", borderColor: "#86efac" }}
+            title="Valider la découpe tracée"
+          >
+            <IconCheck /> {label("Valider découpe")}
+          </button>
+          <button
+            onClick={cancelSplitParcel}
+            style={{ ...btn, background: "#fee2e2", borderColor: "#fca5a5" }}
+            title="Annuler le tracé de découpe"
+          >
+            <IconTrash /> {label("Annuler découpe")}
+          </button>
+        </>
+      )}
+
       <button onClick={addSquareAtCenter} style={btn} title="Ajouter un carré au centre">
         <IconSquare /> {label("Carré centre")}
       </button>
@@ -271,10 +575,20 @@ export default function DrawToolbar({
         <IconTrash /> {label("Supprimer")}
       </button>
 
+      <button
+        onClick={onReset}
+        style={btn}
+        title="Réinitialiser toutes les parcelles"
+      >
+        <IconReset /> {label("Réinitialiser")}
+      </button>
+
       {/* Indication légère du mode courant (debug/UX) */}
       {!compact && (
         <span style={{ marginLeft: 6, fontSize: 12, color: "#666" }}>
           Mode : <code>{mode}</code>
+          {splitTargetId && !splitLineId ? " · Trace la ligne de découpe puis relâche." : ""}
+          {splitTargetId && splitLineId ? " · Ajuste le trait bleu (les extrémités sont collées à la bordure) puis valide la découpe." : ""}
         </span>
       )}
     </div>

@@ -1,16 +1,13 @@
-// src/App.jsx
-import React, { useEffect, useState } from "react";
-import maplibregl from "maplibre-gl";
+import { Suspense, lazy, useEffect, useMemo, useState } from "react";
 
-import RasterToggles from "./components/RasterToggles";
-import ParcelleEditor from "./components/ParcelleEditor";
-import { useMapInitialization } from "./features/map/useMapInitialization";
+import ParcellesViewerMap from "./maps/parcelles/ParcellesViewerMap";
+import { ParcellesProvider } from "./maps/parcelles/ParcellesStore";
+import { useParcelles } from "./maps/parcelles/useParcelles";
+import { buildDeterministicPalette } from "./maps/parcelles/parcellesLayers";
+import { projectCultureYear } from "./maps/parcelles/parcellesData";
+import { codeFromLabel, labelFromCode } from "./utils/cultureLabels";
 
-// ⛔️ retirés car liés aux calques/queries en ligne (Géoportail)
-// import SoilsControl from "./features/soils/components/SoilsControl";
-// import { useSoilsLayer } from "./features/soils/hooks/useSoilsLayer";
-// import SoilInfoPanel from "./components/SoilInfoPanel";
-// import { getRrpAtPoint } from "./utils/rrpGetFeatureInfo";
+const ParcellesEditorMap = lazy(() => import("./maps/parcelles/ParcellesEditorMap"));
 
 // ✅ composant RPG autonome (chemin conservé)
 import RpgFeature from "./Front/useRpgLayer";
@@ -19,166 +16,177 @@ import DrawToolbar from "./Front/DrawToolbar";
 // ✅ Import/Export Télépac (chemin conservé)
 import ImportTelepacButton, { ExportTelepacButton, ExportShapefileButton } from "./Front/TelepacButton";
 
-// ✅ NOUVEAU : hook d’affichage RRP local (depuis un ZIP placé dans /public/data)
-import { useSoilLayerLocal } from "./features/useSoilLayerLocal";
-
-export default function App() {
-  const {
-    mapRef,
-    drawRef,
-    features,
-    setFeatures,
-    selectedId,
-    selectFeatureOnMap,
-  } = useMapInitialization();
-
-  // Onglets + panneau latéral repliable
-  const [sideOpen, setSideOpen] = useState(true);          // panneau latéral ouvert/fermé
-  const [activeTab, setActiveTab] = useState("parcelles"); // "parcelles" | "calques"
-  const [compact, setCompact] = useState(false);
-  const [rrpVisible, setRrpVisible] = useState(true);
-
-  // ✅ expose maplibregl pour les popups utilisés par le hook local
-  useEffect(() => {
-    (window).maplibregl = maplibregl;
-  }, []);
-
-  // ✅ Charge la couche RRP depuis un ZIP local (placer le fichier dans /public/data/)
-  //    Exemple : public/data/rrp_occitanie.zip
-  useSoilLayerLocal({
-    map: mapRef.current,
-    zipUrl: "/data/rrp_occitanie.zip",
-    sourceId: "soils-rrp",
-    fillLayerId: "soils-rrp-fill",
-    lineLayerId: "soils-rrp-outline",
-    labelLayerId: "soils-rrp-label",
-    zIndex: 10,
-    visible: rrpVisible,
-  });
-
-  // ---- Styles de la barre d’outils bas
-  const barBase = {
-    position: "fixed",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    background: "#fff",
-    borderTop: "1px solid #e5e7eb",
-    boxShadow: "0 -6px 20px rgba(0,0,0,0.08)",
-    display: "flex",
-    alignItems: "center",
-    gap: 12,
-    padding: compact ? "6px 10px" : "10px 14px",
-    zIndex: 20,
-  };
-  const groupStyle = {
-    display: "flex",
-    alignItems: "center",
-    gap: compact ? 6 : 10,
-    paddingRight: compact ? 8 : 14,
-    marginRight: compact ? 4 : 8,
-    borderRight: "1px solid #eee",
-  };
-  const btn = {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: 8,
-    padding: compact ? "6px 8px" : "8px 12px",
-    borderRadius: 8,
-    background: "#fff",
-    border: "1px solid #d1d5db",
-    cursor: "pointer",
-    fontSize: 14,
-  };
-  const label = (t) => (compact ? null : <span>{t}</span>);
-
-  // Petites icônes (chevron uniquement ici)
-  const iconStyle = {
-    width: 18,
-    height: 18,
-    display: "inline-block",
-    verticalAlign: "-3px",
-  };
-  const IconChevron = ({ up = false }) => (
-    <svg viewBox="0 0 24 24" style={iconStyle}>
-      <path d={up ? "M7 14l5-5 5 5" : "M7 10l5 5 5-5"} fill="currentColor" />
-    </svg>
+function AppContent() {
+  const { parcellesCollection } = useParcelles();
+  const [mapMode, setMapMode] = useState("editor");
+  const [viewerFilters, setViewerFilters] = useState(VIEWER_DEFAULT_FILTERS);
+  const [colorBy, setColorBy] = useState("culture");
+  const cultureYear = viewerFilters.cultureField || "cultureN";
+  const viewerCollection = useMemo(
+    () => projectCultureYear(parcellesCollection, cultureYear),
+    [parcellesCollection, cultureYear]
   );
+  const cultureValue = useMemo(
+    () =>
+      viewerFilters.cultures
+        .map((code) => labelFromCode(code) || code)
+        .join(", "),
+    [viewerFilters.cultures]
+  );
+  const availableCultures = useMemo(() => {
+    const values = new Map();
+    (viewerCollection?.features ?? []).forEach((feature) => {
+      const raw = feature?.properties?.culture;
+      if (raw == null) return;
+      const code = String(raw).trim();
+      if (!code) return;
+      const label = labelFromCode(code) || code;
+      if (!values.has(code)) {
+        values.set(code, label);
+      }
+    });
+    return Array.from(values.entries())
+      .map(([code, label]) => ({ code, label }))
+      .sort((a, b) => a.label.localeCompare(b.label, "fr"));
+  }, [viewerCollection]);
+  const culturePalette = useMemo(
+    () => buildDeterministicPalette(availableCultures.map((entry) => entry.code)),
+    [availableCultures]
+  );
+  const selectedCultures = useMemo(
+    () => new Set(viewerFilters.cultures),
+    [viewerFilters.cultures]
+  );
+  const mapPalette = useMemo(
+    () => (colorBy === "culture" ? culturePalette : {}),
+    [colorBy, culturePalette]
+  );
+  const cultureYearOptions = useMemo(() => {
+    const entries = new Set();
+    const features = parcellesCollection?.features ?? [];
+    for (const feature of features) {
+      const properties = feature?.properties;
+      if (!properties) continue;
+      Object.keys(properties).forEach((key) => {
+        if (key === "culture") {
+          entries.add(key);
+          return;
+        }
+        if (/^cultureN(_?\d+)?$/i.test(key)) {
+          entries.add(key);
+        }
+      });
+      if (entries.size > 12) break;
+    }
+    const buildLabel = (key) => {
+      const normalized = key.toLowerCase();
+      if (normalized === "culture") return "Culture (champ générique)";
+      const match = normalized.match(/^culturen_?(\d+)?$/);
+      if (!match) return key;
+      const offset = match[1] ? Number(match[1]) : 0;
+      if (!Number.isFinite(offset) || offset <= 0) {
+        return "Culture N";
+      }
+      return `Culture N-${offset}`;
+    };
+    const options = Array.from(entries).map((key) => ({
+      value: key,
+      label: buildLabel(key),
+    }));
+    if (viewerFilters.cultureField && !entries.has(viewerFilters.cultureField)) {
+      options.push({
+        value: viewerFilters.cultureField,
+        label: buildLabel(viewerFilters.cultureField),
+      });
+    }
+    options.sort((a, b) => {
+      const extract = (value) => {
+        const match = value.toLowerCase().match(/^culturen_?(\d+)?$/);
+        if (!match) return Number.POSITIVE_INFINITY;
+        return match[1] ? Number(match[1]) : 0;
+      };
+      return extract(a.value) - extract(b.value);
+    });
+    if (!options.length) {
+      return [
+        { value: "cultureN", label: "Culture N" },
+        { value: "cultureN_1", label: "Culture N-1" },
+      ];
+    }
+    return options;
+  }, [parcellesCollection, viewerFilters.cultureField]);
 
-  // ---- Layout racine (grille 2 colonnes conditionnelle)
-  const layoutStyle = {
-    height: "100%",
-    position: "relative",
-    display: "grid",
-    gridTemplateColumns: sideOpen ? "1fr 420px" : "1fr 0px",
-  };
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const sample = viewerCollection?.features?.find((feature) => feature?.properties);
+    if (!sample) return;
+    const keys = Object.keys(sample.properties || {});
+    console.info("[ViewerFilters] properties keys sample", keys);
+    console.info("[ViewerFilters] culture year mapping", {
+      cultureYear,
+      cultureValue: sample.properties?.culture,
+    });
+  }, [viewerCollection, cultureYear]);
 
   return (
-    <div style={layoutStyle}>
-      {/* Carte */}
-      <div id="map" style={{ height: "100dvh", width: "100%" }} />
-
-      {/* ⛔️ retiré : panneau d’info sols alimenté par GetFeatureInfo distant */}
-      {/* <SoilInfoPanel info={soilInfo} /> */}
-
-      {/* Panneau latéral (onglets + repliable) */}
+    <div style={{ position: "relative", width: "100%", height: "100vh" }}>
       <div
         style={{
-          padding: sideOpen ? 16 : 0,
-          borderLeft: sideOpen ? "1px solid #eee" : "none",
-          overflowY: "auto",
-          display: sideOpen ? "block" : "none",
+          position: "absolute",
+          top: 12,
+          right: 12,
+          zIndex: 30,
+          display: "flex",
+          gap: 8,
         }}
       >
-        {/* En-tête + bouton pour replier */}
-        <div
+        <button
+          type="button"
+          onClick={() => setMapMode("viewer")}
           style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 8,
+            padding: "6px 10px",
+            borderRadius: 8,
+            border: "1px solid #d1d5db",
+            background: mapMode === "viewer" ? "#111" : "#fff",
+            color: mapMode === "viewer" ? "#fff" : "#111",
+            cursor: "pointer",
           }}
         >
-          <h1 style={{ margin: 0, fontSize: 18 }}>Assolia Telepac Mapper</h1>
-          <button
-            onClick={() => setSideOpen(false)}
-            title="Replier le panneau"
-            style={{
-              padding: "6px 8px",
-              borderRadius: 6,
-              border: "1px solid #ddd",
-              background: "#fff",
-              cursor: "pointer",
-            }}
-          >
-            ◀
-          </button>
-        </div>
-
-        {/* Onglets */}
-        <div
-          style={{ display: "flex", gap: 6, marginTop: 12, marginBottom: 8 }}
+          Viewer
+        </button>
+        <button
+          type="button"
+          onClick={() => setMapMode("editor")}
+          style={{
+            padding: "6px 10px",
+            borderRadius: 8,
+            border: "1px solid #d1d5db",
+            background: mapMode === "editor" ? "#111" : "#fff",
+            color: mapMode === "editor" ? "#fff" : "#111",
+            cursor: "pointer",
+          }}
         >
-          <button
-            onClick={() => setActiveTab("parcelles")}
+          Editor
+        </button>
+      </div>
+
+      {mapMode === "viewer" ? (
+        <>
+          <div
             style={{
-              padding: "8px 10px",
-              borderRadius: 8,
-              border: "1px solid #ddd",
-              background: activeTab === "parcelles" ? "#eef6ff" : "#fff",
-              cursor: "pointer",
-            }}
-          >
-            Parcelles
-          </button>
-          <button
-            onClick={() => setActiveTab("calques")}
-            style={{
-              padding: "8px 10px",
-              borderRadius: 8,
-              border: "1px solid #ddd",
-              background: activeTab === "calques" ? "#ffeeeeff" : "#fff",
-              cursor: "pointer",
+              position: "absolute",
+              top: 12,
+              left: 12,
+              zIndex: 25,
+              background: "#fff",
+              border: "1px solid #e5e7eb",
+              borderRadius: 10,
+              padding: 12,
+              width: 240,
+              boxShadow: "0 8px 18px rgba(15, 23, 42, 0.12)",
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
             }}
           >
             Calques
@@ -225,27 +233,116 @@ export default function App() {
               <RasterToggles mapRef={mapRef} />
               <div
                 style={{
-                  border: "1px solid #eee",
-                  borderRadius: 8,
-                  padding: 8,
-                  marginTop: 8,
+                  maxHeight: 140,
+                  overflowY: "auto",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: 6,
+                  padding: "6px 8px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 4,
+                  background: "#f8fafc",
                 }}
               >
-                <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <input
-                    type="checkbox"
-                    checked={rrpVisible}
-                    onChange={(e) => setRrpVisible(e.target.checked)}
-                  />
-                  <span>Carte des sols RRP Occitanie</span>
-                </label>
-                <p style={{ color: "#666", fontSize: 12, marginTop: 8 }}>
-                  Chargée depuis <code>/public/data/rrp_occitanie.zip</code>.
-                </p>
+                {availableCultures.length ? (
+                  availableCultures.map((culture) => (
+                    <label
+                      key={culture.code}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                        fontSize: 12,
+                        color: "#1f2937",
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedCultures.has(culture.code)}
+                        onChange={(event) => {
+                          setViewerFilters((prev) => {
+                            const next = new Set(prev.cultures);
+                            if (event.target.checked) {
+                              next.add(culture.code);
+                            } else {
+                              next.delete(culture.code);
+                            }
+                            return { ...prev, cultures: Array.from(next) };
+                          });
+                        }}
+                      />
+                      <span
+                        style={{
+                          width: 10,
+                          height: 10,
+                          borderRadius: 999,
+                          background: culturePalette[culture.code] || "#94a3b8",
+                          border: "1px solid rgba(15, 23, 42, 0.2)",
+                        }}
+                      />
+                      <span>{culture.label}</span>
+                    </label>
+                  ))
+                ) : (
+                  <span style={{ fontSize: 11, color: "#64748b" }}>
+                    Aucune culture disponible.
+                  </span>
+                )}
               </div>
-              {/* ⛔️ retiré : contrôle sols en ligne (WMS/WFS) */}
-              {/* <SoilsControl ... /> */}
-            </div>
+            </label>
+            <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <span style={{ fontSize: 12, color: "#475569" }}>Ilot</span>
+              <input
+                type="text"
+                value={viewerFilters.ilot}
+                onChange={(event) =>
+                  setViewerFilters((prev) => ({
+                    ...prev,
+                    ilot: event.target.value,
+                  }))
+                }
+                style={{
+                  border: "1px solid #d1d5db",
+                  borderRadius: 6,
+                  padding: "6px 8px",
+                  fontSize: 12,
+                }}
+              />
+            </label>
+            <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <span style={{ fontSize: 12, color: "#475569" }}>Couleurs</span>
+              <select
+                value={colorBy}
+                onChange={(event) => setColorBy(event.target.value)}
+                style={{
+                  border: "1px solid #d1d5db",
+                  borderRadius: 6,
+                  padding: "6px 8px",
+                  fontSize: 12,
+                }}
+              >
+                <option value="culture">Culture</option>
+                <option value="precedent">Précédent</option>
+                <option value="ilot">Ilot</option>
+                <option value="exploitation">Exploitation</option>
+                <option value="score">Score</option>
+              </select>
+            </label>
+            <button
+              type="button"
+              onClick={() => setViewerFilters(VIEWER_DEFAULT_FILTERS)}
+              style={{
+                marginTop: 4,
+                borderRadius: 6,
+                border: "1px solid #e2e8f0",
+                background: "#f8fafc",
+                padding: "6px 8px",
+                fontSize: 12,
+                cursor: "pointer",
+              }}
+            >
+              Réinitialiser les filtres
+            </button>
           </div>
         )}
       </div>
@@ -307,19 +404,20 @@ export default function App() {
             selectFeatureOnMap={selectFeatureOnMap}
             compact={compact}
           />
-        </div>
-
-        <div style={{ marginLeft: "auto" }}>
-          <button
-            onClick={() => setCompact((v) => !v)}
-            style={btn}
-            title={compact ? "Agrandir le panneau" : "Réduire en barre d’outils"}
-          >
-            <IconChevron up={compact} />
-            {label(compact ? "Agrandir" : "Réduire")}
-          </button>
-        </div>
-      </div>
+        </>
+      ) : (
+        <Suspense fallback={<div style={{ padding: 24 }}>Chargement de l'éditeur…</div>}>
+          <ParcellesEditorMap />
+        </Suspense>
+      )}
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <ParcellesProvider>
+      <AppContent />
+    </ParcellesProvider>
   );
 }

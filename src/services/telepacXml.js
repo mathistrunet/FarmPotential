@@ -1,9 +1,33 @@
 // src/services/telepacXml.js
-import { toWgs84 } from "../utils/proj";
+import { toLambert93, toWgs84 } from "../utils/proj";
 import { ringToGml, ringAreaM2 } from "../utils/geometry";
 import { telepacMesParcellesImporter } from "../lib/importers";
 
-let autoNumero = 1;
+function normalizeNumero(value) {
+  return value == null ? "" : String(value).trim();
+}
+
+function normalizeDigits(value) {
+  return normalizeNumero(value).replace(/\D/g, "");
+}
+
+function xmlEscape(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function stableIlotReference(pacage, ilotNumero) {
+  const source = `${pacage}|Courante|${ilotNumero}`;
+  let hash = 0;
+  for (let i = 0; i < source.length; i += 1) {
+    hash = (hash * 31 + source.charCodeAt(i)) >>> 0;
+  }
+  const prefix = normalizeDigits(pacage).slice(0, 9).padEnd(9, "0");
+  const suffix = String(hash % 1000).padStart(3, "0");
+  return `${prefix}${suffix}`;
+}
 
 function isTruthyBoolean(value) {
   if (typeof value === "boolean") return value;
@@ -18,24 +42,24 @@ function isTruthyBoolean(value) {
 export function buildTelepacXML(features) {
   const NS = "urn:x-telepac:fr.gouv.agriculture.telepac:echange-producteur";
   const GML = "http://www.opengis.net/gml";
-  const esc = (s) =>
-    String(s)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
+  const esc = (s) => xmlEscape(s);
+  const cultureColumn = normalizeNumero(options.cultureColumn);
 
-  // Ilot englobant (approx en WGS84 pour simplicité)
-  const first = features[0];
-  const ring0 = first.geometry.coordinates[0];
-  let minX = Infinity,
-    minY = Infinity,
-    maxX = -Infinity,
-    maxY = -Infinity;
-  ring0.forEach(([lon, lat]) => {
-    minX = Math.min(minX, lon);
-    minY = Math.min(minY, lat);
-    maxX = Math.max(maxX, lon);
-    maxY = Math.max(maxY, lat);
+  const meta = inferProducerMeta(Array.isArray(features) ? features : []);
+
+  if (!Array.isArray(features) || features.length === 0) {
+    return `<?xml version="1.0" encoding="UTF-8"?>\n<producteurs xmlns="${NS}" xmlns:gml="${GML}">\n  <producteur numero-pacage="${meta.pacage}" campagne="Courante" fichier-xsd="Echanges-producteur-export-2025-V1">\n    <demandeur certificat-environnemental="false" dossier-sans-demande-aides="false">\n      <identification-societe>\n        <exploitation>${esc(meta.exploitation)}</exploitation>\n      </identification-societe>\n      <siret>${meta.siret}</siret>\n${meta.email ? `      <courriel>${esc(meta.email)}</courriel>\n` : ""}    </demandeur>\n    <rpg></rpg>\n  </producteur>\n</producteurs>`;
+  }
+
+  const globalCommune =
+    normalizeDigits(
+      firstProperty(features[0]?.properties || {}, ["code_insee", "commune", "insee", "codeCommune"])
+    ) || meta.communeSiege;
+
+  const usedIlotNumbers = new Set();
+  features.forEach((feature) => {
+    const ilotNumero = normalizeNumero(feature?.properties?.ilot_numero);
+    if (ilotNumero) usedIlotNumbers.add(ilotNumero);
   });
   const pad = 0.002; // ~200 m
   const ilotCoords = [
@@ -95,8 +119,90 @@ export function buildTelepacXML(features) {
     xml += `<surface-admissible>${ares}</surface-admissible>`;
     xml += `</parcelle>`;
   }
+  xml += `    </demandeur>\n`;
+  xml += `    <rpg>\n`;
 
-  xml += `</parcelles></ilot></rpg></producteur></producteurs>`;
+  const ilotPad = 5; // 5 m
+
+  orderedIlots.forEach((ilot) => {
+    if (!ilot.parcelles.length) return;
+
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    let hasCoords = false;
+    ilot.parcelles.forEach(({ feature }) => {
+      const rings = getAllOuterRings(feature);
+      rings.forEach((ring) => {
+        ring.forEach(([lon, lat]) => {
+          if (typeof lon !== "number" || typeof lat !== "number") return;
+          const [x, y] = toLambert93([lon, lat]);
+          hasCoords = true;
+          minX = Math.min(minX, x);
+          minY = Math.min(minY, y);
+          maxX = Math.max(maxX, x);
+          maxY = Math.max(maxY, y);
+        });
+      });
+    });
+
+    let ilotCoords = "";
+    if (hasCoords) {
+      ilotCoords = [
+        [minX - ilotPad, minY - ilotPad],
+        [maxX + ilotPad, minY - ilotPad],
+        [maxX + ilotPad, maxY + ilotPad],
+        [minX - ilotPad, maxY + ilotPad],
+        [minX - ilotPad, minY - ilotPad],
+      ]
+        .map(([x, y]) => `${x.toFixed(3)},${y.toFixed(3)}`)
+        .join(" ");
+    }
+
+    const rawIlotReference = firstProperty(ilot.parcelles[0]?.feature?.properties || {}, [
+      "numero_ilot_reference",
+      "numero-ilot-reference",
+      "ilot_reference",
+    ]);
+    const ilotReference = normalizeIlotReference(rawIlotReference, meta.pacage, ilot.numero);
+    const codeCommune = (globalCommune || "00000").slice(0, 5);
+
+    xml += `      <ilot numero-ilot-reference="${esc(ilotReference)}" numero-ilot="${esc(ilot.numero)}">\n`;
+    xml += `        <commune>${esc(codeCommune)}</commune>\n`;
+    xml += `        <geometrie><gml:Polygon><gml:outerBoundaryIs><gml:LinearRing><gml:coordinates>${ilotCoords}</gml:coordinates></gml:LinearRing></gml:outerBoundaryIs></gml:Polygon></geometrie>\n`;
+    xml += `        <parcelles>\n`;
+
+    ilot.parcelles
+      .sort((a, b) => a.index - b.index)
+      .forEach(({ feature, numero }) => {
+        const props = feature.properties || {};
+        const code = readCultureCodeFromProperty(props, cultureColumn) || normalizeNumero(props.code) || "JAC";
+        const ring = getFirstOuterRing(feature);
+        const gmlCoords = ring ? ringToGml(ring) : "";
+        const ares = ring ? Math.round(ringAreaM2(ring) / 100) : 0; //surface arrondie et transformée en ares
+
+        xml += `          <parcelle>\n`;
+        xml += `            <descriptif-parcelle numero-parcelle="${esc(numero)}">\n`;
+        xml += `              <culture-principale production-semences="false" production-fermiers="false" deshydratation="false" derogation-ukraine="false" culture-secondaire="A00" accident-culture="false">\n`;
+        xml += `                <code-culture>${esc(code)}</code-culture>\n`;
+        xml += `                <reconversion-pp>false</reconversion-pp>\n`;
+        xml += `                <retournement-pp>false</retournement-pp>\n`;
+        xml += `              </culture-principale>\n`;
+        xml += `              <engagements-maec elevage-monogastrique="false"/>\n`;
+        xml += `            </descriptif-parcelle>\n`;
+        xml += `            <geometrie><gml:Polygon><gml:outerBoundaryIs><gml:LinearRing><gml:coordinates>${gmlCoords}</gml:coordinates></gml:LinearRing></gml:outerBoundaryIs></gml:Polygon></geometrie>\n`;
+        xml += `            <surface-admissible>${ares}</surface-admissible>\n`;
+        xml += `          </parcelle>\n`;
+      });
+
+    xml += `        </parcelles>\n`;
+    xml += `      </ilot>\n`;
+  });
+
+  xml += `    </rpg>\n`;
+  xml += `  </producteur>\n`;
+  xml += `</producteurs>`;
   return xml;
 }
 
@@ -190,6 +296,15 @@ function parseLegacyTelepacXml(text) {
   const parcelles = xml.getElementsByTagNameNS
     ? xml.getElementsByTagNameNS(NS, "parcelle")
     : xml.querySelectorAll("parcelle");
+  const producteurs = xml.getElementsByTagNameNS
+    ? xml.getElementsByTagNameNS(NS, "producteur")
+    : xml.getElementsByTagName("producteur");
+  const producteurNode = producteurs?.[0] || null;
+  const pacage =
+    (producteurNode &&
+      producteurNode.getAttribute &&
+      producteurNode.getAttribute("numero-pacage")) ||
+    "";
 
   const features = [];
   for (let i = 0; i < parcelles.length; i++) {
@@ -262,9 +377,10 @@ function parseLegacyTelepacXml(text) {
       type: "Feature",
       properties: {
         numero,
-        code,
         ilot_numero,
         nom_affiche,
+        ...cultureProps,
+        ...(pacage ? { code_exploitation: pacage } : {}),
         ...(surfaceA !== undefined ? { surface_admissible: surfaceA } : {}),
         ...(hasConduiteBio ? { conduite_bio: conduiteBio, isOrganic: conduiteBio } : {}),
         ...(organicType ? { organicType } : {}),

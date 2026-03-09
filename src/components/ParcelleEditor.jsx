@@ -1,7 +1,15 @@
 // src/components/ParcelleEditor.jsx
-import React, { useEffect, useRef, useState } from "react";
-import { entriesCodebook, labelFromCode, codeFromLabel } from "../utils/cultureLabels";
-import { ringAreaM2 } from "../utils/geometry";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import centroid from "@turf/centroid";
+import booleanPointInPolygon from "@turf/boolean-point-in-polygon";
+import {
+  entriesCodebook,
+  labelFromCode,
+  codeFromLabel,
+} from "../utils/cultureLabels";
+import { featureAreaM2 } from "../utils/geometry";
+import { resolveOverlappingParcels } from "../utils/overlapResolution";
+import { fetchRpgGeoJSON, getCultureLabel } from "../services/rpg";
 
 function computeCultureWarning(raw) {
   const value = (raw ?? "").trim();
@@ -207,6 +215,44 @@ export default function ParcelleEditor({ features, setFeatures, selectedId, onSe
             {surfaceHa != null && !Number.isNaN(surfaceHa) && (
               <div style={{ fontSize: 12, color: "#555", marginBottom: 6 }}>
                 Surface : {surfaceHa.toFixed(2)} ha
+              </div>
+            )}
+            {(f.properties?.overlap_warning || f.properties?.import_mismatch) && (
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
+                {f.properties?.overlap_warning && (
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 4,
+                      padding: "2px 8px",
+                      borderRadius: 999,
+                      background: "#fee2e2",
+                      color: "#991b1b",
+                      fontSize: 11,
+                      fontWeight: 600,
+                    }}
+                  >
+                    ⚠️ Chevauchement détecté
+                  </span>
+                )}
+                {f.properties?.import_mismatch && (
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 4,
+                      padding: "2px 8px",
+                      borderRadius: 999,
+                      background: "#ffedd5",
+                      color: "#9a3412",
+                      fontSize: 11,
+                      fontWeight: 600,
+                    }}
+                  >
+                    ⚠️ Import mismatch
+                  </span>
+                )}
               </div>
             )}
 

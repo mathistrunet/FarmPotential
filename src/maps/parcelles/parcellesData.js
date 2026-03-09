@@ -1,0 +1,287 @@
+export const buildStableHash = (value) => {
+  const text = typeof value === "string" ? value : JSON.stringify(value ?? "");
+  let hash = 5381;
+  for (let i = 0; i < text.length; i += 1) {
+    hash = (hash * 33) ^ text.charCodeAt(i);
+  }
+  return (hash >>> 0).toString(16);
+};
+
+const DEFAULT_PARCELLE_NUMBER_KEYS = [
+  "parcelleNo",
+  "displayNo",
+  "numero",
+  "nom_affiche",
+  "idlot_numero",
+  "__id",
+  "id",
+];
+
+const PROPERTY_ALIASES = {
+  culture: [
+    "culture",
+    "Culture",
+    "CULTURE",
+    "cultureN",
+    "cultureN_0",
+    "cultureN0",
+    "code_culture",
+    "codeCulture",
+    "code",
+  ],
+  precedent: [
+    "precedent",
+    "Precedent",
+    "PRECEDENT",
+    "precedent_culture",
+    "precedentCulture",
+    "culture_prec",
+    "culturePrec",
+  ],
+  ilot: ["ilot", "Ilot", "ILOT", "ilot_numero", "numero_ilot", "numeroIlot"],
+  exploitation: [
+    "exploitation",
+    "Exploitation",
+    "EXPLOITATION",
+    "exploitationId",
+    "exploitation_id",
+    "id_exploitation",
+    "codeExploitation",
+  ],
+};
+
+const CULTURE_YEAR_ALIASES = {
+  current: ["cultureN", "cultureN_0", "cultureN0", "culture", "Culture", "CULTURE"],
+  previous: ["cultureN_1", "cultureN1", "culture_prec", "culturePrec"],
+};
+
+const normalizeStringValue = (value) => {
+  if (value == null) return null;
+  const text = String(value).trim();
+  return text.length ? text : null;
+};
+
+const resolvePropertyAlias = (properties, aliases) => {
+  for (const alias of aliases) {
+    const value = normalizeStringValue(properties?.[alias]);
+    if (value != null) return value;
+  }
+  return null;
+};
+
+const resolvePropertyKey = (properties, key) => {
+  if (!properties || !key) return null;
+  if (Object.prototype.hasOwnProperty.call(properties, key)) {
+    return normalizeStringValue(properties[key]);
+  }
+  const lowered = String(key).toLowerCase();
+  const matched = Object.keys(properties).find(
+    (prop) => prop.toLowerCase() === lowered
+  );
+  if (!matched) return null;
+  return normalizeStringValue(properties[matched]);
+};
+
+const findUniqueKey = (features, preferredKeys) => {
+  for (const key of preferredKeys) {
+    const seen = new Set();
+    let unique = true;
+    for (const feature of features) {
+      const value = resolvePropertyKey(feature?.properties, key);
+      if (value == null) {
+        unique = false;
+        break;
+      }
+      if (seen.has(value)) {
+        unique = false;
+        break;
+      }
+      seen.add(value);
+    }
+    if (unique && seen.size > 0) return key;
+  }
+  return null;
+};
+
+const getStableSortKey = (feature, fallback) =>
+  buildStableHash({
+    geometry: feature?.geometry,
+    id: feature?.id ?? feature?.properties?.id ?? fallback,
+  });
+
+export const assignUniqueParcelNumbers = (payload, { preferredKeys } = {}) => {
+  const source = resolveSourceCollection(payload) || {
+    type: "FeatureCollection",
+    features: [],
+  };
+  const features = source.features ?? [];
+  if (!features.length) return source;
+  const keys = Array.isArray(preferredKeys) && preferredKeys.length
+    ? preferredKeys
+    : DEFAULT_PARCELLE_NUMBER_KEYS;
+  const uniqueKey = findUniqueKey(features, keys);
+  const numbersByIndex = new Map();
+  if (uniqueKey) {
+    const used = new Set();
+    features.forEach((feature, index) => {
+      const rawValue = resolvePropertyKey(feature?.properties, uniqueKey);
+      let value = rawValue != null ? String(rawValue) : String(index + 1);
+      if (used.has(value)) {
+        let suffix = 2;
+        let candidate = `${value}-${suffix}`;
+        while (used.has(candidate)) {
+          suffix += 1;
+          candidate = `${value}-${suffix}`;
+        }
+        value = candidate;
+      }
+      used.add(value);
+      numbersByIndex.set(index, value);
+    });
+  } else {
+    const sorted = features
+      .map((feature, index) => ({
+        index,
+        sortKey: getStableSortKey(feature, index),
+      }))
+      .sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+    let counter = 1;
+    sorted.forEach(({ index }) => {
+      numbersByIndex.set(index, String(counter));
+      counter += 1;
+    });
+  }
+
+  return {
+    ...source,
+    features: features.map((feature, index) => {
+      if (!feature || feature.type !== "Feature") return feature;
+      const parcelleNo = numbersByIndex.get(index);
+      if (parcelleNo == null) return feature;
+      return {
+        ...feature,
+        properties: {
+          ...(feature.properties || {}),
+          parcelleNo,
+        },
+      };
+    }),
+  };
+};
+
+const resolveSourceCollection = (payload) => {
+  if (!payload || typeof payload !== "object") return null;
+  if (payload.type === "FeatureCollection" && Array.isArray(payload.features)) {
+    return payload;
+  }
+  if (Array.isArray(payload.features)) {
+    return { type: "FeatureCollection", features: payload.features };
+  }
+  if (Array.isArray(payload)) {
+    return { type: "FeatureCollection", features: payload };
+  }
+  if (payload.data || payload.geojson || payload.collection) {
+    return (
+      resolveSourceCollection(payload.data) ||
+      resolveSourceCollection(payload.geojson) ||
+      resolveSourceCollection(payload.collection)
+    );
+  }
+  return null;
+};
+
+const resolveCultureYearValue = (properties, yearKey = "current") => {
+  const directValue = resolvePropertyKey(properties, yearKey);
+  if (directValue != null) return directValue;
+  const aliases = CULTURE_YEAR_ALIASES[yearKey];
+  if (Array.isArray(aliases)) {
+    const value = resolvePropertyAlias(properties, aliases);
+    if (value != null) return value;
+  }
+  if (yearKey === "previous") {
+    return resolvePropertyAlias(properties, PROPERTY_ALIASES.precedent);
+  }
+  return resolvePropertyAlias(properties, PROPERTY_ALIASES.culture);
+};
+
+export const normalizeParcellesCollection = (payload) => {
+  const source = resolveSourceCollection(payload) || {
+    type: "FeatureCollection",
+    features: [],
+  };
+  const usedIds = new Set();
+  const normalizeFeature = (feature, index) => {
+    if (!feature || feature.type !== "Feature") return null;
+    const properties = feature.properties || {};
+    const normalized = { ...properties };
+    const culture = Object.prototype.hasOwnProperty.call(properties, "culture")
+      ? normalizeStringValue(properties.culture)
+      : resolvePropertyAlias(properties, PROPERTY_ALIASES.culture);
+    const precedent = Object.prototype.hasOwnProperty.call(properties, "precedent")
+      ? normalizeStringValue(properties.precedent)
+      : resolvePropertyAlias(properties, PROPERTY_ALIASES.precedent);
+    const ilot = resolvePropertyAlias(properties, PROPERTY_ALIASES.ilot);
+    const exploitation = resolvePropertyAlias(properties, PROPERTY_ALIASES.exploitation);
+    if (culture != null) normalized.culture = culture;
+    if (precedent != null) normalized.precedent = precedent;
+    if (ilot != null) normalized.ilot = ilot;
+    if (exploitation != null) {
+      normalized.exploitation = exploitation;
+      if (normalized.exploitationId == null) {
+        normalized.exploitationId = exploitation;
+      }
+    }
+    const baseId =
+      feature.id ??
+      normalized.__id ??
+      normalized.id ??
+      `parcelle-${buildStableHash({
+        geometry: feature.geometry,
+        nom: normalized.nom ?? normalized.nom_affiche ?? "",
+        ilot: normalized.ilot ?? "",
+      })}`;
+    let nextId = String(baseId);
+    if (usedIds.has(nextId)) {
+      nextId = `${nextId}-${index}`;
+    }
+    usedIds.add(nextId);
+
+    return {
+      ...feature,
+      id: nextId,
+      properties: {
+        ...normalized,
+        __id: nextId,
+        id: normalized.id ?? nextId,
+      },
+    };
+  };
+
+  return {
+    type: "FeatureCollection",
+    features: source.features.map(normalizeFeature).filter(Boolean),
+  };
+};
+
+export const projectCultureYear = (payload, yearKey = "current") => {
+  const source = resolveSourceCollection(payload) || {
+    type: "FeatureCollection",
+    features: [],
+  };
+
+  return {
+    ...source,
+    features: source.features.map((feature) => {
+      if (!feature || feature.type !== "Feature") return feature;
+      const properties = feature.properties || {};
+      const cultureValue = resolveCultureYearValue(properties, yearKey);
+      return {
+        ...feature,
+        properties: {
+          ...properties,
+          culture: cultureValue ?? null,
+        },
+      };
+    }),
+  };
+};

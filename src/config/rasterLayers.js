@@ -1,3 +1,73 @@
+// Clé d'accès GeoPlateforme facultative : plusieurs couches sont publiques,
+// mais VITE_GEO_PORTAIL_API_KEY peut être défini pour accéder aux ressources
+// qui le nécessitent.
+const GEO_PORTAIL_KEY =
+  import.meta.env.VITE_GEO_PORTAIL_API_KEY?.trim() || null;
+
+const withOptionalKey = (baseUrl) => {
+  if (!GEO_PORTAIL_KEY) {
+    return baseUrl;
+  }
+  const [url, hash] = baseUrl.split("#");
+  const separator = url.includes("?") ? "&" : "?";
+  return `${url}${separator}apikey=${encodeURIComponent(
+    GEO_PORTAIL_KEY,
+  )}${hash ? `#${hash}` : ""}`;
+};
+
+const normaliseFeatureCollection = (payload) => {
+  if (!payload) return { items: [], summary: null };
+
+  if (typeof payload === "string") {
+    return { items: [], summary: payload };
+  }
+
+  if (payload.text && typeof payload.text === "string") {
+    return { items: [], summary: payload.text };
+  }
+
+  const featureCollection =
+    payload?.type === "FeatureCollection"
+      ? payload
+      : payload?.FeatureCollection?.type === "FeatureCollection"
+      ? payload.FeatureCollection
+      : null;
+
+  const features = Array.isArray(featureCollection?.features)
+    ? featureCollection.features
+    : Array.isArray(payload?.features)
+    ? payload.features
+    : [];
+
+  const items = features.map((feature, index) => {
+    const props = feature?.properties || {};
+    const candidateTitle =
+      feature?.id ||
+      props.nom ||
+      props.NOM ||
+      props.libelle ||
+      props.LIBELLE ||
+      props.appellation ||
+      props.APPELLATION ||
+      `Entité ${index + 1}`;
+
+    return {
+      id: feature?.id ?? index,
+      title: String(candidateTitle),
+      properties: props,
+    };
+  });
+
+  const summary =
+    items.length > 0 ? `${items.length} élément${items.length > 1 ? "s" : ""}` : null;
+
+  return { items, summary };
+};
+
+const defaultFeatureInfoParser = (payload) => normaliseFeatureCollection(payload);
+
+export const DEFAULT_FEATURE_INFO_PARSER = defaultFeatureInfoParser;
+
 export const RASTER_LAYERS = [
   {
     id: "osm_std",
@@ -19,11 +89,12 @@ export const RASTER_LAYERS = [
     defaultVisible: false,
     defaultOpacity: 0.8,
   },
-
   {
     id: "ign_satellite",
     label: "IGN Satellite",
-    url: "https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&FORMAT=image/jpeg",
+    url: withOptionalKey(
+      "https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&FORMAT=image/jpeg",
+    ),
     subdomains: null,
     tileSize: 256,
     attribution: "© IGN",
@@ -33,10 +104,13 @@ export const RASTER_LAYERS = [
   {
     id: "fr_soils",
     label: "Types de sols (GisSol / INRAE)",
-    url: "https://data.geopf.fr/wmts/INRA.CARTE.SOLS/normal/default/PM/{z}/{x}/{y}.png",
+    url: "https://data.geopf.fr/wmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&LAYER=INRA.CARTE.SOLS&STYLE=normal&FORMAT=image/png&TILEMATRIXSET=PM&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}",
     subdomains: null,
     tileSize: 256,
     attribution: "© IGN · © GisSol/INRAE",
+    mapLayerId: "soil-wmts",
+    sourceId: "soil-wmts",
+    managedExternally: true,
     defaultVisible: false,
     defaultOpacity: 0.85,
   },
