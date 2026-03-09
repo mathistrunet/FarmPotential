@@ -190,7 +190,7 @@ function AppContent() {
             }}
           >
             Calques
-          </button>
+          </div>
         </div>
 
         {/* RPG (autonome) */}
@@ -289,7 +289,7 @@ function AppContent() {
                   </span>
                 )}
               </div>
-            </label>
+            </div>
             <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               <span style={{ fontSize: 12, color: "#475569" }}>Ilot</span>
               <input
