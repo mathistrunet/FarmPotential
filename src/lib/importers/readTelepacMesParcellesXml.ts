@@ -1,6 +1,7 @@
 import { DOMParser } from '@xmldom/xmldom';
 import { polygonFromGml, type GmlPolygon } from '../utils/gml';
 import { isLambert93Collection, toWgs842154 } from '../utils/reproject';
+import { resolvePrecisionForCode, splitCultureKey } from '../../utils/cultureLabels';
 import type {
   Position,
   TelepacFeature,
@@ -260,6 +261,8 @@ function buildProperties(
     productionSemences?: boolean;
     productionFermiers?: boolean;
     deshydratation?: boolean;
+    derogationUkraine?: boolean;
+    accidentCulture?: boolean;
     reconversionPP?: boolean;
     obligationReimplantationPP?: boolean;
     conduiteBio?: boolean;
@@ -283,6 +286,8 @@ function buildProperties(
     production_semences: details.productionSemences,
     production_fermiers: details.productionFermiers,
     deshydratation: details.deshydratation,
+    derogation_ukraine: details.derogationUkraine,
+    accident_culture: details.accidentCulture,
     reconversion_pp: details.reconversionPP,
     obligation_reimplantation_pp: details.obligationReimplantationPP,
     conduite_bio: details.conduiteBio,
@@ -366,6 +371,8 @@ export async function readTelepacMesParcellesXml(input: string | ArrayBuffer): P
         const productionSemences = parseBooleanAttribute(culturePrincipale, 'production-semences');
         const productionFermiers = parseBooleanAttribute(culturePrincipale, 'production-fermiers');
         const deshydratation = parseBooleanAttribute(culturePrincipale, 'deshydratation');
+        const derogationUkraine = parseBooleanAttribute(culturePrincipale, 'derogation-ukraine');
+        const accidentCulture = parseBooleanAttribute(culturePrincipale, 'accident-culture');
         const reconversionPP = parseBooleanChild(culturePrincipale, 'reconversion-pp');
         const obligationReimplantationPP = parseBooleanChild(culturePrincipale, 'obligation-reimplantation-pp');
         const dateLabour = normalizeDateLabour(culturePrincipale.getAttribute('date-labour'));
@@ -397,11 +404,13 @@ export async function readTelepacMesParcellesXml(input: string | ArrayBuffer): P
         const properties = buildProperties(pacage, ilotNumber, parcelleNumber, codeCulture, {
           ilotReference: ilotReference ?? null,
           commune,
-          precision: precision ?? null,
+          precision: resolvedPrecision || null,
           cultureSecondaire: cultureSecondaire ?? null,
           productionSemences,
           productionFermiers,
           deshydratation,
+          derogationUkraine,
+          accidentCulture,
           reconversionPP,
           obligationReimplantationPP,
           conduiteBio,

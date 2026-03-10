@@ -22,7 +22,7 @@ export function toWgs842154(point: [number, number]): [number, number] {
 
 export function isLambert93(point: [number, number]): boolean {
   const [x, y] = point;
-  return x >= 600000 && x <= 1300000 && y >= 6000000 && y <= 7200000;
+  return x >= 0 && x <= 1300000 && y >= 5000000 && y <= 7400000;
 }
 
 export function isLambert93Collection(points: Array<[number, number]>): boolean {

@@ -150,7 +150,11 @@ export function useToponymieAutoNaming(setFeatures) {
           const key = feature?.id ?? `idx:${index}`;
           const name = finalMap.get(key);
           if (!name) return feature;
-          const props = { ...(feature?.properties || {}), nom: name };
+          const props = { ...(feature?.properties || {}) };
+          props.nom = name;
+          props.nom_parcelle = name;
+          props.NOM_PARCEL = name;
+          props.nom_affiche = name;
           changed = true;
           return { ...feature, properties: props };
         });
@@ -165,3 +169,4 @@ export function useToponymieAutoNaming(setFeatures) {
 
   return { fillToponymieNames, isNaming };
 }
+

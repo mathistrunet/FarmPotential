@@ -406,3 +406,25 @@ function normalizeUcsId(value) {
   const match = normalized.match(/(\d+)/);
   return match ? match[1] : "";
 }
+
+
+export function normalizeStructureMappings(payload) {
+  const rawMappings = payload?.mappings && typeof payload.mappings === "object" ? payload.mappings : {};
+  const mappings = {};
+  Object.entries(rawMappings).forEach(([structure, entry]) => {
+    const soilTypes = Array.isArray(entry?.soilTypes)
+      ? entry.soilTypes.map((item) => String(item || "").trim()).filter(Boolean)
+      : [];
+    const rawCombinationMap = entry?.combinationMap && typeof entry.combinationMap === "object"
+      ? entry.combinationMap
+      : {};
+    const combinationMap = {};
+    Object.entries(rawCombinationMap).forEach(([key, value]) => {
+      const name = String(value || "").trim();
+      if (name) combinationMap[String(key || "").trim()] = name;
+    });
+    mappings[String(structure || "").trim()] = { soilTypes, combinationMap };
+  });
+  return { mappings };
+}
+

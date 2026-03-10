@@ -3,6 +3,7 @@ import React, { useRef, useState } from "react";
 import { parseTelepacXmlToFeatures, buildTelepacXML } from "../services/telepacXml";
 import { parseShapefileZipToFeatures } from "../services/shapefileZip";
 import { buildParcelShapefileZip } from "../services/parcelleShapefile";
+import { resolveOverlappingParcels } from "../utils/overlapResolution";
 
 /** Icônes légères inline (gardées) */
 const iconStyle = { width: 18, height: 18, display: "inline-block", verticalAlign: "-3px" };
@@ -32,7 +33,7 @@ function parseYearInput(value) {
   return year;
 }
 
-function resolveCsvYear(file) {
+function _resolveCsvYear(file) {
   const detected = extractYearFromFilename(file?.name || "");
   if (detected != null) {
     const confirmed = window.confirm(
@@ -46,7 +47,7 @@ function resolveCsvYear(file) {
   return parseYearInput(input);
 }
 
-function resolveXmlYear(file, metaYear) {
+function _resolveXmlYear(file, metaYear) {
   if (Number.isFinite(metaYear)) return metaYear;
   const detected = extractYearFromFilename(file?.name || "");
   if (detected != null) return detected;
@@ -93,7 +94,7 @@ async function readFileText(file) {
   });
 }
 
-async function resolveTelepacCultureOffset(file, baseCultureYearRef) {
+async function _resolveTelepacCultureOffset(file, baseCultureYearRef) {
   const text = await readFileText(file);
   const { campaign, year, pacage } = detectTelepacMeta(text);
 
@@ -136,13 +137,11 @@ export default function ImportTelepacButton({
   zoomOnImport = true,
   labelImport,
   onImported,
-  onImportMeta,
   onError,
-  structureName,
 }) {
   const fileInputRef = useRef(null);
   const [loading, setLoading] = useState(false);
-  const baseCultureYearRef = useRef(null);
+  const _baseCultureYearRef = useRef(null);
 
   const btnDefault = {
     display: "inline-flex",
@@ -259,7 +258,6 @@ export default function ImportTelepacButton({
 
       onImported?.(feats);
     } catch (err) {
-      const code = err?.code ? ` [${err.code}]` : "";
       console.error(err);
       onError?.(err);
       alert(

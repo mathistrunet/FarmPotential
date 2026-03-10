@@ -1,5 +1,6 @@
 // src/services/telepacXml.js
 import { toLambert93, toWgs84 } from "../utils/proj";
+import { resolvePrecisionForCode, splitCultureKey } from "../utils/cultureLabels";
 import { ringToGml, ringAreaM2 } from "../utils/geometry";
 import { telepacMesParcellesImporter } from "../lib/importers";
 
@@ -18,17 +19,6 @@ function xmlEscape(value) {
     .replace(/>/g, "&gt;");
 }
 
-function stableIlotReference(pacage, ilotNumero) {
-  const source = `${pacage}|Courante|${ilotNumero}`;
-  let hash = 0;
-  for (let i = 0; i < source.length; i += 1) {
-    hash = (hash * 31 + source.charCodeAt(i)) >>> 0;
-  }
-  const prefix = normalizeDigits(pacage).slice(0, 9).padEnd(9, "0");
-  const suffix = String(hash % 1000).padStart(3, "0");
-  return `${prefix}${suffix}`;
-}
-
 function isTruthyBoolean(value) {
   if (typeof value === "boolean") return value;
   if (typeof value === "number") return value === 1;
@@ -39,90 +29,162 @@ function isTruthyBoolean(value) {
   return false;
 }
 
-export function buildTelepacXML(features) {
+function normalizeBooleanAttribute(value, fallback = false) {
+  const resolved = isTruthyBoolean(value);
+  if (resolved) return "true";
+  if (value === false || value === 0 || value === "false" || value === "0") return "false";
+  return fallback ? "true" : "false";
+}
+
+function getBooleanProp(props, keys, fallback = false) {
+  for (const key of keys) {
+    const value = props?.[key];
+    if (value == null) continue;
+    return normalizeBooleanAttribute(value, fallback);
+  }
+  return fallback ? "true" : "false";
+}
+
+function firstProperty(props, keys) {
+  for (const key of keys) {
+    const value = props?.[key];
+    if (value == null) continue;
+    const normalized = String(value).trim();
+    if (normalized) return normalized;
+  }
+  return "";
+}
+
+function inferProducerMeta(features) {
+  const firstProps = features?.[0]?.properties || {};
+  const pacage =
+    normalizeDigits(
+      firstProperty(firstProps, [
+        "code_exploitation",
+        "pacage",
+        "numero_pacage",
+        "numero-pacage",
+      ])
+    ) || "000000000";
+  return {
+    pacage,
+    siret: firstProperty(firstProps, ["siret", "SIRET"]),
+    exploitation: firstProperty(firstProps, ["exploitation", "nom_exploitation"]),
+    email: firstProperty(firstProps, ["courriel", "email", "mail"]),
+    communeSiege: normalizeDigits(
+      firstProperty(firstProps, ["code_insee", "commune", "insee", "codeCommune"])
+    ),
+  };
+}
+
+function normalizeIlotReference(raw, pacage, ilotNumero) {
+  const digits = normalizeDigits(raw);
+  if (digits.length >= 12) return digits.slice(0, 12);
+  const pac = normalizeDigits(pacage).padEnd(9, "0").slice(0, 9);
+  const suffix = String(ilotNumero ?? "1").replace(/\D/g, "").padStart(3, "0").slice(-3);
+  return `${pac}${suffix}`.padEnd(12, "0").slice(0, 12);
+}
+
+function readCultureCodeFromProperty(props, cultureColumn) {
+  if (cultureColumn) {
+    const value = props?.[cultureColumn];
+    if (value != null && String(value).trim()) {
+      return normalizeNumero(value).toUpperCase();
+    }
+  }
+  const fallback = firstProperty(props, [
+    "culture",
+    "cultureN",
+    "code_culture",
+    "code",
+    "CODE_CULTURE",
+  ]);
+  return normalizeNumero(fallback).toUpperCase();
+}
+
+function getFirstOuterRing(feature) {
+  const geom = feature?.geometry;
+  if (!geom) return null;
+  if (geom.type === "Polygon") return geom.coordinates?.[0] || null;
+  if (geom.type === "MultiPolygon") return geom.coordinates?.[0]?.[0] || null;
+  return null;
+}
+
+function getAllOuterRings(feature) {
+  const geom = feature?.geometry;
+  if (!geom) return [];
+  if (geom.type === "Polygon") return geom.coordinates?.[0] ? [geom.coordinates[0]] : [];
+  if (geom.type === "MultiPolygon") {
+    return (geom.coordinates || []).map((poly) => poly?.[0]).filter(Boolean);
+  }
+  return [];
+}
+
+export function buildTelepacXML(features, options = {}) {
   const NS = "urn:x-telepac:fr.gouv.agriculture.telepac:echange-producteur";
   const GML = "http://www.opengis.net/gml";
   const esc = (s) => xmlEscape(s);
   const cultureColumn = normalizeNumero(options.cultureColumn);
 
-  const meta = inferProducerMeta(Array.isArray(features) ? features : []);
+  const safeFeatures = Array.isArray(features) ? features : [];
+  const meta = inferProducerMeta(safeFeatures);
 
-  if (!Array.isArray(features) || features.length === 0) {
-    return `<?xml version="1.0" encoding="UTF-8"?>\n<producteurs xmlns="${NS}" xmlns:gml="${GML}">\n  <producteur numero-pacage="${meta.pacage}" campagne="Courante" fichier-xsd="Echanges-producteur-export-2025-V1">\n    <demandeur certificat-environnemental="false" dossier-sans-demande-aides="false">\n      <identification-societe>\n        <exploitation>${esc(meta.exploitation)}</exploitation>\n      </identification-societe>\n      <siret>${meta.siret}</siret>\n${meta.email ? `      <courriel>${esc(meta.email)}</courriel>\n` : ""}    </demandeur>\n    <rpg></rpg>\n  </producteur>\n</producteurs>`;
+  if (!safeFeatures.length) {
+    return `<?xml version="1.0" encoding="ISO-8859-1"?>
+` +
+      `<producteurs xmlns="${NS}" xmlns:gml="${GML}">` +
+      `<producteur numero-pacage="${esc(meta.pacage)}" campagne="Courante" fichier-xsd="Echanges-producteur-export-2025-V1">` +
+      `<demandeur certificat-environnemental="false" dossier-sans-demande-aides="false"></demandeur>` +
+      `<rpg></rpg>` +
+      `</producteur></producteurs>`;
   }
 
   const globalCommune =
     normalizeDigits(
-      firstProperty(features[0]?.properties || {}, ["code_insee", "commune", "insee", "codeCommune"])
-    ) || meta.communeSiege;
+      firstProperty(safeFeatures[0]?.properties || {}, [
+        "code_insee",
+        "commune",
+        "insee",
+        "codeCommune",
+      ])
+    ) ||
+    meta.communeSiege ||
+    "00000";
 
-  const usedIlotNumbers = new Set();
-  features.forEach((feature) => {
-    const ilotNumero = normalizeNumero(feature?.properties?.ilot_numero);
-    if (ilotNumero) usedIlotNumbers.add(ilotNumero);
+  const ilotsByNumero = new Map();
+  let autoNumero = 1;
+  safeFeatures.forEach((feature, index) => {
+    const props = feature?.properties || {};
+    const ilotNumero = normalizeNumero(props.ilot_numero || props.ilot || "1") || "1";
+    const rawNumero = normalizeNumero(props.numero || props.parcelle || "");
+    const numero = rawNumero !== "" ? rawNumero : String(autoNumero++);
+    const list = ilotsByNumero.get(ilotNumero) || [];
+    list.push({ feature, index, numero });
+    ilotsByNumero.set(ilotNumero, list);
   });
-  const pad = 0.002; // ~200 m
-  const ilotCoords = [
-    [minX - pad, minY - pad],
-    [maxX + pad, minY - pad],
-    [maxX + pad, maxY + pad],
-    [minX - pad, maxY + pad],
-    [minX - pad, minY - pad],
-  ]
-    .map(([lon, lat]) => `${lon.toFixed(6)},${lat.toFixed(6)}`)
-    .join(" ");
-  const numeroIlot =
-    (features[0]?.properties?.ilot_numero ?? "1").toString().trim() || "1";
 
-  let xml = `<?xml version="1.0" encoding="ISO-8859-1"?>\n`;
+  const orderedIlots = Array.from(ilotsByNumero.entries())
+    .map(([numero, parcelles]) => ({ numero, parcelles }))
+    .sort((a, b) => Number(a.numero) - Number(b.numero));
+
+  let xml = `<?xml version="1.0" encoding="ISO-8859-1"?>
+`;
   xml += `<producteurs xmlns="${NS}" xmlns:gml="${GML}">`;
-  xml += `<producteur>`;
-  xml += `<demandeur certificat-environnemental="false" dossier-sans-demande-aides="false"></demandeur>`;
-  xml += `<rpg>`;
-  xml += `<ilot numero-ilot="${numeroIlot}">`;
-  xml += `<geometrie><gml:Polygon><gml:outerBoundaryIs><gml:LinearRing><gml:coordinates>${ilotCoords}</gml:coordinates></gml:LinearRing></gml:outerBoundaryIs></gml:Polygon></geometrie>`;
-  xml += `<parcelles>`;
-
-  for (let i = 0; i < features.length; i++) {
-    const f = features[i];
-    const props = f.properties || {};
-    let numero = 0
-    for (let i = 0; i < features.length; i++) {
-      const f = features[i];
-      const props = f.properties || {};
-      const rawNumero = (props.numero ?? "").toString().trim();
-      numero = rawNumero !== "" ? rawNumero : String(autoNumero++);
-    }
-    const code = (props.code || "").trim() || "JAC"; // Mets automatiquement le code culture JAC quand on exporte une parcelle sans code culture
-    const gmlCoords = ringToGml(f.geometry.coordinates[0]);
-    const ares = Math.round(ringAreaM2(f.geometry.coordinates[0]) / 100); //surface arrondie et transformée en ares
-    const conduiteBioSource =
-      props.isOrganic ?? props.conduite_bio ?? props.bio ?? props.BIO ?? null;
-    const conduiteBio = isTruthyBoolean(conduiteBioSource);
-    const organicTypeSource =
-      props.organicType ?? props.type_conduite_bio ?? props["type-conduite-bio"] ?? null;
-    const organicType = organicTypeSource ? String(organicTypeSource).trim() : "";
-
-    xml += `<parcelle>`;
-    xml += `<descriptif-parcelle numero-parcelle="${esc(numero)}">`;
-    xml += `<culture-principale>`;
-    xml += `<code-culture>${esc(code)}</code-culture>`;
-    xml += `</culture-principale>`;
-    if (conduiteBio) {
-      const typeAttr = organicType || "AB";
-      xml += `<agri-bio conduite-bio="true" type-conduite-bio="${esc(
-        typeAttr
-      )}" conduite-maraichage="false" />`;
-    }
-    xml += `</descriptif-parcelle>`;
-    xml += `<geometrie><gml:Polygon><gml:outerBoundaryIs><gml:LinearRing><gml:coordinates>${gmlCoords}</gml:coordinates></gml:LinearRing></gml:outerBoundaryIs></gml:Polygon></geometrie>`;
-    xml += `<surface-admissible>${ares}</surface-admissible>`;
-    xml += `</parcelle>`;
+  xml += `<producteur numero-pacage="${esc(meta.pacage)}" campagne="Courante" fichier-xsd="Echanges-producteur-export-2025-V1">`;
+  xml += `<demandeur certificat-environnemental="false" dossier-sans-demande-aides="false">`;
+  if (meta.exploitation) {
+    xml += `<identification-societe><exploitation>${esc(meta.exploitation)}</exploitation></identification-societe>`;
   }
-  xml += `    </demandeur>\n`;
-  xml += `    <rpg>\n`;
+  if (meta.siret) {
+    xml += `<siret>${esc(meta.siret)}</siret>`;
+  }
+  if (meta.email) {
+    xml += `<courriel>${esc(meta.email)}</courriel>`;
+  }
+  xml += `</demandeur>`;
+  xml += `<rpg>`;
 
-  const ilotPad = 5; // 5 m
+  const ilotPad = 5; // meters
 
   orderedIlots.forEach((ilot) => {
     if (!ilot.parcelles.length) return;
@@ -132,6 +194,7 @@ export function buildTelepacXML(features) {
     let maxX = -Infinity;
     let maxY = -Infinity;
     let hasCoords = false;
+
     ilot.parcelles.forEach(({ feature }) => {
       const rings = getAllOuterRings(feature);
       rings.forEach((ring) => {
@@ -168,40 +231,52 @@ export function buildTelepacXML(features) {
     const ilotReference = normalizeIlotReference(rawIlotReference, meta.pacage, ilot.numero);
     const codeCommune = (globalCommune || "00000").slice(0, 5);
 
-    xml += `      <ilot numero-ilot-reference="${esc(ilotReference)}" numero-ilot="${esc(ilot.numero)}">\n`;
-    xml += `        <commune>${esc(codeCommune)}</commune>\n`;
-    xml += `        <geometrie><gml:Polygon><gml:outerBoundaryIs><gml:LinearRing><gml:coordinates>${ilotCoords}</gml:coordinates></gml:LinearRing></gml:outerBoundaryIs></gml:Polygon></geometrie>\n`;
-    xml += `        <parcelles>\n`;
+    xml += `<ilot numero-ilot-reference="${esc(ilotReference)}" numero-ilot="${esc(ilot.numero)}">`;
+    xml += `<commune>${esc(codeCommune)}</commune>`;
+    xml += `<geometrie><gml:Polygon><gml:outerBoundaryIs><gml:LinearRing><gml:coordinates>${ilotCoords}</gml:coordinates></gml:LinearRing></gml:outerBoundaryIs></gml:Polygon></geometrie>`;
+    xml += `<parcelles>`;
 
     ilot.parcelles
       .sort((a, b) => a.index - b.index)
       .forEach(({ feature, numero }) => {
-        const props = feature.properties || {};
-        const code = readCultureCodeFromProperty(props, cultureColumn) || normalizeNumero(props.code) || "JAC";
+        const props = feature?.properties || {};
+        const cultureKey = readCultureCodeFromProperty(props, cultureColumn) || normalizeNumero(props.code) || "JAC";
+        const split = splitCultureKey(cultureKey);
+        const code = split.code || normalizeNumero(cultureKey) || "JAC";
         const ring = getFirstOuterRing(feature);
         const gmlCoords = ring ? ringToGml(ring) : "";
-        const ares = ring ? Math.round(ringAreaM2(ring) / 100) : 0; //surface arrondie et transformée en ares
+        const ares = ring ? Math.round(ringAreaM2(ring) / 100) : 0;
+        const precisionRaw = firstProperty(props, ["precision", "precision_n", "precision_n0", "precision_n_0"]) || split.precision;
+        const precision = resolvePrecisionForCode(code, precisionRaw);
+        const cultureSecondaire = firstProperty(props, ["culture_secondaire", "culture-secondaire"]) || "A00";
+        const productionSemences = getBooleanProp(props, ["production_semences", "production-semences"]);
+        const productionFermiers = getBooleanProp(props, ["production_fermiers", "production-fermiers"]);
+        const deshydratation = getBooleanProp(props, ["deshydratation"]);
+        const derogationUkraine = getBooleanProp(props, ["derogation_ukraine", "derogation-ukraine"]);
+        const accidentCulture = getBooleanProp(props, ["accident_culture", "accident-culture"]);
+        const maecElevage = getBooleanProp(props, ["maec_elevage_monogastrique", "elevage_monogastrique"]);
 
-        xml += `          <parcelle>\n`;
-        xml += `            <descriptif-parcelle numero-parcelle="${esc(numero)}">\n`;
-        xml += `              <culture-principale production-semences="false" production-fermiers="false" deshydratation="false" derogation-ukraine="false" culture-secondaire="A00" accident-culture="false">\n`;
-        xml += `                <code-culture>${esc(code)}</code-culture>\n`;
-        xml += `                <reconversion-pp>false</reconversion-pp>\n`;
-        xml += `                <retournement-pp>false</retournement-pp>\n`;
-        xml += `              </culture-principale>\n`;
-        xml += `              <engagements-maec elevage-monogastrique="false"/>\n`;
-        xml += `            </descriptif-parcelle>\n`;
-        xml += `            <geometrie><gml:Polygon><gml:outerBoundaryIs><gml:LinearRing><gml:coordinates>${gmlCoords}</gml:coordinates></gml:LinearRing></gml:outerBoundaryIs></gml:Polygon></geometrie>\n`;
-        xml += `            <surface-admissible>${ares}</surface-admissible>\n`;
-        xml += `          </parcelle>\n`;
+        xml += `<parcelle>`;
+        xml += `<descriptif-parcelle numero-parcelle="${esc(numero)}">`;
+        xml += `<culture-principale production-semences="${productionSemences}" production-fermiers="${productionFermiers}" deshydratation="${deshydratation}" derogation-ukraine="${derogationUkraine}" culture-secondaire="${esc(cultureSecondaire)}" accident-culture="${accidentCulture}">`;
+        xml += `<code-culture>${esc(code)}</code-culture>`;
+        if (precision) {
+          xml += `<precision>${esc(precision)}</precision>`;
+        }
+        xml += `</culture-principale>`;
+        xml += `<engagements-maec elevage-monogastrique="${maecElevage}"/>`;
+        xml += `</descriptif-parcelle>`;
+        xml += `<geometrie><gml:Polygon><gml:outerBoundaryIs><gml:LinearRing><gml:coordinates>${gmlCoords}</gml:coordinates></gml:LinearRing></gml:outerBoundaryIs></gml:Polygon></geometrie>`;
+        xml += `<surface-admissible>${ares}</surface-admissible>`;
+        xml += `</parcelle>`;
       });
 
-    xml += `        </parcelles>\n`;
-    xml += `      </ilot>\n`;
+    xml += `</parcelles>`;
+    xml += `</ilot>`;
   });
 
-  xml += `    </rpg>\n`;
-  xml += `  </producteur>\n`;
+  xml += `</rpg>`;
+  xml += `</producteur>`;
   xml += `</producteurs>`;
   return xml;
 }
@@ -323,6 +398,14 @@ function parseLegacyTelepacXml(text) {
     let conduiteBio;
     let hasConduiteBio = false;
     let organicType = null;
+    let propsMaecMonog;
+    let propsPrecision = null;
+    let propsProductionSemences;
+    let propsProductionFermiers;
+    let propsDeshydratation;
+    let propsDerogationUkraine;
+    let propsAccidentCulture;
+    let propsCultureSecondaire = null;
 
     const desc = p.getElementsByTagName("descriptif-parcelle")[0];
     if (desc) {
@@ -332,6 +415,32 @@ function parseLegacyTelepacXml(text) {
       if (cp) {
         const codeNode = cp.getElementsByTagName("code-culture")[0];
         if (codeNode) code = codeNode.textContent.trim().toUpperCase();
+        const precisionNode = cp.getElementsByTagName("precision")[0];
+        if (precisionNode && precisionNode.textContent) {
+          propsPrecision = precisionNode.textContent.trim();
+        }
+        if (code) {
+          const resolvedPrecision = resolvePrecisionForCode(code, propsPrecision);
+          if (resolvedPrecision) propsPrecision = resolvedPrecision;
+        }
+        const prodSem = cp.getAttribute("production-semences");
+        const prodFerm = cp.getAttribute("production-fermiers");
+        const deshyd = cp.getAttribute("deshydratation");
+        const derogUkraine = cp.getAttribute("derogation-ukraine");
+        const accident = cp.getAttribute("accident-culture");
+        const cultSec = cp.getAttribute("culture-secondaire");
+        if (prodSem != null) propsProductionSemences = isTruthyBoolean(prodSem);
+        if (prodFerm != null) propsProductionFermiers = isTruthyBoolean(prodFerm);
+        if (deshyd != null) propsDeshydratation = isTruthyBoolean(deshyd);
+        if (derogUkraine != null) propsDerogationUkraine = isTruthyBoolean(derogUkraine);
+        if (accident != null) propsAccidentCulture = isTruthyBoolean(accident);
+        if (cultSec) propsCultureSecondaire = cultSec.trim();
+      }
+
+      const engagementsMaecNode = desc.getElementsByTagName("engagements-maec")[0];
+      if (engagementsMaecNode) {
+        const elevage = engagementsMaecNode.getAttribute("elevage-monogastrique");
+        if (elevage != null) propsMaecMonog = isTruthyBoolean(elevage);
       }
 
       const agriBioNode = desc.getElementsByTagName("agri-bio")[0];
@@ -347,6 +456,8 @@ function parseLegacyTelepacXml(text) {
         }
       }
     }
+
+    const cultureProps = code ? { culture: code, cultureN: code } : {};
 
     let surfaceA;
     const surfNode = p.getElementsByTagName("surface-admissible")[0];
@@ -384,6 +495,14 @@ function parseLegacyTelepacXml(text) {
         ...(surfaceA !== undefined ? { surface_admissible: surfaceA } : {}),
         ...(hasConduiteBio ? { conduite_bio: conduiteBio, isOrganic: conduiteBio } : {}),
         ...(organicType ? { organicType } : {}),
+        ...(propsPrecision ? { precision: propsPrecision } : {}),
+        ...(propsProductionSemences != null ? { production_semences: propsProductionSemences } : {}),
+        ...(propsProductionFermiers != null ? { production_fermiers: propsProductionFermiers } : {}),
+        ...(propsDeshydratation != null ? { deshydratation: propsDeshydratation } : {}),
+        ...(propsDerogationUkraine != null ? { derogation_ukraine: propsDerogationUkraine } : {}),
+        ...(propsAccidentCulture != null ? { accident_culture: propsAccidentCulture } : {}),
+        ...(propsCultureSecondaire ? { culture_secondaire: propsCultureSecondaire } : {}),
+        ...(propsMaecMonog != null ? { maec_elevage_monogastrique: propsMaecMonog } : {}),
       },
       geometry: { type: "Polygon", coordinates: [ringWgs] },
     };

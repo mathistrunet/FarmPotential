@@ -5,14 +5,54 @@ function readCodebookNow() {
     ? window.CODEBOOK_EXTRA
     : {};
 
-  // Normalise: clés (codes) en MAJUSCULES, tout trim
   const cb = Object.create(null);
   for (const [k, v] of Object.entries(raw)) {
-    const code = String(k).trim().toUpperCase();
+    const key = String(k).trim().toUpperCase();
     const label = String(v).trim();
-    if (code) cb[code] = label;
+    if (key) cb[key] = label;
   }
   return cb;
+}
+
+export function splitCultureKey(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return { code: "", precision: "" };
+  const [codeRaw, precisionRaw] = raw.split("|");
+  const code = String(codeRaw || "").trim().toUpperCase();
+  const precision = String(precisionRaw || "").trim();
+  return { code, precision };
+}
+
+export function buildCultureKey(code, precision) {
+  const rawCode = String(code || "").trim().toUpperCase();
+  const rawPrecision = String(precision || "").trim();
+  if (!rawCode) return "";
+  if (!rawPrecision) return rawCode;
+  return `${rawCode}|${rawPrecision}`;
+}
+
+
+function normalizePrecisionValue(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (/^\d+$/.test(raw)) {
+    return String(parseInt(raw, 10));
+  }
+  return raw;
+}
+
+function resolvePrecisionKey(code, precision) {
+  const list = getPrecisionKeysForCode(code);
+  if (!list.length) return "";
+  const candidate = String(precision || "").trim();
+  if (!candidate) return list[list.length - 1] || "";
+  if (list.includes(candidate)) return candidate;
+  if (/^\d+$/.test(candidate)) {
+    const target = normalizePrecisionValue(candidate);
+    const match = list.find((p) => /^\d+$/.test(p) && normalizePrecisionValue(p) == target);
+    if (match) return match;
+  }
+  return list[list.length - 1] || "";
 }
 
 function buildReverse(cb) {
@@ -23,10 +63,16 @@ function buildReverse(cb) {
   return rev;
 }
 
-export function labelFromCode(code) {
+export function labelFromCode(code, precision) {
   if (!code) return null;
   const cb = readCodebookNow();
-  return cb[String(code).trim().toUpperCase()] || null;
+  const { code: baseCode, precision: keyPrecision } = splitCultureKey(code);
+  const precisionValue = String(precision || keyPrecision || "").trim();
+  if (precisionValue) {
+    const key = buildCultureKey(baseCode, resolvePrecisionKey(baseCode, precisionValue));
+    if (cb[key]) return cb[key];
+  }
+  return cb[baseCode] || null;
 }
 
 export function codeFromLabel(label) {
@@ -36,13 +82,79 @@ export function codeFromLabel(label) {
   return rev[String(label).trim()] || null;
 }
 
-export function entriesCodebook() {
-  // [ [code, label], ... ] trié par label
+export function getPrecisionKeysForCode(code) {
+  const base = String(code || "").trim().toUpperCase();
+  if (!base) return [];
   const cb = readCodebookNow();
-  return Object.entries(cb).sort((a, b) => a[1].localeCompare(b[1]));
+  const precisions = [];
+  for (const key of Object.keys(cb)) {
+    const split = splitCultureKey(key);
+    if (split.code === base && split.precision) {
+      precisions.push(split.precision);
+    }
+  }
+  return precisions
+    .filter(Boolean)
+    .sort((a, b) => {
+      const numA = Number(a);
+      const numB = Number(b);
+      if (!Number.isNaN(numA) && !Number.isNaN(numB)) return numA - numB;
+      return String(a).localeCompare(String(b));
+    });
 }
 
-// Détecte un code culture probable dans des props (uppercased)
+export function resolvePrecisionForCode(code, precision) {
+  return resolvePrecisionKey(code, precision);
+}
+
+export function isPrecisionKnown(code, precision) {
+  const list = getPrecisionKeysForCode(code);
+  if (!list.length) return false;
+  const candidate = String(precision || "").trim();
+  if (!candidate) return false;
+  if (list.includes(candidate)) return true;
+  if (/^\d+$/.test(candidate)) {
+    const target = normalizePrecisionValue(candidate);
+    return list.some((p) => /^\d+$/.test(p) && normalizePrecisionValue(p) === target);
+  }
+  return false;
+}
+
+export function entriesCodebook() {
+  const cb = readCodebookNow();
+  const hasPrecision = new Set();
+  for (const key of Object.keys(cb)) {
+    const split = splitCultureKey(key);
+    if (split.precision) {
+      hasPrecision.add(split.code);
+    }
+  }
+
+  const entries = [];
+  for (const [key, label] of Object.entries(cb)) {
+    const split = splitCultureKey(key);
+    if (split.precision) {
+      entries.push([key, label]);
+    } else if (!hasPrecision.has(split.code)) {
+      entries.push([key, label]);
+    }
+  }
+
+  return entries.sort((a, b) => a[1].localeCompare(b[1]));
+}
+
+function getPrecisionFromProps(props = {}) {
+  const keys = [
+    "precision","precision_n","precision_n0","precision_n_0",
+    "precision_n1","precision_n2","precision_n3","precision_n4","precision_n5","precision_n6",
+  ];
+  for (const key of keys) {
+    const value = props[key];
+    if (value != null && String(value).trim() !== "") return String(value).trim();
+  }
+  return "";
+}
+
 export function detectCultureCode(props = {}) {
   const codeLike = [
     "CODE_CULTURE","CODE_CULTU","CULT_CODE","CODE","CODE_CULT",
@@ -53,8 +165,8 @@ export function detectCultureCode(props = {}) {
     if (value == null) return false;
     const trimmed = String(value).trim();
     if (!trimmed) return false;
-    const upper = trimmed.toUpperCase();
-    if (/^[A-Z0-9]{2,10}$/.test(upper)) return upper;
+    const { code } = splitCultureKey(trimmed);
+    if (/^[A-Z0-9]{2,10}$/.test(code)) return code;
     return false;
   };
   for (const k of codeLike) {
@@ -71,10 +183,12 @@ export function detectCultureCode(props = {}) {
   return null;
 }
 
-// Affichage pour RPG (tooltip) : libellé si connu, sinon le code, sinon "(inconnu)"
 export function displayLabelFromProps(props = {}) {
   const code = detectCultureCode(props);
-  if (code) return labelFromCode(code) || code;
+  if (code) {
+    const precision = getPrecisionFromProps(props);
+    return labelFromCode(code, precision) || code;
+  }
 
   const DIRECT_KEYS = [
     "LIB_CULTURE","LIB_CULTU","LIBELLE_CULTURE","NOM_CULTURE","LIB_LONG","LIBELLE",

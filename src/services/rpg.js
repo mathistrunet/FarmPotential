@@ -1,6 +1,8 @@
 // src/services/rpg.js
 // Appel WFS GEOPF (RPG) + utilitaires libellé culture
 
+import { labelFromCode } from "../utils/cultureLabels";
+
 const WFS_BASE = "https://data.geopf.fr/wfs/ows";
 
 export async function fetchRpgGeoJSON(year, bboxCRS84, count = 1000) {
@@ -55,8 +57,7 @@ export function getCultureLabel(props={}) {
       }
     }
   }
-  const map = { ...(window.CODEBOOK_EXTRA || {}) };
-  return { label: code ? (map[code] || `Code : ${code}`) : "(culture inconnue)", code };
+  return { label: code ? (labelFromCode(code) || `Code : ${code}`) : "(culture inconnue)", code };
 }
 
 // Utilitaire simple

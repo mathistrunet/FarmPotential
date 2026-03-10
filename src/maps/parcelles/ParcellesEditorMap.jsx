@@ -48,6 +48,7 @@ import {
   loadSoilTypeLookupByUcsId,
   resolveFileUcs,
   resolveUcsId,
+  buildSoilCombinationKey,
 } from "../../services/soilTypeMapping";
 import { featureAreaM2 } from "../../utils/geometry";
 
@@ -197,6 +198,7 @@ export default function ParcellesEditorMap() {
     setFeatures,
     selectedId,
     selectFeatureOnMap,
+    selectFeaturesOnMap,
     setDrawFeatures,
     mapInitError,
     drawReady,
@@ -1049,7 +1051,7 @@ export default function ParcellesEditorMap() {
 
       return { index, feature, soilRow: detectedSoilRow, surfaceHa };
     });
-  }, [features, mapRef, rrpVisible]);
+  }, [features, mapRef, rrpVisible, loadingTiles, polygonsShown]);
 
   useEffect(() => {
     if (!rrpVisible) {
@@ -1080,6 +1082,37 @@ export default function ParcellesEditorMap() {
     soilMappingDebugLoggedRef.current = false;
     setSoilMappingRefreshTick((prev) => prev + 1);
   }, []);
+
+  const applySoilMappingToParcels = useCallback((structureName, mapping) => {
+    if (!structureName || !mapping) return;
+    const combinationMap = mapping?.combinationMap || {};
+    const hasMapping = Object.keys(combinationMap).length > 0;
+    if (!hasMapping) {
+      alert("Aucun mapping defini pour cette structure.");
+      return;
+    }
+
+    const candidatesByIndex = new Map();
+    soilMappingParcelCandidates.forEach((candidate) => {
+      if (candidate && Number.isFinite(candidate.index)) {
+        candidatesByIndex.set(candidate.index, candidate);
+      }
+    });
+
+    const nextFeatures = features.map((feature, index) => {
+      const candidate = candidatesByIndex.get(index);
+      if (!candidate?.soilRow) return feature;
+      const key = buildSoilCombinationKey(candidate.soilRow);
+      const mappedName = combinationMap[key];
+      if (!mappedName) return feature;
+      const props = { ...(feature.properties || {}) };
+      props.type_sol = mappedName;
+      props.TYPE_SOL = mappedName;
+      return { ...feature, properties: props };
+    });
+
+    setFeatures(nextFeatures);
+  }, [features, soilMappingParcelCandidates, setFeatures]);
 
   // ---- Styles de la barre d’outils bas
   const bottomBarHeight = compact ? 56 : 64;
@@ -1381,22 +1414,6 @@ export default function ParcellesEditorMap() {
                   Tableau
                 </button>
               </div>
-              <button
-                type="button"
-                onClick={() => setSideExpanded((v) => !v)}
-                style={{
-                  marginLeft: "auto",
-                  padding: "6px 10px",
-                  borderRadius: 8,
-                  border: "1px solid #d1d5db",
-                  background: sideExpanded ? "#eef2ff" : "#fff",
-                  cursor: "pointer",
-                  fontSize: 12,
-                  display: parcelleViewMode === "table" ? "inline-flex" : "none",
-                }}
-              >
-                {sideExpanded ? "Réduire" : "Agrandir"}
-              </button>
             </div>
           )}
         </div>
@@ -1515,6 +1532,7 @@ export default function ParcellesEditorMap() {
               selectedId={selectedId}
               onSelect={(id) => selectFeatureOnMap(id, true)}
               drawRef={drawRef}
+              mapRef={mapRef}
               viewMode={parcelleViewMode}
               csvValues={csvValues}
               onCsvValuesChange={setCsvValues}
@@ -1534,6 +1552,8 @@ export default function ParcellesEditorMap() {
             rrpVisible={rrpVisible}
             loading={soilMappingLoading || loadingTiles}
             onRefresh={refreshSoilMapping}
+            onApplyMapping={applySoilMappingToParcels}
+            onSelectParcels={(ids) => selectFeaturesOnMap(ids, true)}
           />
         )}
 
@@ -1902,3 +1922,17 @@ export default function ParcellesEditorMap() {
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+

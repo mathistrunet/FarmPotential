@@ -32,19 +32,6 @@ const YEAR_COLOR_PALETTE = [
 const DEFAULT_POLYGON_FILL = "#18A0FB";
 const DEFAULT_POLYGON_LINE = "#0066CC";
 
-const normalizeYearValue = (value) => {
-  if (value == null) return null;
-  const trimmed = typeof value === "string" ? value.trim() : value;
-  const parsed = Number(trimmed);
-  return Number.isFinite(parsed) ? parsed : null;
-};
-
-const resolveYearColor = (year) => {
-  if (!Number.isFinite(year)) return null;
-  const index = Math.abs(Math.trunc(year)) % YEAR_COLOR_PALETTE.length;
-  return YEAR_COLOR_PALETTE[index];
-};
-
 export function useMapInitialization() {
   const mapRef = useRef(null);
   const drawRef = useRef(null);
@@ -144,7 +131,57 @@ export function useMapInitialization() {
     }
   }, []);
 
-  useEffect(() => {
+  const selectFeaturesOnMap = useCallback((ids, fit = false) => {
+    const map = mapRef.current;
+    const draw = drawRef.current;
+    if (!map || !draw || !Array.isArray(ids) || ids.length === 0) return;
+
+    draw.changeMode("simple_select", { featureIds: ids });
+    setSelectedId(ids[0]);
+
+    if (fit) {
+      const all = draw.getAll();
+      const features = (all && all.features ? all.features : []).filter((g) => ids.includes(g.id));
+      if (features.length === 0) return;
+
+      let minLon = Infinity;
+      let minLat = Infinity;
+      let maxLon = -Infinity;
+      let maxLat = -Infinity;
+
+      features.forEach((feature) => {
+        const coords = feature.geometry?.coordinates;
+        const type = feature.geometry?.type;
+        const rings = [];
+        if (type === "Polygon") rings.push(coords?.[0] || []);
+        if (type === "MultiPolygon") {
+          (coords || []).forEach((poly) => rings.push(poly?.[0] || []));
+        }
+        rings.forEach((ring) => {
+          ring.forEach((point) => {
+            const lon = point?.[0];
+            const lat = point?.[1];
+            if (!Number.isFinite(lon) || !Number.isFinite(lat)) return;
+            minLon = Math.min(minLon, lon);
+            minLat = Math.min(minLat, lat);
+            maxLon = Math.max(maxLon, lon);
+            maxLat = Math.max(maxLat, lat);
+          });
+        });
+      });
+
+      if (Number.isFinite(minLon) && Number.isFinite(minLat) && Number.isFinite(maxLon) && Number.isFinite(maxLat)) {
+        map.fitBounds(
+          [
+            [minLon, minLat],
+            [maxLon, maxLat],
+          ],
+          { padding: 40, duration: 400 }
+        );
+      }
+    }
+  }, []);
+useEffect(() => {
     if (typeof maplibregl.supported === "function" && !maplibregl.supported()) {
       setMapInitError(
         buildError(
@@ -537,8 +574,12 @@ export function useMapInitialization() {
     selectedId,
     setSelectedId,
     selectFeatureOnMap,
+    selectFeaturesOnMap,
     setDrawFeatures,
     mapInitError,
     drawReady,
   };
 }
+
+
+

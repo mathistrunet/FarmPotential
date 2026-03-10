@@ -6,6 +6,8 @@ import {
   detectCultureCode,
   displayLabelFromProps,
   labelFromCode,
+  resolvePrecisionForCode,
+  splitCultureKey,
 } from "../utils/cultureLabels";
 import { buildError, ERROR_CODES } from "../utils/errors";
 import { withBasePath } from "../utils/publicBase";
@@ -27,6 +29,8 @@ const CSV_HEADERS = [
 ];
 
 const ASSOLIA_CULTURES_PATH = withBasePath("/data/assolia_cultures_export.csv");
+
+const PRECISION_KEYS_BY_INDEX = ["precision", "precision_n1", "precision_n2", "precision_n3", "precision_n4", "precision_n5", "precision_n6"];
 let assoliaCulturesPromise;
 
 function escapeCsvCell(value) {
@@ -87,7 +91,10 @@ function getMetacodeFromValue(raw) {
   const trimmed = String(raw).trim();
   if (!trimmed) return "";
   const fromLabel = codeFromLabel(trimmed);
-  if (fromLabel) return String(fromLabel).trim().toUpperCase();
+  if (fromLabel) {
+    const split = splitCultureKey(fromLabel);
+    return String(split.code || fromLabel).trim().toUpperCase();
+  }
   const upper = trimmed.toUpperCase();
   if (labelFromCode(upper)) return upper;
   if (/^[A-Z0-9]{2,10}$/.test(upper)) return upper;
@@ -155,6 +162,8 @@ function buildCultureProps(cultureValues, offset) {
     const key = targetIndex === 0 ? "cultureN" : `cultureN_${targetIndex}`;
     if (entry.value) props[key] = entry.value;
     if (entry.code && targetIndex === 0) props.code = entry.code;
+    const precisionKey = PRECISION_KEYS_BY_INDEX[targetIndex];
+    if (precisionKey && entry.precision) props[precisionKey] = entry.precision;
   });
   return props;
 }
@@ -175,15 +184,27 @@ function formatParcelleBioValue(raw) {
 
 function parseCultureValue(raw, structureLookup = null) {
   const trimmed = raw == null ? "" : String(raw).trim();
-  if (!trimmed) return { value: "", code: "" };
+  if (!trimmed) return { value: "", code: "", precision: "" };
   const structureCode = structureLookup?.byCultureName?.[normalizeStructureName(trimmed)];
-  if (structureCode) return { value: structureCode, code: structureCode };
+  if (structureCode) {
+    const split = splitCultureKey(structureCode);
+    const resolvedPrecision = resolvePrecisionForCode(split.code, split.precision);
+    return { value: split.code, code: split.code, precision: resolvedPrecision };
+  }
   const fromLabel = codeFromLabel(trimmed);
-  if (fromLabel) return { value: fromLabel, code: fromLabel };
+  if (fromLabel) {
+    const split = splitCultureKey(fromLabel);
+    const resolvedPrecision = resolvePrecisionForCode(split.code, split.precision);
+    return { value: split.code, code: split.code, precision: resolvedPrecision };
+  }
+  if (/^[A-Za-z0-9]{2,10}(\|[0-9]{1,3})?$/.test(trimmed)) {
+    const split = splitCultureKey(trimmed);
+    const resolvedPrecision = resolvePrecisionForCode(split.code, split.precision);
+    return { value: split.code, code: split.code, precision: resolvedPrecision };
+  }
   const upper = trimmed.toUpperCase();
-  if (labelFromCode(upper)) return { value: upper, code: upper };
-  if (/^[A-Za-z0-9]{2,10}$/.test(trimmed)) return { value: upper, code: upper };
-  return { value: trimmed, code: "" };
+  if (labelFromCode(upper)) return { value: upper, code: upper, precision: resolvePrecisionForCode(upper, "") };
+  return { value: trimmed, code: "", precision: "" };
 }
 
 function parseSurfaceValue(raw) {
@@ -399,3 +420,20 @@ export async function parseParcellesCsvToFeatures(file, options = {}) {
 
   return features;
 }
+
+
+
+
+export async function loadAssoliaStructureNames() {
+  const entries = await loadAssoliaCulturesExport();
+  const byNormalized = new Map();
+  entries.forEach((entry) => {
+    const rawName = String(entry.structure_name || "").trim();
+    if (!rawName) return;
+    const normalized = normalizeStructureName(rawName);
+    if (!normalized || byNormalized.has(normalized)) return;
+    byNormalized.set(normalized, rawName);
+  });
+  return Array.from(byNormalized.values()).sort((a, b) => a.localeCompare(b, "fr"));
+}
+

@@ -35,6 +35,8 @@ export interface TelepacParcelleProperties {
   production_semences?: boolean;
   production_fermiers?: boolean;
   deshydratation?: boolean;
+  derogation_ukraine?: boolean;
+  accident_culture?: boolean;
   reconversion_pp?: boolean;
   obligation_reimplantation_pp?: boolean;
   conduite_bio?: boolean;
