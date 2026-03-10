@@ -102,6 +102,38 @@ function readCultureCodeFromProperty(props, cultureColumn) {
   return normalizeNumero(fallback).toUpperCase();
 }
 
+function resolvePrecisionKeyForCultureColumn(cultureColumn) {
+  const normalized = normalizeNumero(cultureColumn).toLowerCase();
+  if (!normalized) return "precision";
+
+  if (normalized.includes("plus1") || normalized.includes("+1")) {
+    return "precision_n_plus1";
+  }
+
+  const precMatch = normalized.match(/prec(?:_|-)?(\d+)/);
+  if (precMatch) {
+    return `precision_n${precMatch[1]}`;
+  }
+
+  const nMatch = normalized.match(/n(?:_|-)?(\d+)/);
+  if (nMatch) {
+    return `precision_n${nMatch[1]}`;
+  }
+
+  if (
+    normalized === "culture" ||
+    normalized === "culturen" ||
+    normalized === "culturen0" ||
+    normalized === "culturen_0" ||
+    normalized === "code" ||
+    normalized === "code_culture"
+  ) {
+    return "precision";
+  }
+
+  return "precision";
+}
+
 function getFirstOuterRing(feature) {
   const geom = feature?.geometry;
   if (!geom) return null;
@@ -246,7 +278,11 @@ export function buildTelepacXML(features, options = {}) {
         const ring = getFirstOuterRing(feature);
         const gmlCoords = ring ? ringToGml(ring) : "";
         const ares = ring ? Math.round(ringAreaM2(ring) / 100) : 0;
-        const precisionRaw = firstProperty(props, ["precision", "precision_n", "precision_n0", "precision_n_0"]) || split.precision;
+        const precisionKey = resolvePrecisionKeyForCultureColumn(cultureColumn);
+        const precisionKeys = precisionKey === "precision"
+          ? ["precision", "precision_n", "precision_n0", "precision_n_0"]
+          : [precisionKey];
+        const precisionRaw = firstProperty(props, precisionKeys) || split.precision;
         const precision = resolvePrecisionForCode(code, precisionRaw);
         const cultureSecondaire = firstProperty(props, ["culture_secondaire", "culture-secondaire"]) || "A00";
         const productionSemences = getBooleanProp(props, ["production_semences", "production-semences"]);
@@ -561,3 +597,8 @@ export async function parseTelepacXmlToFeatures(file) {
   }
   return legacyFeatures;
 }
+
+
+
+
+

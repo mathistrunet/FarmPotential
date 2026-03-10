@@ -3,7 +3,7 @@
   "features": [
     {
       "type": "Feature",
-      "id": "lJ6rOUdxOgSEcMf3l9eybLuMvS3nfBBE",
+      "id": "4Md9tPCKVosgdmJW7KgHODhEoFQiRdul",
       "geometry": {
         "coordinates": [
           [
@@ -40,25 +40,36 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "1",
-        "ilot_numero": "1",
-        "nom_affiche": "1-1",
-        "culture": "SNE",
-        "cultureN": "SNE",
-        "code_exploitation": "031158368",
+        "pacage": "031158368",
+        "ilot": 1,
+        "ilot_ref": "031016292751",
+        "parcelle": 1,
+        "commune_insee": "31196",
+        "code_culture": "SNE",
         "precision": "001",
+        "culture_secondaire": "",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
+        "reconversion_pp": false,
+        "obligation_reimplantation_pp": false,
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 1,
+        "numero": 1,
+        "code": "SNE",
+        "nom_affiche": "1-1",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "9kqL1w8uMbxemiwGiasZTvcqFillmwFK",
+      "id": "UaJGBYbZ8ECnR8YvtwYKmRVUc9YzdKqM",
       "geometry": {
         "coordinates": [
           [
@@ -147,26 +158,37 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "3",
-        "ilot_numero": "1",
-        "nom_affiche": "1-3",
-        "culture": "PPH",
-        "cultureN": "PPH",
-        "code_exploitation": "031158368",
-        "surface_admissible": 63,
+        "pacage": "031158368",
+        "ilot": 1,
+        "ilot_ref": "031016292751",
+        "parcelle": 3,
+        "commune_insee": "31196",
+        "code_culture": "PPH",
         "precision": "002",
+        "culture_secondaire": "",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
+        "reconversion_pp": false,
+        "obligation_reimplantation_pp": false,
+        "maec_surface_cible": false,
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 1,
+        "numero": 3,
+        "code": "PPH",
+        "nom_affiche": "1-3",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "DcxtG5QJUBPCq3YEbCzgqlvQIZkDtjYO",
+      "id": "ZGd7LZG7XdzDUd6vdWeAeiU7McVTcqsy",
       "geometry": {
         "coordinates": [
           [
@@ -267,26 +289,37 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "4",
-        "ilot_numero": "1",
-        "nom_affiche": "1-4",
-        "culture": "PPH",
-        "cultureN": "PPH",
-        "code_exploitation": "031158368",
-        "surface_admissible": 20,
+        "pacage": "031158368",
+        "ilot": 1,
+        "ilot_ref": "031016292751",
+        "parcelle": 4,
+        "commune_insee": "31196",
+        "code_culture": "PPH",
         "precision": "001",
+        "culture_secondaire": "",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
+        "reconversion_pp": false,
+        "obligation_reimplantation_pp": false,
+        "maec_surface_cible": false,
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 1,
+        "numero": 4,
+        "code": "PPH",
+        "nom_affiche": "1-4",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "iCSmsKL669bcEdtmBh94EYfR5PfVdUiX",
+      "id": "6FRIKYUfgoRKtFmxFj8tvbWXk9fcAPt9",
       "geometry": {
         "coordinates": [
           [
@@ -439,27 +472,36 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "5",
-        "ilot_numero": "1",
-        "nom_affiche": "1-5",
-        "culture": "LUZ",
-        "cultureN": "LUZ",
-        "code_exploitation": "031158368",
-        "surface_admissible": 224,
+        "pacage": "031158368",
+        "ilot": 1,
+        "ilot_ref": "031016292751",
+        "parcelle": 5,
+        "commune_insee": "31196",
+        "code_culture": "LUZ",
         "precision": "002",
+        "culture_secondaire": "A00",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
-        "culture_secondaire": "A00",
+        "reconversion_pp": false,
+        "obligation_reimplantation_pp": false,
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 1,
+        "numero": 5,
+        "code": "LUZ",
+        "nom_affiche": "1-5",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "W8sr93evsnMrXuQuSXQvtd5vW25QU5GR",
+      "id": "KSpEare7syMpQm3MsCsDr8DrEdh4Nzrr",
       "geometry": {
         "coordinates": [
           [
@@ -532,26 +574,37 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "6",
-        "ilot_numero": "1",
-        "nom_affiche": "1-6",
-        "culture": "PPH",
-        "cultureN": "PPH",
-        "code_exploitation": "031158368",
-        "surface_admissible": 36,
+        "pacage": "031158368",
+        "ilot": 1,
+        "ilot_ref": "031016292751",
+        "parcelle": 6,
+        "commune_insee": "31196",
+        "code_culture": "PPH",
         "precision": "002",
+        "culture_secondaire": "",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
+        "reconversion_pp": false,
+        "obligation_reimplantation_pp": false,
+        "maec_surface_cible": false,
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 1,
+        "numero": 6,
+        "code": "PPH",
+        "nom_affiche": "1-6",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "Zg9HcR2LNLPr61ghhKAifJi3MjJ6iKhh",
+      "id": "gcH38WHgirsUWOzNjbn8t5fIkpf4FGGZ",
       "geometry": {
         "coordinates": [
           [
@@ -852,26 +905,37 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "7",
-        "ilot_numero": "1",
-        "nom_affiche": "1-7",
-        "culture": "PPH",
-        "cultureN": "PPH",
-        "code_exploitation": "031158368",
-        "surface_admissible": 218,
+        "pacage": "031158368",
+        "ilot": 1,
+        "ilot_ref": "031016292751",
+        "parcelle": 7,
+        "commune_insee": "31196",
+        "code_culture": "PPH",
         "precision": "004",
+        "culture_secondaire": "",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
+        "reconversion_pp": false,
+        "obligation_reimplantation_pp": false,
+        "maec_surface_cible": false,
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 1,
+        "numero": 7,
+        "code": "PPH",
+        "nom_affiche": "1-7",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "gkJNLo0HJx5aRxndhGCoM7zmbRoYvqBC",
+      "id": "Sf4GWCnp66bejPJhXy2sZbT0f6VPwhvF",
       "geometry": {
         "coordinates": [
           [
@@ -1084,27 +1148,34 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "8",
-        "ilot_numero": "1",
-        "nom_affiche": "1-8",
-        "culture": "FVL",
-        "cultureN": "FVL",
-        "code_exploitation": "031158368",
-        "surface_admissible": 1171,
+        "pacage": "031158368",
+        "ilot": 1,
+        "ilot_ref": "031016292751",
+        "parcelle": 8,
+        "commune_insee": "31196",
+        "code_culture": "FVL",
         "precision": "002",
+        "culture_secondaire": "A00",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
-        "culture_secondaire": "A00",
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 1,
+        "numero": 8,
+        "code": "FVL",
+        "nom_affiche": "1-8",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "aAjk9PRx3tTs0AWOLInvOBIeF8gPrQB6",
+      "id": "Sg96XCgIOp7W7CMaMfilXyskvuOanIrn",
       "geometry": {
         "coordinates": [
           [
@@ -1469,27 +1540,36 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "9",
-        "ilot_numero": "1",
-        "nom_affiche": "1-9",
-        "culture": "LUZ",
-        "cultureN": "LUZ",
-        "code_exploitation": "031158368",
-        "surface_admissible": 858,
+        "pacage": "031158368",
+        "ilot": 1,
+        "ilot_ref": "031016292751",
+        "parcelle": 9,
+        "commune_insee": "31196",
+        "code_culture": "LUZ",
         "precision": "002",
+        "culture_secondaire": "A00",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
-        "culture_secondaire": "A00",
+        "reconversion_pp": false,
+        "obligation_reimplantation_pp": false,
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 1,
+        "numero": 9,
+        "code": "LUZ",
+        "nom_affiche": "1-9",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "mhDGokboFFIiXeC4KQB388ideiYO4BMP",
+      "id": "ZhEbgQ3xlwUCdZvnZlan7zfeGaQWlV8Q",
       "geometry": {
         "coordinates": [
           [
@@ -1534,25 +1614,36 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "10",
-        "ilot_numero": "1",
-        "nom_affiche": "1-10",
-        "culture": "SNE",
-        "cultureN": "SNE",
-        "code_exploitation": "031158368",
+        "pacage": "031158368",
+        "ilot": 1,
+        "ilot_ref": "031016292751",
+        "parcelle": 10,
+        "commune_insee": "31196",
+        "code_culture": "SNE",
         "precision": "005",
+        "culture_secondaire": "",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
+        "reconversion_pp": false,
+        "obligation_reimplantation_pp": false,
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 1,
+        "numero": 10,
+        "code": "SNE",
+        "nom_affiche": "1-10",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "QidED3HBtQdXlGudwuduXT71Gxz5fgis",
+      "id": "0oI3ldIQBFxr9oZVJijv1kOliBHQbwWy",
       "geometry": {
         "coordinates": [
           [
@@ -1693,27 +1784,34 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "1",
-        "ilot_numero": "2",
-        "nom_affiche": "2-1",
-        "culture": "BTH",
-        "cultureN": "BTH",
-        "code_exploitation": "031158368",
-        "surface_admissible": 718,
+        "pacage": "031158368",
+        "ilot": 2,
+        "ilot_ref": "031016291625",
+        "parcelle": 1,
+        "commune_insee": "31196",
+        "code_culture": "BTH",
         "precision": "001",
+        "culture_secondaire": "A00",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
-        "culture_secondaire": "A00",
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 2,
+        "numero": 1,
+        "code": "BTH",
+        "nom_affiche": "2-1",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "E8S9uzBTNfbVKZrS1cV1EcDbk6bTJnPz",
+      "id": "u5A3kDLObAzcPPIcS1eweAW1jlqMqD1N",
       "geometry": {
         "coordinates": [
           [
@@ -1850,25 +1948,36 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "2",
-        "ilot_numero": "2",
-        "nom_affiche": "2-2",
-        "culture": "BOR",
-        "cultureN": "BOR",
-        "code_exploitation": "031158368",
-        "precision": "7",
+        "pacage": "031158368",
+        "ilot": 2,
+        "ilot_ref": "031016291625",
+        "parcelle": 2,
+        "commune_insee": "31196",
+        "code_culture": "BOR",
+        "precision": null,
+        "culture_secondaire": "",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
+        "reconversion_pp": false,
+        "obligation_reimplantation_pp": false,
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 2,
+        "numero": 2,
+        "code": "BOR",
+        "nom_affiche": "2-2",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "xdyx5YasFnnWMTfqwj2OtBtvjlMSlTvh",
+      "id": "rabMCtG3FZXrlydY4SolgHn7t0arIX2O",
       "geometry": {
         "coordinates": [
           [
@@ -2033,25 +2142,36 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "3",
-        "ilot_numero": "2",
-        "nom_affiche": "2-3",
-        "culture": "BOR",
-        "cultureN": "BOR",
-        "code_exploitation": "031158368",
-        "precision": "6",
+        "pacage": "031158368",
+        "ilot": 2,
+        "ilot_ref": "031016291625",
+        "parcelle": 3,
+        "commune_insee": "31196",
+        "code_culture": "BOR",
+        "precision": null,
+        "culture_secondaire": "",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
+        "reconversion_pp": false,
+        "obligation_reimplantation_pp": false,
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 2,
+        "numero": 3,
+        "code": "BOR",
+        "nom_affiche": "2-3",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "iYWrndtUymFSAPkexSob670d0TcJ2iHv",
+      "id": "zw0KlQ6QzAzhQOj5TzZaqYJV019lHOzk",
       "geometry": {
         "coordinates": [
           [
@@ -2168,25 +2288,36 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "4",
-        "ilot_numero": "2",
-        "nom_affiche": "2-4",
-        "culture": "BOR",
-        "cultureN": "BOR",
-        "code_exploitation": "031158368",
-        "precision": "1",
+        "pacage": "031158368",
+        "ilot": 2,
+        "ilot_ref": "031016291625",
+        "parcelle": 4,
+        "commune_insee": "31196",
+        "code_culture": "BOR",
+        "precision": null,
+        "culture_secondaire": "",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
+        "reconversion_pp": false,
+        "obligation_reimplantation_pp": false,
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 2,
+        "numero": 4,
+        "code": "BOR",
+        "nom_affiche": "2-4",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "iqtdZ9dv4UpziY0RvLxLgK1qhFzRCB5Y",
+      "id": "a6hz0q7UsgmuT0CbWsEoKCaJOE1JvPRx",
       "geometry": {
         "coordinates": [
           [
@@ -2303,27 +2434,36 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "6",
-        "ilot_numero": "2",
-        "nom_affiche": "2-6",
-        "culture": "SOJ",
-        "cultureN": "SOJ",
-        "code_exploitation": "031158368",
-        "surface_admissible": 457,
+        "pacage": "031158368",
+        "ilot": 2,
+        "ilot_ref": "031016291625",
+        "parcelle": 6,
+        "commune_insee": "31196",
+        "code_culture": "SOJ",
         "precision": "001",
+        "culture_secondaire": "A00",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
-        "culture_secondaire": "A00",
+        "reconversion_pp": false,
+        "obligation_reimplantation_pp": false,
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 2,
+        "numero": 6,
+        "code": "SOJ",
+        "nom_affiche": "2-6",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "u6EIY6WKvtLobUxBJpto6dvBtvQ6wn5p",
+      "id": "d8bYVbo077IdCRJhsMMdiw4XNPlnoIl4",
       "geometry": {
         "coordinates": [
           [
@@ -2420,27 +2560,36 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "7",
-        "ilot_numero": "2",
-        "nom_affiche": "2-7",
-        "culture": "SOJ",
-        "cultureN": "SOJ",
-        "code_exploitation": "031158368",
-        "surface_admissible": 416,
+        "pacage": "031158368",
+        "ilot": 2,
+        "ilot_ref": "031016291625",
+        "parcelle": 7,
+        "commune_insee": "31196",
+        "code_culture": "SOJ",
         "precision": "001",
+        "culture_secondaire": "A00",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
-        "culture_secondaire": "A00",
+        "reconversion_pp": false,
+        "obligation_reimplantation_pp": false,
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 2,
+        "numero": 7,
+        "code": "SOJ",
+        "nom_affiche": "2-7",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "Y8bHxKAQHT5KOESD2Hphdbtqo4B1QSpt",
+      "id": "aBl7L3MEtU0FShXJErtSxi4bAKcsNMx1",
       "geometry": {
         "coordinates": [
           [
@@ -2501,25 +2650,36 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "1",
-        "ilot_numero": "3",
-        "nom_affiche": "3-1",
-        "culture": "BOR",
-        "cultureN": "BOR",
-        "code_exploitation": "031158368",
-        "precision": "3",
+        "pacage": "031158368",
+        "ilot": 3,
+        "ilot_ref": "031016291627",
+        "parcelle": 1,
+        "commune_insee": "31196",
+        "code_culture": "BOR",
+        "precision": null,
+        "culture_secondaire": "",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
+        "reconversion_pp": false,
+        "obligation_reimplantation_pp": false,
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 3,
+        "numero": 1,
+        "code": "BOR",
+        "nom_affiche": "3-1",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "fy4qw6efie8ZkV4HM4STmIlj5OL6ujtO",
+      "id": "Zp9ADnzXUnyn5kiZt5abCFR8MacLOooH",
       "geometry": {
         "coordinates": [
           [
@@ -2584,27 +2744,36 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "3",
-        "ilot_numero": "3",
-        "nom_affiche": "3-3",
-        "culture": "LUZ",
-        "cultureN": "LUZ",
-        "code_exploitation": "031158368",
-        "surface_admissible": 251,
+        "pacage": "031158368",
+        "ilot": 3,
+        "ilot_ref": "031016291627",
+        "parcelle": 3,
+        "commune_insee": "31196",
+        "code_culture": "LUZ",
         "precision": "002",
+        "culture_secondaire": "A00",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
-        "culture_secondaire": "A00",
+        "reconversion_pp": false,
+        "obligation_reimplantation_pp": false,
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 3,
+        "numero": 3,
+        "code": "LUZ",
+        "nom_affiche": "3-3",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "0UPQpwhQZTOQwXkdAV1doI16Yb5guG2L",
+      "id": "CkwMcGy84e26sbfx0PSlueDpZz3yg5VQ",
       "geometry": {
         "coordinates": [
           [
@@ -2741,27 +2910,36 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "1",
-        "ilot_numero": "4",
-        "nom_affiche": "4-1",
-        "culture": "BTH",
-        "cultureN": "BTH",
-        "code_exploitation": "031158368",
-        "surface_admissible": 371,
+        "pacage": "031158368",
+        "ilot": 4,
+        "ilot_ref": "031016291629",
+        "parcelle": 1,
+        "commune_insee": "31196",
+        "code_culture": "BTH",
         "precision": "001",
+        "culture_secondaire": "A00",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
-        "culture_secondaire": "A00",
+        "reconversion_pp": false,
+        "obligation_reimplantation_pp": false,
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 4,
+        "numero": 1,
+        "code": "BTH",
+        "nom_affiche": "4-1",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "jPfUMXfEuUQt6jCMabxViuDgMNhpeo62",
+      "id": "7S1Qhxq6EQ7BveItOL9u5csQf0VUazUh",
       "geometry": {
         "coordinates": [
           [
@@ -2874,26 +3052,37 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "1",
-        "ilot_numero": "5",
-        "nom_affiche": "5-1",
-        "culture": "PPH",
-        "cultureN": "PPH",
-        "code_exploitation": "031158368",
-        "surface_admissible": 473,
+        "pacage": "031158368",
+        "ilot": 5,
+        "ilot_ref": "031016291631",
+        "parcelle": 1,
+        "commune_insee": "31196",
+        "code_culture": "PPH",
         "precision": "004",
+        "culture_secondaire": "",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
+        "reconversion_pp": false,
+        "obligation_reimplantation_pp": false,
+        "maec_surface_cible": false,
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 5,
+        "numero": 1,
+        "code": "PPH",
+        "nom_affiche": "5-1",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "ti3TsDNxPIMAdHWnPsWjOJ5SWMHgChGM",
+      "id": "CfPMVvG7utmPb1Hs9XVwm0EY2h3I6z0k",
       "geometry": {
         "coordinates": [
           [
@@ -2930,25 +3119,36 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "1",
-        "ilot_numero": "6",
-        "nom_affiche": "6-1",
-        "culture": "SNE",
-        "cultureN": "SNE",
-        "code_exploitation": "031158368",
+        "pacage": "031158368",
+        "ilot": 6,
+        "ilot_ref": "031016291633",
+        "parcelle": 1,
+        "commune_insee": "31196",
+        "code_culture": "SNE",
         "precision": "001",
+        "culture_secondaire": "",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
+        "reconversion_pp": false,
+        "obligation_reimplantation_pp": false,
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 6,
+        "numero": 1,
+        "code": "SNE",
+        "nom_affiche": "6-1",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "oL423LJ7RDfJk3luoylx3lJwMQ2dG3iv",
+      "id": "KPwQkhQYJ6PPBLym2LcRrjcDh2BDBNvA",
       "geometry": {
         "coordinates": [
           [
@@ -3009,26 +3209,37 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "3",
-        "ilot_numero": "6",
-        "nom_affiche": "6-3",
-        "culture": "PPH",
-        "cultureN": "PPH",
-        "code_exploitation": "031158368",
-        "surface_admissible": 38,
+        "pacage": "031158368",
+        "ilot": 6,
+        "ilot_ref": "031016291633",
+        "parcelle": 3,
+        "commune_insee": "31196",
+        "code_culture": "PPH",
         "precision": "004",
+        "culture_secondaire": "",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
+        "reconversion_pp": false,
+        "obligation_reimplantation_pp": false,
+        "maec_surface_cible": false,
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 6,
+        "numero": 3,
+        "code": "PPH",
+        "nom_affiche": "6-3",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "VGuqCGlhxKZjapHqpa3gf6yTIaJTX26j",
+      "id": "yBCtyFad1j6Vy47nArs1ShKEjqgXigcz",
       "geometry": {
         "coordinates": [
           [
@@ -3113,26 +3324,36 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "1",
-        "ilot_numero": "7",
-        "nom_affiche": "7-1",
-        "culture": "PTR",
-        "cultureN": "PTR",
-        "code_exploitation": "031158368",
-        "surface_admissible": 10,
+        "pacage": "031158368",
+        "ilot": 7,
+        "ilot_ref": "031016291636",
+        "parcelle": 1,
+        "commune_insee": "31196",
+        "code_culture": "PTR",
+        "precision": null,
+        "culture_secondaire": "A00",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
-        "culture_secondaire": "A00",
+        "reconversion_pp": false,
+        "obligation_reimplantation_pp": false,
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 7,
+        "numero": 1,
+        "code": "PTR",
+        "nom_affiche": "7-1",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "h4UUO2nDKZRmwCRNk3NqsgAT7UcF8EQP",
+      "id": "w7ThDBITy1ad3k2Wd8LCDek7KnkuPuz9",
       "geometry": {
         "coordinates": [
           [
@@ -3329,26 +3550,37 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "2",
-        "ilot_numero": "7",
-        "nom_affiche": "7-2",
-        "culture": "PPH",
-        "cultureN": "PPH",
-        "code_exploitation": "031158368",
-        "surface_admissible": 583,
+        "pacage": "031158368",
+        "ilot": 7,
+        "ilot_ref": "031016291636",
+        "parcelle": 2,
+        "commune_insee": "31196",
+        "code_culture": "PPH",
         "precision": "004",
+        "culture_secondaire": "",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
+        "reconversion_pp": false,
+        "obligation_reimplantation_pp": false,
+        "maec_surface_cible": false,
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 7,
+        "numero": 2,
+        "code": "PPH",
+        "nom_affiche": "7-2",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "JP0I3lNPfWYh9eT8RX6qlbInlLei6ixf",
+      "id": "0qIUsPONjaB2eq72k9Q0SeMPaNpUQ7nc",
       "geometry": {
         "coordinates": [
           [
@@ -3497,27 +3729,36 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "4",
-        "ilot_numero": "7",
-        "nom_affiche": "7-4",
-        "culture": "MIS",
-        "cultureN": "MIS",
-        "code_exploitation": "031158368",
-        "surface_admissible": 933,
+        "pacage": "031158368",
+        "ilot": 7,
+        "ilot_ref": "031016291636",
+        "parcelle": 4,
+        "commune_insee": "31196",
+        "code_culture": "MIS",
         "precision": "001",
+        "culture_secondaire": "A00",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
-        "culture_secondaire": "A00",
+        "reconversion_pp": false,
+        "obligation_reimplantation_pp": false,
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 7,
+        "numero": 4,
+        "code": "MIS",
+        "nom_affiche": "7-4",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "NWgpOOmFhZrq2tezePKvvOTRhddLdRVc",
+      "id": "er9MiZEZugUQOyRmGExYyI2shao0CvME",
       "geometry": {
         "coordinates": [
           [
@@ -3682,26 +3923,37 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "1",
-        "ilot_numero": "8",
-        "nom_affiche": "8-1",
-        "culture": "PPH",
-        "cultureN": "PPH",
-        "code_exploitation": "031158368",
-        "surface_admissible": 968,
+        "pacage": "031158368",
+        "ilot": 8,
+        "ilot_ref": "031016291706",
+        "parcelle": 1,
+        "commune_insee": "31196",
+        "code_culture": "PPH",
         "precision": "004",
+        "culture_secondaire": "",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
+        "reconversion_pp": false,
+        "obligation_reimplantation_pp": false,
+        "maec_surface_cible": false,
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 8,
+        "numero": 1,
+        "code": "PPH",
+        "nom_affiche": "8-1",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "GYESTk4CyJVz2a1ynv8njivjSStuVVk8",
+      "id": "U9tRvWjTYn8wfSOjmO8ikcI9ZM9Q9Mf0",
       "geometry": {
         "coordinates": [
           [
@@ -3758,27 +4010,34 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "1",
-        "ilot_numero": "9",
-        "nom_affiche": "9-1",
-        "culture": "BTH",
-        "cultureN": "BTH",
-        "code_exploitation": "031158368",
-        "surface_admissible": 1118,
+        "pacage": "031158368",
+        "ilot": 9,
+        "ilot_ref": "031016291709",
+        "parcelle": 1,
+        "commune_insee": "31196",
+        "code_culture": "BTH",
         "precision": "001",
+        "culture_secondaire": "A00",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
-        "culture_secondaire": "A00",
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 9,
+        "numero": 1,
+        "code": "BTH",
+        "nom_affiche": "9-1",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "4LxvHmJVm7frphuwCoZIbw5RDqnpf5E4",
+      "id": "JaGgtjxsXz9r8Holql3cQa4M7xcnvEzP",
       "geometry": {
         "coordinates": [
           [
@@ -3843,25 +4102,36 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "2",
-        "ilot_numero": "9",
-        "nom_affiche": "9-2",
-        "culture": "BOR",
-        "cultureN": "BOR",
-        "code_exploitation": "031158368",
-        "precision": "1",
+        "pacage": "031158368",
+        "ilot": 9,
+        "ilot_ref": "031016291709",
+        "parcelle": 2,
+        "commune_insee": "31196",
+        "code_culture": "BOR",
+        "precision": null,
+        "culture_secondaire": "",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
+        "reconversion_pp": false,
+        "obligation_reimplantation_pp": false,
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 9,
+        "numero": 2,
+        "code": "BOR",
+        "nom_affiche": "9-2",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "akqclmmhvy6mz2PGDJ6ArOwPY8lykSRt",
+      "id": "Jprn8SkYDFsm6oo07FUPuiLbxN8Zy7Hg",
       "geometry": {
         "coordinates": [
           [
@@ -4058,27 +4328,34 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "1",
-        "ilot_numero": "10",
-        "nom_affiche": "10-1",
-        "culture": "FVL",
-        "cultureN": "FVL",
-        "code_exploitation": "031158368",
-        "surface_admissible": 1002,
+        "pacage": "031158368",
+        "ilot": 10,
+        "ilot_ref": "031016291711",
+        "parcelle": 1,
+        "commune_insee": "31196",
+        "code_culture": "FVL",
         "precision": "002",
+        "culture_secondaire": "A00",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
-        "culture_secondaire": "A00",
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 10,
+        "numero": 1,
+        "code": "FVL",
+        "nom_affiche": "10-1",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "q5Oi2vNYOrQ8NS2U2hjyRM0ol4F7hESy",
+      "id": "YXdthWeYDDOpoBFiFuQ8BbpuOjS2hdsa",
       "geometry": {
         "coordinates": [
           [
@@ -4202,30 +4479,63 @@
               1.0048394060464363,
               43.266280271220275
             ]
+          ],
+          [
+            [
+              1.0082787227983234,
+              43.265792977845415
+            ],
+            [
+              1.0082704142612533,
+              43.26572691222725
+            ],
+            [
+              1.0048890155276928,
+              43.266276022406366
+            ],
+            [
+              1.0049325091343428,
+              43.26634145142205
+            ],
+            [
+              1.0082787227983234,
+              43.265792977845415
+            ]
           ]
         ],
         "type": "Polygon"
       },
       "properties": {
-        "numero": "2",
-        "ilot_numero": "10",
-        "nom_affiche": "10-2",
-        "culture": "BOR",
-        "cultureN": "BOR",
-        "code_exploitation": "031158368",
-        "precision": "1",
+        "pacage": "031158368",
+        "ilot": 10,
+        "ilot_ref": "031016291711",
+        "parcelle": 2,
+        "commune_insee": "31196",
+        "code_culture": "BOR",
+        "precision": null,
+        "culture_secondaire": "",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
+        "reconversion_pp": false,
+        "obligation_reimplantation_pp": false,
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 10,
+        "numero": 2,
+        "code": "BOR",
+        "nom_affiche": "10-2",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "XaGFY3abTsRPRnKCv31es61ldRHBlLtM",
+      "id": "FY7MLutbheId4GUb9sL9gGmyCCwRK5VV",
       "geometry": {
         "coordinates": [
           [
@@ -4270,26 +4580,37 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "4",
-        "ilot_numero": "10",
-        "nom_affiche": "10-4",
-        "culture": "PPH",
-        "cultureN": "PPH",
-        "code_exploitation": "031158368",
-        "surface_admissible": 101,
+        "pacage": "031158368",
+        "ilot": 10,
+        "ilot_ref": "031016291711",
+        "parcelle": 4,
+        "commune_insee": "31196",
+        "code_culture": "PPH",
         "precision": "004",
+        "culture_secondaire": "",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
+        "reconversion_pp": false,
+        "obligation_reimplantation_pp": false,
+        "maec_surface_cible": false,
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 10,
+        "numero": 4,
+        "code": "PPH",
+        "nom_affiche": "10-4",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "yVJNBaR616f7FJlpEd7aUfSmP9A7rApl",
+      "id": "9o2H7bVqNkqLhM7dLDvAWgtPLYQMFQVA",
       "geometry": {
         "coordinates": [
           [
@@ -4354,27 +4675,34 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "5",
-        "ilot_numero": "10",
-        "nom_affiche": "10-5",
-        "culture": "FVL",
-        "cultureN": "FVL",
-        "code_exploitation": "031158368",
-        "surface_admissible": 360,
+        "pacage": "031158368",
+        "ilot": 10,
+        "ilot_ref": "031016291711",
+        "parcelle": 5,
+        "commune_insee": "31196",
+        "code_culture": "FVL",
         "precision": "002",
+        "culture_secondaire": "A00",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
-        "culture_secondaire": "A00",
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 10,
+        "numero": 5,
+        "code": "FVL",
+        "nom_affiche": "10-5",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "yWfUTWu20n2KX6ncOnNfTEIOMvwr2MRd",
+      "id": "YaQd91VBB0NuD49BznRws3RwbtaRi7CG",
       "geometry": {
         "coordinates": [
           [
@@ -4631,26 +4959,37 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "1",
-        "ilot_numero": "11",
-        "nom_affiche": "11-1",
-        "culture": "PPH",
-        "cultureN": "PPH",
-        "code_exploitation": "031158368",
-        "surface_admissible": 1894,
+        "pacage": "031158368",
+        "ilot": 11,
+        "ilot_ref": "031016291713",
+        "parcelle": 1,
+        "commune_insee": "31196",
+        "code_culture": "PPH",
         "precision": "004",
+        "culture_secondaire": "",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
+        "reconversion_pp": false,
+        "obligation_reimplantation_pp": false,
+        "maec_surface_cible": false,
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 11,
+        "numero": 1,
+        "code": "PPH",
+        "nom_affiche": "11-1",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "5Tw4X8Y9gWgNjIBomAGBuEvZrCM2xrEx",
+      "id": "RPVQRbqTT5joiSWr26zzfmBlGpgqSRuS",
       "geometry": {
         "coordinates": [
           [
@@ -4695,26 +5034,37 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "1",
-        "ilot_numero": "12",
-        "nom_affiche": "12-1",
-        "culture": "PPH",
-        "cultureN": "PPH",
-        "code_exploitation": "031158368",
-        "surface_admissible": 95,
+        "pacage": "031158368",
+        "ilot": 12,
+        "ilot_ref": "031016291714",
+        "parcelle": 1,
+        "commune_insee": "31196",
+        "code_culture": "PPH",
         "precision": "004",
+        "culture_secondaire": "",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
+        "reconversion_pp": false,
+        "obligation_reimplantation_pp": false,
+        "maec_surface_cible": false,
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 12,
+        "numero": 1,
+        "code": "PPH",
+        "nom_affiche": "12-1",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "Ab1TV5xxJQMiancwJpUqgegQWCslmIUo",
+      "id": "XGg9LLdjXB8yRT9ecDo8lENhxFL53z13",
       "geometry": {
         "coordinates": [
           [
@@ -5007,27 +5357,36 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "1",
-        "ilot_numero": "13",
-        "nom_affiche": "13-1",
-        "culture": "BTH",
-        "cultureN": "BTH",
-        "code_exploitation": "031158368",
-        "surface_admissible": 854,
+        "pacage": "031158368",
+        "ilot": 13,
+        "ilot_ref": "031016291717",
+        "parcelle": 1,
+        "commune_insee": "31196",
+        "code_culture": "BTH",
         "precision": "001",
+        "culture_secondaire": "A00",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
-        "culture_secondaire": "A00",
+        "reconversion_pp": false,
+        "obligation_reimplantation_pp": false,
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 13,
+        "numero": 1,
+        "code": "BTH",
+        "nom_affiche": "13-1",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "WpmcnCJOaYU9gDB3tt7G92QaOP6ZblSq",
+      "id": "g0SJXKqPMT8xU4OdcDFPJd6Rd6F10IIu",
       "geometry": {
         "coordinates": [
           [
@@ -5384,25 +5743,36 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "2",
-        "ilot_numero": "13",
-        "nom_affiche": "13-2",
-        "culture": "BOR",
-        "cultureN": "BOR",
-        "code_exploitation": "031158368",
-        "precision": "1",
+        "pacage": "031158368",
+        "ilot": 13,
+        "ilot_ref": "031016291717",
+        "parcelle": 2,
+        "commune_insee": "31196",
+        "code_culture": "BOR",
+        "precision": null,
+        "culture_secondaire": "",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
+        "reconversion_pp": false,
+        "obligation_reimplantation_pp": false,
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 13,
+        "numero": 2,
+        "code": "BOR",
+        "nom_affiche": "13-2",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "7pHBKFteZoZEuWhseQUD2BClxdLt3Z4m",
+      "id": "hJVQpnpKWQAVP3ZBve5HhMYTbtmiQiwY",
       "geometry": {
         "coordinates": [
           [
@@ -5507,27 +5877,34 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "1",
-        "ilot_numero": "14",
-        "nom_affiche": "14-1",
-        "culture": "BTH",
-        "cultureN": "BTH",
-        "code_exploitation": "031158368",
-        "surface_admissible": 360,
+        "pacage": "031158368",
+        "ilot": 14,
+        "ilot_ref": "031016291719",
+        "parcelle": 1,
+        "commune_insee": "31292",
+        "code_culture": "BTH",
         "precision": "001",
+        "culture_secondaire": "A00",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
-        "culture_secondaire": "A00",
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 14,
+        "numero": 1,
+        "code": "BTH",
+        "nom_affiche": "14-1",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "MJa9JS9CmK9GDUC5d8ZHfwOLhdFa5AfT",
+      "id": "5hrZ3Xrj4YZqeDWCTvJabCzb8mEZYue9",
       "geometry": {
         "coordinates": [
           [
@@ -5692,27 +6069,34 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "2",
-        "ilot_numero": "15",
-        "nom_affiche": "15-2",
-        "culture": "MIS",
-        "cultureN": "MIS",
-        "code_exploitation": "031158368",
-        "surface_admissible": 306,
+        "pacage": "031158368",
+        "ilot": 15,
+        "ilot_ref": "031016291720",
+        "parcelle": 2,
+        "commune_insee": "31370",
+        "code_culture": "MIS",
         "precision": "001",
+        "culture_secondaire": "A00",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
-        "culture_secondaire": "A00",
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 15,
+        "numero": 2,
+        "code": "MIS",
+        "nom_affiche": "15-2",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "WOMaLfaZ92rbgemDr33fERkmCwsNBmn4",
+      "id": "o6DYcgibsNTKcJT6AWHjIdbfvpNrqavD",
       "geometry": {
         "coordinates": [
           [
@@ -5821,25 +6205,36 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "3",
-        "ilot_numero": "15",
-        "nom_affiche": "15-3",
-        "culture": "BOR",
-        "cultureN": "BOR",
-        "code_exploitation": "031158368",
-        "precision": "2",
+        "pacage": "031158368",
+        "ilot": 15,
+        "ilot_ref": "031016291720",
+        "parcelle": 3,
+        "commune_insee": "31370",
+        "code_culture": "BOR",
+        "precision": null,
+        "culture_secondaire": "",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
+        "reconversion_pp": false,
+        "obligation_reimplantation_pp": false,
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 15,
+        "numero": 3,
+        "code": "BOR",
+        "nom_affiche": "15-3",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "X8hWeSKAJiECTgPYh5jfOliPag3eHSTV",
+      "id": "actMZYhwFay4diertGD1TR8vSIsqFkli",
       "geometry": {
         "coordinates": [
           [
@@ -6012,27 +6407,36 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "1",
-        "ilot_numero": "16",
-        "nom_affiche": "16-1",
-        "culture": "MIS",
-        "cultureN": "MIS",
-        "code_exploitation": "031158368",
-        "surface_admissible": 1652,
+        "pacage": "031158368",
+        "ilot": 16,
+        "ilot_ref": "031016291722",
+        "parcelle": 1,
+        "commune_insee": "31370",
+        "code_culture": "MIS",
         "precision": "001",
+        "culture_secondaire": "A00",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
-        "culture_secondaire": "A00",
+        "reconversion_pp": false,
+        "obligation_reimplantation_pp": false,
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 16,
+        "numero": 1,
+        "code": "MIS",
+        "nom_affiche": "16-1",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "c429tsrhlMof3woXrmpcNh71YhM6o1cX",
+      "id": "rjoGf5yBDJ5ZqEw36c9BTaqK0ylYF8Gl",
       "geometry": {
         "coordinates": [
           [
@@ -6205,25 +6609,36 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "2",
-        "ilot_numero": "16",
-        "nom_affiche": "16-2",
-        "culture": "BTA",
-        "cultureN": "BTA",
-        "code_exploitation": "031158368",
-        "precision": "1",
+        "pacage": "031158368",
+        "ilot": 16,
+        "ilot_ref": "031016291722",
+        "parcelle": 2,
+        "commune_insee": "31370",
+        "code_culture": "BTA",
+        "precision": null,
+        "culture_secondaire": "",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
+        "reconversion_pp": false,
+        "obligation_reimplantation_pp": false,
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 16,
+        "numero": 2,
+        "code": "BTA",
+        "nom_affiche": "16-2",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "Km8QLBy1wPK8OIOHI5KMvOJ1KrOA5zVc",
+      "id": "KVYVoQekJ6e1YIC9OhM6tl3SeeJLsyAk",
       "geometry": {
         "coordinates": [
           [
@@ -6296,27 +6711,36 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "1",
-        "ilot_numero": "17",
-        "nom_affiche": "17-1",
-        "culture": "SOJ",
-        "cultureN": "SOJ",
-        "code_exploitation": "031158368",
-        "surface_admissible": 384,
+        "pacage": "031158368",
+        "ilot": 17,
+        "ilot_ref": "031016291725",
+        "parcelle": 1,
+        "commune_insee": "31196",
+        "code_culture": "SOJ",
         "precision": "001",
+        "culture_secondaire": "A00",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
-        "culture_secondaire": "A00",
+        "reconversion_pp": false,
+        "obligation_reimplantation_pp": false,
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 17,
+        "numero": 1,
+        "code": "SOJ",
+        "nom_affiche": "17-1",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "NNR8M1SM7TfN006jCs4u5Vf6GSagEWSs",
+      "id": "mPG5Dnog7yUb9ab91hEHttFPUIms9nte",
       "geometry": {
         "coordinates": [
           [
@@ -6353,26 +6777,37 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "1",
-        "ilot_numero": "18",
-        "nom_affiche": "18-1",
-        "culture": "PPH",
-        "cultureN": "PPH",
-        "code_exploitation": "031158368",
-        "surface_admissible": 90,
+        "pacage": "031158368",
+        "ilot": 18,
+        "ilot_ref": "031016291726",
+        "parcelle": 1,
+        "commune_insee": "31196",
+        "code_culture": "PPH",
         "precision": "004",
+        "culture_secondaire": "",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
+        "reconversion_pp": false,
+        "obligation_reimplantation_pp": false,
+        "maec_surface_cible": false,
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 18,
+        "numero": 1,
+        "code": "PPH",
+        "nom_affiche": "18-1",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "ejdVEv1TxSSixFcqscxDptv9c59DiO7z",
+      "id": "mbrvhBk2xoQ77RMCfVmDKKweDQYfYIqV",
       "geometry": {
         "coordinates": [
           [
@@ -6405,26 +6840,37 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "1",
-        "ilot_numero": "19",
-        "nom_affiche": "19-1",
-        "culture": "PPH",
-        "cultureN": "PPH",
-        "code_exploitation": "031158368",
-        "surface_admissible": 98,
+        "pacage": "031158368",
+        "ilot": 19,
+        "ilot_ref": "031013299887",
+        "parcelle": 1,
+        "commune_insee": "31196",
+        "code_culture": "PPH",
         "precision": "002",
+        "culture_secondaire": "",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
+        "reconversion_pp": false,
+        "obligation_reimplantation_pp": false,
+        "maec_surface_cible": false,
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 19,
+        "numero": 1,
+        "code": "PPH",
+        "nom_affiche": "19-1",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "IqRkf2oclOW6sPy4Ke4QnM0l6GdnKKhi",
+      "id": "TQwajHqruQKzi9OqpDf1abqCFR8K5xOs",
       "geometry": {
         "coordinates": [
           [
@@ -6529,27 +6975,36 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "1",
-        "ilot_numero": "20",
-        "nom_affiche": "20-1",
-        "culture": "MIS",
-        "cultureN": "MIS",
-        "code_exploitation": "031158368",
-        "surface_admissible": 544,
+        "pacage": "031158368",
+        "ilot": 20,
+        "ilot_ref": "031015608743",
+        "parcelle": 1,
+        "commune_insee": "31196",
+        "code_culture": "MIS",
         "precision": "002",
+        "culture_secondaire": "A00",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
-        "culture_secondaire": "A00",
+        "reconversion_pp": false,
+        "obligation_reimplantation_pp": false,
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 20,
+        "numero": 1,
+        "code": "MIS",
+        "nom_affiche": "20-1",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "lgOM6g7mLYd0sWiXkC7FGtEH59TYdGjJ",
+      "id": "BXuelu5UQlkrBfLTBcqSFD8fJnWwIOPy",
       "geometry": {
         "coordinates": [
           [
@@ -6626,27 +7081,34 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "1",
-        "ilot_numero": "21",
-        "nom_affiche": "21-1",
-        "culture": "BTH",
-        "cultureN": "BTH",
-        "code_exploitation": "031158368",
-        "surface_admissible": 125,
+        "pacage": "031158368",
+        "ilot": 21,
+        "ilot_ref": "031015612278",
+        "parcelle": 1,
+        "commune_insee": "31196",
+        "code_culture": "BTH",
         "precision": "001",
+        "culture_secondaire": "A00",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
-        "culture_secondaire": "A00",
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 21,
+        "numero": 1,
+        "code": "BTH",
+        "nom_affiche": "21-1",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "or2SPu5U6cLzXiCPBOsDWXw4dtHEnUR7",
+      "id": "obVTjQeiKYXxdNVDduZKLKZHGPXJfPXI",
       "geometry": {
         "coordinates": [
           [
@@ -6743,26 +7205,37 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "1",
-        "ilot_numero": "22",
-        "nom_affiche": "22-1",
-        "culture": "PPH",
-        "cultureN": "PPH",
-        "code_exploitation": "031158368",
-        "surface_admissible": 248,
+        "pacage": "031158368",
+        "ilot": 22,
+        "ilot_ref": "031015612279",
+        "parcelle": 1,
+        "commune_insee": "31196",
+        "code_culture": "PPH",
         "precision": "004",
+        "culture_secondaire": "",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
+        "reconversion_pp": false,
+        "obligation_reimplantation_pp": false,
+        "maec_surface_cible": false,
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 22,
+        "numero": 1,
+        "code": "PPH",
+        "nom_affiche": "22-1",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "I8NHn5LinsZhcviSG4GnHodmV2wRJbj1",
+      "id": "25KwMMI4LMMuacsFvccszhlsOOjXAcLG",
       "geometry": {
         "coordinates": [
           [
@@ -6791,25 +7264,36 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "2",
-        "ilot_numero": "23",
-        "nom_affiche": "23-2",
-        "culture": "SNE",
-        "cultureN": "SNE",
-        "code_exploitation": "031158368",
+        "pacage": "031158368",
+        "ilot": 23,
+        "ilot_ref": "031015608745",
+        "parcelle": 2,
+        "commune_insee": "31196",
+        "code_culture": "SNE",
         "precision": "001",
+        "culture_secondaire": "",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
+        "reconversion_pp": false,
+        "obligation_reimplantation_pp": false,
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 23,
+        "numero": 2,
+        "code": "SNE",
+        "nom_affiche": "23-2",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "YxodUN0whhkRiWmDqy8N4f3Pjk1HfsrN",
+      "id": "D0EuUwjlr2guEd4TKe2wWHcnZdv4F6gm",
       "geometry": {
         "coordinates": [
           [
@@ -6850,27 +7334,36 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "3",
-        "ilot_numero": "23",
-        "nom_affiche": "23-3",
-        "culture": "BTH",
-        "cultureN": "BTH",
-        "code_exploitation": "031158368",
-        "surface_admissible": 67,
+        "pacage": "031158368",
+        "ilot": 23,
+        "ilot_ref": "031015608745",
+        "parcelle": 3,
+        "commune_insee": "31196",
+        "code_culture": "BTH",
         "precision": "001",
+        "culture_secondaire": "A00",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
-        "culture_secondaire": "A00",
+        "reconversion_pp": false,
+        "obligation_reimplantation_pp": false,
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 23,
+        "numero": 3,
+        "code": "BTH",
+        "nom_affiche": "23-3",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "Nsvv6gtdkyLN7vDD5Ind4XHOVXtDyOqs",
+      "id": "F5wrbtuSwMmFqZkdVCpclJNV8KDNJmgA",
       "geometry": {
         "coordinates": [
           [
@@ -6947,25 +7440,36 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "4",
-        "ilot_numero": "23",
-        "nom_affiche": "23-4",
-        "culture": "BTA",
-        "cultureN": "BTA",
-        "code_exploitation": "031158368",
-        "precision": "5",
+        "pacage": "031158368",
+        "ilot": 23,
+        "ilot_ref": "031015608745",
+        "parcelle": 4,
+        "commune_insee": "31196",
+        "code_culture": "BTA",
+        "precision": null,
+        "culture_secondaire": "",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
+        "reconversion_pp": false,
+        "obligation_reimplantation_pp": false,
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 23,
+        "numero": 4,
+        "code": "BTA",
+        "nom_affiche": "23-4",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "hVZy4277Z3umcobgQJLJ7vQbpf8eRYMW",
+      "id": "GbahTqvxHtQ4PtXLPgyLjyCtSq5waqi8",
       "geometry": {
         "coordinates": [
           [
@@ -7110,27 +7614,36 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "5",
-        "ilot_numero": "23",
-        "nom_affiche": "23-5",
-        "culture": "LUZ",
-        "cultureN": "LUZ",
-        "code_exploitation": "031158368",
-        "surface_admissible": 275,
+        "pacage": "031158368",
+        "ilot": 23,
+        "ilot_ref": "031015608745",
+        "parcelle": 5,
+        "commune_insee": "31196",
+        "code_culture": "LUZ",
         "precision": "002",
+        "culture_secondaire": "A00",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
-        "culture_secondaire": "A00",
+        "reconversion_pp": false,
+        "obligation_reimplantation_pp": false,
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 23,
+        "numero": 5,
+        "code": "LUZ",
+        "nom_affiche": "23-5",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "QuiGYHCmp5agz35VPahR3AD3iwltg9gi",
+      "id": "ewsRd5h4KCzYGwFB2JMCgO9KdnUQuJSE",
       "geometry": {
         "coordinates": [
           [
@@ -7175,27 +7688,34 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "1",
-        "ilot_numero": "24",
-        "nom_affiche": "24-1",
-        "culture": "MIS",
-        "cultureN": "MIS",
-        "code_exploitation": "031158368",
-        "surface_admissible": 211,
+        "pacage": "031158368",
+        "ilot": 24,
+        "ilot_ref": "031015608742",
+        "parcelle": 1,
+        "commune_insee": "31292",
+        "code_culture": "MIS",
         "precision": "001",
+        "culture_secondaire": "A00",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
-        "culture_secondaire": "A00",
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 24,
+        "numero": 1,
+        "code": "MIS",
+        "nom_affiche": "24-1",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "kkJjT8edBh3uimCa1RVui4d7bBPE6mu6",
+      "id": "oYzUhwC2WT2Eq0fNt4RTm3SokEZFdL4p",
       "geometry": {
         "coordinates": [
           [
@@ -7256,26 +7776,37 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "1",
-        "ilot_numero": "25",
-        "nom_affiche": "25-1",
-        "culture": "PPH",
-        "cultureN": "PPH",
-        "code_exploitation": "031158368",
-        "surface_admissible": 7,
+        "pacage": "031158368",
+        "ilot": 25,
+        "ilot_ref": "031015611060",
+        "parcelle": 1,
+        "commune_insee": "31196",
+        "code_culture": "PPH",
         "precision": "004",
+        "culture_secondaire": "",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
+        "reconversion_pp": false,
+        "obligation_reimplantation_pp": false,
+        "maec_surface_cible": false,
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 25,
+        "numero": 1,
+        "code": "PPH",
+        "nom_affiche": "25-1",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "qttLuzq5CwLcmZTy87G4w0xjcMgl9at6",
+      "id": "NnTZFQybT93fMa8ufxURalkAm3Gdomod",
       "geometry": {
         "coordinates": [
           [
@@ -7320,26 +7851,37 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "1",
-        "ilot_numero": "26",
-        "nom_affiche": "26-1",
-        "culture": "PPH",
-        "cultureN": "PPH",
-        "code_exploitation": "031158368",
-        "surface_admissible": 2,
+        "pacage": "031158368",
+        "ilot": 26,
+        "ilot_ref": "031015611067",
+        "parcelle": 1,
+        "commune_insee": "31196",
+        "code_culture": "PPH",
         "precision": "004",
+        "culture_secondaire": "",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
+        "reconversion_pp": false,
+        "obligation_reimplantation_pp": false,
+        "maec_surface_cible": false,
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 26,
+        "numero": 1,
+        "code": "PPH",
+        "nom_affiche": "26-1",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "kGPoqbnjA8G9TPLKwF2Nnel0N5NXYDFB",
+      "id": "FvXDh42roGqhDHqMM00Kbt6crKbudIIr",
       "geometry": {
         "coordinates": [
           [
@@ -7372,26 +7914,37 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "1",
-        "ilot_numero": "27",
-        "nom_affiche": "27-1",
-        "culture": "PPH",
-        "cultureN": "PPH",
-        "code_exploitation": "031158368",
-        "surface_admissible": 35,
+        "pacage": "031158368",
+        "ilot": 27,
+        "ilot_ref": "031015611064",
+        "parcelle": 1,
+        "commune_insee": "31196",
+        "code_culture": "PPH",
         "precision": "001",
+        "culture_secondaire": "",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
+        "reconversion_pp": false,
+        "obligation_reimplantation_pp": false,
+        "maec_surface_cible": false,
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 27,
+        "numero": 1,
+        "code": "PPH",
+        "nom_affiche": "27-1",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "8i2bPOniWLrpwFKSJE6xznYT7LrxPxgH",
+      "id": "hwOA6kPTFaTYaT6IJVY7qb6ja9f884Za",
       "geometry": {
         "coordinates": [
           [
@@ -7456,27 +8009,36 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "1",
-        "ilot_numero": "28",
-        "nom_affiche": "28-1",
-        "culture": "BTH",
-        "cultureN": "BTH",
-        "code_exploitation": "031158368",
-        "surface_admissible": 136,
+        "pacage": "031158368",
+        "ilot": 28,
+        "ilot_ref": "031015612282",
+        "parcelle": 1,
+        "commune_insee": "31196",
+        "code_culture": "BTH",
         "precision": "001",
+        "culture_secondaire": "A00",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
-        "culture_secondaire": "A00",
+        "reconversion_pp": false,
+        "obligation_reimplantation_pp": false,
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 28,
+        "numero": 1,
+        "code": "BTH",
+        "nom_affiche": "28-1",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "egLtpZbhVdLVFISgWNN4O8JBTYG7zUi5",
+      "id": "L24mXT4PyXiWTbR97FO1CxkCxoZHsolH",
       "geometry": {
         "coordinates": [
           [
@@ -7585,27 +8147,36 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "1",
-        "ilot_numero": "29",
-        "nom_affiche": "29-1",
-        "culture": "BTH",
-        "cultureN": "BTH",
-        "code_exploitation": "031158368",
-        "surface_admissible": 285,
+        "pacage": "031158368",
+        "ilot": 29,
+        "ilot_ref": "031018502802",
+        "parcelle": 1,
+        "commune_insee": "31196",
+        "code_culture": "BTH",
         "precision": "001",
+        "culture_secondaire": "A00",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
-        "culture_secondaire": "A00",
+        "reconversion_pp": false,
+        "obligation_reimplantation_pp": false,
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 29,
+        "numero": 1,
+        "code": "BTH",
+        "nom_affiche": "29-1",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "RMmhGCRkpDOcqD4DcosSdjIlHxTQBhby",
+      "id": "nPf0qKySHPZMK3EugPkCZ2vcpmMiJEsV",
       "geometry": {
         "coordinates": [
           [
@@ -7706,27 +8277,36 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "2",
-        "ilot_numero": "30",
-        "nom_affiche": "30-2",
-        "culture": "LUZ",
-        "cultureN": "LUZ",
-        "code_exploitation": "031158368",
-        "surface_admissible": 514,
+        "pacage": "031158368",
+        "ilot": 30,
+        "ilot_ref": "031018502803",
+        "parcelle": 2,
+        "commune_insee": "31196",
+        "code_culture": "LUZ",
         "precision": "002",
+        "culture_secondaire": "A00",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
-        "culture_secondaire": "A00",
+        "reconversion_pp": false,
+        "obligation_reimplantation_pp": false,
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 30,
+        "numero": 2,
+        "code": "LUZ",
+        "nom_affiche": "30-2",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "5puyWN1e7G9R3tQe90Nr95Xz24GI8tdV",
+      "id": "LlSfI8sEzOa6APrU5GsM31V5GFmmGjoO",
       "geometry": {
         "coordinates": [
           [
@@ -7827,25 +8407,36 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "3",
-        "ilot_numero": "30",
-        "nom_affiche": "30-3",
-        "culture": "BTA",
-        "cultureN": "BTA",
-        "code_exploitation": "031158368",
-        "precision": "2",
+        "pacage": "031158368",
+        "ilot": 30,
+        "ilot_ref": "031018502803",
+        "parcelle": 3,
+        "commune_insee": "31196",
+        "code_culture": "BTA",
+        "precision": null,
+        "culture_secondaire": "",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
+        "reconversion_pp": false,
+        "obligation_reimplantation_pp": false,
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 30,
+        "numero": 3,
+        "code": "BTA",
+        "nom_affiche": "30-3",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "a2O89Hc3o3UhSfKR7l0eFusCb2m4QHtR",
+      "id": "hI4Pa5GTJWfx0X9JsleZPc0lYWWmPDb9",
       "geometry": {
         "coordinates": [
           [
@@ -7902,25 +8493,36 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "1",
-        "ilot_numero": "35",
-        "nom_affiche": "35-1",
-        "culture": "SNE",
-        "cultureN": "SNE",
-        "code_exploitation": "031158368",
+        "pacage": "031158368",
+        "ilot": 35,
+        "ilot_ref": "031017949574",
+        "parcelle": 1,
+        "commune_insee": "31196",
+        "code_culture": "SNE",
         "precision": "001",
+        "culture_secondaire": "",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
+        "reconversion_pp": false,
+        "obligation_reimplantation_pp": false,
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 35,
+        "numero": 1,
+        "code": "SNE",
+        "nom_affiche": "35-1",
         "overlap_warning": false
       }
     },
     {
       "type": "Feature",
-      "id": "nb8uu2YRmm97oHaqsNqK9hJguV7C5sJw",
+      "id": "UjaP1Yp66bDRZxslaXAbO52asQ1GJDMY",
       "geometry": {
         "coordinates": [
           [
@@ -7953,20 +8555,31 @@
         "type": "Polygon"
       },
       "properties": {
-        "numero": "3",
-        "ilot_numero": "35",
-        "nom_affiche": "35-3",
-        "culture": "PPH",
-        "cultureN": "PPH",
-        "code_exploitation": "031158368",
-        "surface_admissible": 5,
+        "pacage": "031158368",
+        "ilot": 35,
+        "ilot_ref": "031017949574",
+        "parcelle": 3,
+        "commune_insee": "31196",
+        "code_culture": "PPH",
         "precision": "004",
+        "culture_secondaire": "",
         "production_semences": false,
         "production_fermiers": false,
         "deshydratation": false,
         "derogation_ukraine": false,
         "accident_culture": false,
+        "reconversion_pp": false,
+        "obligation_reimplantation_pp": false,
+        "maec_surface_cible": false,
         "maec_elevage_monogastrique": false,
+        "date_labour": null,
+        "justification_motif": null,
+        "justification_texte": null,
+        "source": "telepac-mesparcelles-xml",
+        "ilot_numero": 35,
+        "numero": 3,
+        "code": "PPH",
+        "nom_affiche": "35-3",
         "overlap_warning": false
       }
     }

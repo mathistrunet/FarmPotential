@@ -434,7 +434,7 @@ export default function ParcellesEditorMap() {
     ) {
       warnings.push({
         code: ERROR_CODES.CODEBOOK_MISSING,
-        message: "codebook.js est absent ou invalide (labels cultures indisponibles).",
+        message: "codebookV2.js est absent ou invalide (labels cultures indisponibles).",
       });
     }
     if (
@@ -1922,6 +1922,7 @@ export default function ParcellesEditorMap() {
     </div>
   );
 }
+
 
 
 

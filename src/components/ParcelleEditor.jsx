@@ -870,32 +870,34 @@ export default function ParcelleEditor({
                   ))
                 : null}
               {CULTURE_COLUMNS.map((col) => (
-                <th
-                  key={col.id}
-                  style={{
-                    ...headerStyle,
-                    cursor: col.id === "current" ? "pointer" : headerStyle.cursor,
-                  }}
-                  onClick={
-                    col.id === "current"
-                      ? () => setShowAdvancedColumns((prev) => !prev)
-                      : undefined
-                  }
-                  title={
-                    col.id === "current"
-                      ? showAdvancedColumns
-                        ? "Masquer les options semences/fermiere/etc."
-                        : "Afficher les options semences/fermiere/etc."
-                      : undefined
-                  }
-                >
-                  <div>
+                <th key={col.id} style={headerStyle}>
+                  <div
+                    onClick={
+                      col.id === "current"
+                        ? () => setShowAdvancedColumns((prev) => !prev)
+                        : undefined
+                    }
+                    title={
+                      col.id === "current"
+                        ? showAdvancedColumns
+                          ? "Masquer les options semences/fermiere/etc."
+                          : "Afficher les options semences/fermiere/etc."
+                        : undefined
+                    }
+                    style={{
+                      cursor: col.id === "current" ? "pointer" : "default",
+                      fontWeight: 600,
+                    }}
+                  >
                     {col.label}
                     {col.id === "current" ? (showAdvancedColumns ? " [-]" : " [+]") : ""}
                   </div>
                   <button
                     type="button"
-                    onClick={() => fillCultureFromRpg(col)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      fillCultureFromRpg(col);
+                    }}
                     disabled={isFillingRpg}
                     style={{
                       ...headerButtonStyle,
@@ -975,22 +977,8 @@ export default function ParcelleEditor({
                       style={{ width: "100%", padding: "4px", border: "1px solid #d1d5db", borderRadius: 4 }}
                     />
                   </td>
-                  <td style={{ padding: "6px", borderBottom: "1px solid #e5e7eb" }}>
-                    <input
-                      value={props.code_exploitation ?? props.CODE_EXPLO ?? ""}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        f.properties = {
-                          ...props,
-                          code_exploitation: val,
-                          CODE_EXPLO: val,
-                        };
-                        setFeatures([...features]);
-                      }}
-                      onClick={(e) => e.stopPropagation()}
-                      style={{ width: "100%", padding: "4px", border: "1px solid #d1d5db", borderRadius: 4 }}
-                    />
-                  </td>
+
+
                   <td style={{ padding: "6px", borderBottom: "1px solid #e5e7eb", fontSize: 13 }}>
                     {surfaceHa != null && !Number.isNaN(surfaceHa) ? surfaceHa.toFixed(2) : "-"}
                   </td>
@@ -1106,6 +1094,8 @@ export default function ParcelleEditor({
     </div>
   );
 }
+
+
 
 
 

@@ -367,6 +367,7 @@ export async function readTelepacMesParcellesXml(input: string | ArrayBuffer): P
         }
 
         const precision = textContentOfChild(culturePrincipale, 'precision');
+        const resolvedPrecision = resolvePrecisionForCode(codeCulture, precision);
         const cultureSecondaire = culturePrincipale.getAttribute('culture-secondaire');
         const productionSemences = parseBooleanAttribute(culturePrincipale, 'production-semences');
         const productionFermiers = parseBooleanAttribute(culturePrincipale, 'production-fermiers');
@@ -448,3 +449,4 @@ export const telepacMesParcellesImporter = {
 };
 
 export default telepacMesParcellesImporter;
+
