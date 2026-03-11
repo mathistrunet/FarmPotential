@@ -1,7 +1,7 @@
 import type { GeoJsonProperties } from "geojson";
 
 import { applyGerNomColor } from "../config/soilColorbook";
-import { loadGeoPackageFeatureCollection } from "../utils/geopackage.ts";
+import type { LngLatBBox } from "../types/geo";
 import { buildError, ERROR_CODES } from "../utils/errors";
 
 export type DepartmentFeatures = {
@@ -11,22 +11,30 @@ export type DepartmentFeatures = {
 
 export async function loadDepartmentGeoJSON(
   code: string,
-  basePath: string
+  bounds: LngLatBBox,
+  signal?: AbortSignal
 ): Promise<DepartmentFeatures> {
-  const gpkgUrl = `${basePath}/code_insee_${code}.gpkg`;
-  let collection;
+  const normalized = code.trim().toUpperCase();
+  const bbox = bounds.join(",");
+  const url = `/api/soil/department?code=${encodeURIComponent(normalized)}&bbox=${encodeURIComponent(bbox)}&limit=10000`;
+
+  let payload;
   try {
-    collection = await loadGeoPackageFeatureCollection(gpkgUrl);
+    const response = await fetch(url, { signal });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    payload = await response.json();
   } catch (error) {
     throw buildError(
       ERROR_CODES.SOIL_DATA_LOAD_FAILED,
-      `Échec du chargement des données sols (${code}).`,
+      `Echec du chargement des donnees sols (${normalized}).`,
       error
     );
   }
 
-  const features = collection.features.map((feature) => {
-    const props = { ...(feature.properties ?? {}) } as GeoJsonProperties;
+  const features = (payload?.collection?.features || []).map((feature) => {
+    const props = { ...(feature?.properties ?? {}) } as GeoJsonProperties;
     applyGerNomColor(props);
     return {
       ...feature,
@@ -34,5 +42,5 @@ export async function loadDepartmentGeoJSON(
     } as GeoJSON.Feature;
   });
 
-  return { code, features };
+  return { code: normalized, features };
 }

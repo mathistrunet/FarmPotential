@@ -1,36 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { GeoJsonProperties } from "geojson";
 import type maplibregl from "maplibre-gl";
-import type {
-  MultiPolygon as ClippingMultiPolygon,
-  Pair as ClippingPair,
-  Polygon as ClippingPolygon,
-} from "polygon-clipping";
-import * as polygonClipping from "polygon-clipping";
 
-type IntersectionFn = (
-  geom: ClippingPolygon | ClippingMultiPolygon,
-  ...geoms: (ClippingPolygon | ClippingMultiPolygon)[]
-) => ClippingMultiPolygon;
-
-const polygonClippingModule = polygonClipping as {
-  intersection?: IntersectionFn;
-  default?: { intersection?: IntersectionFn };
-};
-
-const missingIntersection: IntersectionFn = () => {
-  throw new Error("polygon-clipping intersection export unavailable");
-};
-
-export const clipIntersection: IntersectionFn =
-  polygonClippingModule.intersection ??
-  polygonClippingModule.default?.intersection ??
-  missingIntersection;
-
-import type { LngLatBBox } from "../services/rrpLocal";
+import type { LngLatBBox } from "../types/geo";
 import { loadDepartmentGeoJSON } from "../services/soilmapLocal";
 import departementsMeta from "../data/departements_meta.json";
-import { withBasePath } from "../utils/publicBase";
 
 import {
   FIELD_UCS,
@@ -51,6 +25,7 @@ const HALF_SQUARE_EDGE_METERS = MAX_TILE_EDGE_METERS / 2;
 const EARTH_RADIUS = WEB_MERCATOR_WORLD_WIDTH_METERS / (2 * Math.PI);
 const MAX_MERCATOR_LAT = 85.05112877980659;
 const MAX_DEPARTMENTS = 3;
+const UPDATE_DEBOUNCE_MS = 180;
 
 const META = departementsMeta as Record<
   string,
@@ -79,7 +54,6 @@ export type TileSummary = {
 
 type Options = {
   map: maplibregl.Map | null;
-  dataPath?: string;
   sourceId?: string;
   fillLayerId?: string;
   lineLayerId?: string;
@@ -93,7 +67,6 @@ type Options = {
 
 export function useSoilLayerLocal({
   map,
-  dataPath = withBasePath("/data/soilmap_dep"),
   sourceId = "soils-rrp",
   fillLayerId = "soils-rrp-fill",
   lineLayerId = "soils-rrp-outline",
@@ -112,20 +85,14 @@ export function useSoilLayerLocal({
   const freezeRef = useRef(freezeTiles);
   const updateRef = useRef<(() => void) | null>(null);
   const requestIdRef = useRef(0);
-  const departmentCacheRef = useRef(new Map<string, GeoJSON.Feature[]>());
-  const departmentPromiseRef = useRef(new Map<string, Promise<GeoJSON.Feature[]>>());
   const frozenTilesRef = useRef<FrozenTile[]>([]);
   const currentTileRef = useRef<CurrentTile | null>(null);
   const nextFrozenIdRef = useRef(1);
+  const updateTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     frozenTilesRef.current = frozenTiles;
   }, [frozenTiles]);
-
-  useEffect(() => {
-    departmentCacheRef.current.clear();
-    departmentPromiseRef.current.clear();
-  }, [dataPath]);
 
   useEffect(() => {
     freezeRef.current = freezeTiles;
@@ -153,9 +120,7 @@ export function useSoilLayerLocal({
 
     let aborted = false;
 
-    const applyCombinedFeatures = (
-      dynamicFeatures: GeoJSON.Feature[]
-    ): GeoJSON.FeatureCollection => {
+    const applyCombinedFeatures = (dynamicFeatures: GeoJSON.Feature[]): GeoJSON.FeatureCollection => {
       const allFeatures = [
         ...frozenTilesRef.current.flatMap((tile) => tile.features),
         ...dynamicFeatures,
@@ -173,33 +138,11 @@ export function useSoilLayerLocal({
       return { type: "FeatureCollection", features: allFeatures };
     };
 
-    const ensureDepartment = (code: string) => {
-      const cacheKey = normalizeDepartmentCode(code);
-      const cache = departmentCacheRef.current;
-      const promises = departmentPromiseRef.current;
-      if (cache.has(cacheKey)) {
-        return Promise.resolve(cache.get(cacheKey)!);
-      }
-      let promise = promises.get(cacheKey);
-      if (!promise) {
-        promise = loadDepartmentGeoJSON(cacheKey, dataPath)
-          .then((res) => {
-            cache.set(cacheKey, res.features);
-            return res.features;
-          })
-          .catch((err) => {
-            promises.delete(cacheKey);
-            throw err;
-          });
-        promises.set(cacheKey, promise);
-      }
-      return promise;
-    };
-
     const runUpdate = async () => {
       if (aborted || freezeRef.current) return;
       const center = map.getCenter();
       const codes = pickNearestDepartments(center.lng, center.lat, MAX_DEPARTMENTS);
+      const squareBounds = getSquareBounds(center.lng, center.lat);
       if (!codes.length) {
         currentTileRef.current = null;
         setCurrentTileSummary(null);
@@ -207,42 +150,51 @@ export function useSoilLayerLocal({
         setLoadingTiles(false);
         return;
       }
+
       setLoadingTiles(true);
       const reqId = ++requestIdRef.current;
+      const abortController = new AbortController();
       try {
-        await Promise.all(codes.map((code) => ensureDepartment(code)));
-        if (aborted || reqId !== requestIdRef.current) return;
-        const squareBounds = getSquareBounds(center.lng, center.lat);
-        const features = codes.flatMap((code) =>
-          departmentCacheRef.current.get(normalizeDepartmentCode(code)) ?? []
+        const departmentResponses = await Promise.all(
+          codes.map((code) => loadDepartmentGeoJSON(code, squareBounds, abortController.signal))
         );
-        const clipped = clipFeaturesToBounds(features, squareBounds);
+        if (aborted || reqId !== requestIdRef.current) return;
+
+        const features = departmentResponses.flatMap((item) => item.features);
         currentTileRef.current = {
           bounds: squareBounds,
           center: [center.lng, center.lat],
-          features: clipped,
+          features,
         };
         setCurrentTileSummary({
           bounds: squareBounds,
           center: [center.lng, center.lat],
-          featureCount: clipped.length,
+          featureCount: features.length,
         });
-        applyCombinedFeatures(clipped);
+        applyCombinedFeatures(features);
       } catch (error) {
         if (!aborted) {
-          const code = (error && typeof error === "object" && "code" in error)
-            ? error.code
-            : undefined;
+          const code =
+            error && typeof error === "object" && "code" in error
+              ? (error as { code?: string }).code
+              : undefined;
           const prefix = code ? `[${code}] ` : "";
           console.error(`${prefix}Failed to load soil department`, error);
         }
       } finally {
+        abortController.abort();
         if (!aborted) setLoadingTiles(false);
       }
     };
 
-    const updateHandler = () => {
-      void runUpdate();
+    const scheduleUpdate = () => {
+      if (updateTimerRef.current != null) {
+        window.clearTimeout(updateTimerRef.current);
+      }
+      updateTimerRef.current = window.setTimeout(() => {
+        updateTimerRef.current = null;
+        void runUpdate();
+      }, UPDATE_DEBOUNCE_MS);
     };
 
     function add() {
@@ -311,16 +263,12 @@ export function useSoilLayerLocal({
             },
             getLayerIdBelow(map, zIndex + 2) || undefined
           );
-        } else {
-          console.warn(
-            `Skipping "${labelLayerId}" labels because the current style has no glyphs URL.`
-          );
         }
 
-        updateRef.current = updateHandler;
-        updateHandler();
-        map.on("move", updateHandler);
-        map.on("zoom", updateHandler);
+        updateRef.current = scheduleUpdate;
+        scheduleUpdate();
+        map.on("moveend", scheduleUpdate);
+        map.on("zoomend", scheduleUpdate);
       } catch (err) {
         console.error("RRP GeoPackage error:", err);
         setLoadingTiles(false);
@@ -341,8 +289,12 @@ export function useSoilLayerLocal({
     return () => {
       aborted = true;
       map.off("load", start);
-      map.off("move", updateHandler);
-      map.off("zoom", updateHandler);
+      map.off("moveend", scheduleUpdate);
+      map.off("zoomend", scheduleUpdate);
+      if (updateTimerRef.current != null) {
+        window.clearTimeout(updateTimerRef.current);
+        updateTimerRef.current = null;
+      }
       if (map.getLayer(labelLayerId)) map.removeLayer(labelLayerId);
       if (map.getLayer(lineLayerId)) map.removeLayer(lineLayerId);
       if (map.getLayer(fillLayerId)) map.removeLayer(fillLayerId);
@@ -357,7 +309,6 @@ export function useSoilLayerLocal({
   }, [
     map,
     visible,
-    dataPath,
     sourceId,
     fillLayerId,
     lineLayerId,
@@ -502,11 +453,7 @@ function useGeoportalOverlays({
       const { sourceId: overlaySourceId, layerId } = getOverlayIdentifiers(sourceId, key);
       const previous = overlayState.get(key);
 
-      if (
-        previous &&
-        boundsEqual(previous, bounds) &&
-        map.getLayer(layerId)
-      ) {
+      if (previous && boundsEqual(previous, bounds) && map.getLayer(layerId)) {
         map.setPaintProperty(layerId, "raster-opacity", overlayOpacity);
         return;
       }
@@ -606,40 +553,6 @@ function boundsEqual(a: LngLatBBox, b: LngLatBBox, epsilon = 1e-9) {
   return true;
 }
 
-function normalizeDepartmentCode(code: string): string {
-  return code.trim().toUpperCase();
-}
-
-function clipFeaturesToBounds(
-  features: GeoJSON.Feature[],
-  bounds: LngLatBBox
-): GeoJSON.Feature[] {
-  if (!features.length) return [];
-  const clipped: GeoJSON.Feature[] = [];
-  features.forEach((feature) => {
-    if (!feature.geometry) return;
-    if (
-      feature.geometry.type !== "Polygon" &&
-      feature.geometry.type !== "MultiPolygon" &&
-      feature.geometry.type !== "GeometryCollection"
-    ) {
-      return;
-    }
-    let clippedFeature: GeoJSON.Feature | null = null;
-    try {
-      const clippedGeometry = clipGeometryToBounds(feature.geometry, bounds);
-      clippedFeature = clippedGeometry
-        ? cloneFeatureWithGeometry(feature, clippedGeometry)
-        : null;
-    } catch {
-      clippedFeature = null;
-    }
-    if (!clippedFeature?.geometry || geometryIsEmpty(clippedFeature.geometry)) return;
-    clipped.push(clippedFeature);
-  });
-  return clipped;
-}
-
 function getSquareBounds(lng: number, lat: number): LngLatBBox {
   const center = projectToMercator(lng, lat);
   const minX = center.x - HALF_SQUARE_EDGE_METERS;
@@ -670,148 +583,11 @@ function clampLatitude(lat: number) {
   return Math.max(Math.min(lat, MAX_MERCATOR_LAT), -MAX_MERCATOR_LAT);
 }
 
-function geometryIsEmpty(geometry: GeoJSON.Geometry): boolean {
-  switch (geometry.type) {
-    case "Polygon": {
-      const rings = geometry.coordinates;
-      if (!Array.isArray(rings) || rings.length === 0) return true;
-      let hasValidRing = false;
-      for (const ring of rings) {
-        if (!isValidLinearRing(ring)) {
-          return true;
-        }
-        hasValidRing = true;
-      }
-      return !hasValidRing;
-    }
-    case "MultiPolygon": {
-      const polygons = geometry.coordinates;
-      if (!Array.isArray(polygons) || polygons.length === 0) return true;
-      let hasValidPolygon = false;
-      for (const polygon of polygons) {
-        if (!Array.isArray(polygon) || polygon.length === 0) {
-          return true;
-        }
-        for (const ring of polygon) {
-          if (!isValidLinearRing(ring)) {
-            return true;
-          }
-        }
-        hasValidPolygon = true;
-      }
-      return !hasValidPolygon;
-    }
-    case "GeometryCollection": {
-      const geometries = geometry.geometries;
-      if (!Array.isArray(geometries) || geometries.length === 0) return true;
-      let hasRenderable = false;
-      for (const geom of geometries) {
-        if (!geom || typeof geom !== "object") {
-          return true;
-        }
-        if (!geometryIsEmpty(geom)) {
-          hasRenderable = true;
-        }
-      }
-      return !hasRenderable;
-    }
-    default:
-      return false;
-  }
-}
-
-function isValidLinearRing(ring: unknown): ring is GeoJSON.Position[] {
-  if (!Array.isArray(ring) || ring.length < 4) return false;
-  if (!ring.every((position) => isValidPosition(position))) return false;
-  return true;
-}
-
-function isValidPosition(position: unknown): position is GeoJSON.Position {
-  if (!Array.isArray(position) || position.length < 2) return false;
-  const [lng, lat, ...rest] = position;
-  if (!isFiniteNumber(lng) || !isFiniteNumber(lat)) return false;
-  for (const value of rest) {
-    if (value != null && !isFiniteNumber(value)) return false;
-  }
-  return true;
-}
-
-function isFiniteNumber(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value);
-}
-
-function cloneFeatureWithGeometry(
-  feature: GeoJSON.Feature,
-  geometry: GeoJSON.Geometry
-): GeoJSON.Feature {
-  const { geometry: _oldGeometry, bbox: _oldBBox, ...rest } = feature as GeoJSON.Feature & {
-    bbox?: GeoJSON.BBox;
-  };
-  return { ...rest, geometry };
-}
-
 function deepCloneFeature(feature: GeoJSON.Feature): GeoJSON.Feature {
-  return JSON.parse(JSON.stringify(feature)) as GeoJSON.Feature;
-}
-
-function clipGeometryToBounds(
-  geometry: GeoJSON.Geometry,
-  bounds: LngLatBBox
-): GeoJSON.Geometry | null {
-  switch (geometry.type) {
-    case "Polygon": {
-      const clipped = clipPolygonsToBounds([geometry.coordinates], bounds);
-      if (!clipped.length) return null;
-      if (clipped.length === 1) {
-        return { type: "Polygon", coordinates: clipped[0] };
-      }
-      return { type: "MultiPolygon", coordinates: clipped };
-    }
-    case "MultiPolygon": {
-      const clipped = clipPolygonsToBounds(geometry.coordinates, bounds);
-      if (!clipped.length) return null;
-      return { type: "MultiPolygon", coordinates: clipped };
-    }
-    case "GeometryCollection": {
-      const geometries = geometry.geometries
-        .map((geom) => (geom ? clipGeometryToBounds(geom, bounds) : null))
-        .filter((geom): geom is GeoJSON.Geometry => geom != null);
-      if (!geometries.length) return null;
-      return { type: "GeometryCollection", geometries };
-    }
-    default:
-      return null;
+  if (typeof structuredClone === "function") {
+    return structuredClone(feature) as GeoJSON.Feature;
   }
-}
-
-function clipPolygonsToBounds(
-  polygons: GeoJSON.Position[][][],
-  bounds: LngLatBBox
-): GeoJSON.Position[][][] {
-  if (!polygons.length) return [];
-  const subject = polygons.map((poly) =>
-    poly.map((ring) =>
-      ring.map((position) => [position[0], position[1]] as ClippingPair)
-    )
-  ) as ClippingMultiPolygon;
-  const clipped = clipIntersection(subject, boundsToClippingPolygon(bounds));
-  if (!clipped.length) return [];
-  return clipped.map((poly) =>
-    poly.map((ring) => ring.map(([lng, lat]) => [lng, lat] as GeoJSON.Position))
-  );
-}
-
-function boundsToClippingPolygon(bounds: LngLatBBox): ClippingPolygon {
-  const [minX, minY, maxX, maxY] = bounds;
-  return [
-    [
-      [minX, minY],
-      [maxX, minY],
-      [maxX, maxY],
-      [minX, maxY],
-      [minX, minY],
-    ],
-  ];
+  return JSON.parse(JSON.stringify(feature)) as GeoJSON.Feature;
 }
 
 function getLayerIdBelow(map: maplibregl.Map, zIndex: number): string | null {

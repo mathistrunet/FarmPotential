@@ -99,6 +99,31 @@ function collectAssignments(features) {
   return pending;
 }
 
+function buildRegionBbox(items, paddingDegrees = 0.02) {
+  if (!Array.isArray(items) || !items.length) return null;
+  let minLng = Infinity;
+  let minLat = Infinity;
+  let maxLng = -Infinity;
+  let maxLat = -Infinity;
+
+  items.forEach((item) => {
+    const [lng, lat] = item.centroid || [];
+    if (!Number.isFinite(lng) || !Number.isFinite(lat)) return;
+    minLng = Math.min(minLng, lng);
+    minLat = Math.min(minLat, lat);
+    maxLng = Math.max(maxLng, lng);
+    maxLat = Math.max(maxLat, lat);
+  });
+
+  if (!Number.isFinite(minLng)) return null;
+  return [
+    minLng - paddingDegrees,
+    minLat - paddingDegrees,
+    maxLng + paddingDegrees,
+    maxLat + paddingDegrees,
+  ];
+}
+
 export function useToponymieAutoNaming(setFeatures) {
   const [isNaming, setIsNaming] = useState(false);
 
@@ -111,15 +136,24 @@ export function useToponymieAutoNaming(setFeatures) {
 
     setIsNaming(true);
     try {
-      const regionSet = new Set(pending.map((item) => item.region));
       const regionData = new Map();
+      const pendingByRegion = new Map();
+      pending.forEach((item) => {
+        if (!pendingByRegion.has(item.region)) {
+          pendingByRegion.set(item.region, []);
+        }
+        pendingByRegion.get(item.region).push(item);
+      });
+
       await Promise.all(
-        Array.from(regionSet).map(async (region) => {
+        Array.from(pendingByRegion.entries()).map(async ([region, items]) => {
+          const bbox = buildRegionBbox(items);
+          if (!bbox) return;
           try {
-            const points = await getToponymiePoints(region);
+            const points = await getToponymiePoints(region, bbox);
             regionData.set(region, points);
           } catch (error) {
-            console.error(`Toponymie: échec du chargement ${region}`, error);
+            console.error(`Toponymie: echec du chargement ${region}`, error);
           }
         })
       );
@@ -169,4 +203,3 @@ export function useToponymieAutoNaming(setFeatures) {
 
   return { fillToponymieNames, isNaming };
 }
-

@@ -1,4 +1,4 @@
-import type { LngLatBBox } from "../services/rrpLocal";
+import type { LngLatBBox } from "../types/geo";
 
 const GEO_PORTAIL_KEY =
   import.meta.env.VITE_GEO_PORTAIL_API_KEY?.trim() || null;

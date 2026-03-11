@@ -1,6 +1,3 @@
-import { loadGeoPackageFeatureCollection } from "../utils/geopackage.ts";
-import { TOPONYMIE_REGION_PATHS } from "../config/toponymie";
-
 const regionCache = new Map();
 
 function normalizeRegion(code) {
@@ -8,30 +5,45 @@ function normalizeRegion(code) {
   return code.toUpperCase();
 }
 
-export async function getToponymiePoints(regionCode) {
+function bboxKey(bbox) {
+  return bbox.map((value) => Number(value).toFixed(4)).join(":");
+}
+
+export async function getToponymiePoints(regionCode, bbox, signal) {
   const normalized = normalizeRegion(regionCode);
-  if (!normalized || !TOPONYMIE_REGION_PATHS[normalized]) {
+  if (!normalized || !Array.isArray(bbox) || bbox.length !== 4) {
     return [];
   }
-  if (regionCache.has(normalized)) {
-    return regionCache.get(normalized);
+
+  const cacheKey = `${normalized}:${bboxKey(bbox)}`;
+  if (regionCache.has(cacheKey)) {
+    return regionCache.get(cacheKey);
   }
-  const promise = loadGeoPackageFeatureCollection(
-    TOPONYMIE_REGION_PATHS[normalized]
-  )
-    .then((collection) => {
-      const points = collection.features
-        .filter((feature) => feature?.geometry?.type === "Point")
-        .map((feature) => ({
-          coordinates: feature.geometry.coordinates,
-          properties: feature.properties || {},
-        }));
-      return points;
+
+  const query = new URLSearchParams({
+    region: normalized,
+    bbox: bbox.join(","),
+    limit: "15000",
+  });
+
+  const promise = fetch(`/api/toponymie/points?${query.toString()}`, { signal })
+    .then((response) => {
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      return response.json();
+    })
+    .then((payload) => {
+      const points = Array.isArray(payload?.points) ? payload.points : [];
+      return points.filter(
+        (point) => Array.isArray(point?.coordinates) && point.coordinates.length >= 2
+      );
     })
     .catch((error) => {
-      regionCache.delete(normalized);
+      regionCache.delete(cacheKey);
       throw error;
     });
-  regionCache.set(normalized, promise);
+
+  regionCache.set(cacheKey, promise);
   return promise;
 }

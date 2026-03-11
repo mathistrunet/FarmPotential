@@ -12,16 +12,16 @@ import { ringAreaM2 } from "../utils/geometry";
 import { fetchRpgGeoJSON, getCultureLabel, getMapBoundsCRS84 } from "../services/rpg";
 import { RPG_MIN_ZOOM } from "../Front/useRpgLayer";
 
-function computeCultureWarning(raw) {
+function computeCultureWarning(raw, fallbackPrecision = "") {
   const value = (raw ?? "").trim();
   if (value === "") return null;
-  const len = value.replace(/\s+/g, "").length;
-  if (len < 3) return null;
-  if (len === 3) {
-    const asCode = value.toUpperCase();
-    const known = !!labelFromCode(asCode);
+  const split = splitCultureKey(value);
+  const isCodeLike = /^[A-Z0-9]{2,10}$/.test(split.code);
+  if (isCodeLike) {
+    const precision = split.precision || String(fallbackPrecision || "").trim();
+    const known = !!(labelFromCode(split.code, precision) || labelFromCode(split.code));
     if (!known) {
-      return { type: "code", value: asCode };
+      return { type: "code", value: split.code };
     }
     return null;
   }
@@ -216,7 +216,7 @@ export default function ParcelleEditor({
   isFillingNames = false,
   viewMode: externalViewMode,
 }) {
-  const options = entriesCodebook();
+  const options = useMemo(() => entriesCodebook(), []);
   const rowsRef = useRef(new Map());
   const [typed, setTyped] = useState(buildEmptyTypedState);
   const [isFillingRpg, setIsFillingRpg] = useState(false);
@@ -255,10 +255,13 @@ export default function ParcelleEditor({
       return lookup.display;
     }
     const fromLabel = codeFromLabel(textValue);
-    const split = splitCultureKey(fromLabel || "");
-    const code = labelFromCode(textValue.toUpperCase()) ? textValue.toUpperCase() : split.code;
+    const splitFromLabel = splitCultureKey(fromLabel || "");
+    const splitFromValue = splitCultureKey(textValue);
+    const codeFromValue = /^[A-Z0-9]{2,10}$/.test(splitFromValue.code) ? splitFromValue.code : "";
+    const code = codeFromValue || splitFromLabel.code;
     if (code) {
-      const candidate = split.precision || (precisionKey ? props?.[precisionKey] : "");
+      const candidate =
+        splitFromValue.precision || splitFromLabel.precision || (precisionKey ? props?.[precisionKey] : "");
       const precision = resolvePrecisionForCode(code, candidate);
       const label = labelFromCode(code, precision) || labelFromCode(code);
       return label || code;
@@ -269,12 +272,22 @@ export default function ParcelleEditor({
   useEffect(() => {
     if (!features.length) return;
     const props = features[0]?.properties || {};
-    setGeneralInfo((prev) => ({
-      exploitation: prev.exploitation || props.exploitation || props.nom_exploitation || "",
-      pacage: prev.pacage || props.code_exploitation || props.pacage || props.numero_pacage || "",
-      siret: prev.siret || props.siret || props.SIRET || "",
-    }));
-  }, [features, resolveCultureDisplay]);
+    setGeneralInfo((prev) => {
+      const next = {
+        exploitation: prev.exploitation || props.exploitation || props.nom_exploitation || "",
+        pacage: prev.pacage || props.code_exploitation || props.pacage || props.numero_pacage || "",
+        siret: prev.siret || props.siret || props.SIRET || "",
+      };
+      if (
+        prev.exploitation === next.exploitation &&
+        prev.pacage === next.pacage &&
+        prev.siret === next.siret
+      ) {
+        return prev;
+      }
+      return next;
+    });
+  }, [features]);
 
 
   const registerRowRef = (idKey) => (el) => {
@@ -504,10 +517,10 @@ export default function ParcelleEditor({
 
 
   
-  const renderCultureWarning = (raw) => {
+  const renderCultureWarning = (raw, precision) => {
     if (!raw) return null;
     if (displayLookup.has(String(raw).trim().toLowerCase())) return null;
-    const warn = computeCultureWarning(raw);
+    const warn = computeCultureWarning(raw, precision);
     if (!warn) return null;
     return (
       <div style={{ fontSize: 12, color: "#a00", marginTop: 4 }}>
@@ -711,7 +724,7 @@ export default function ParcelleEditor({
                 placeholder="Tapez le nom (ou le code)..."
                 style={{ width: "90%", padding: "6px 8px", border: "1px solid #ccc", borderRadius: 6, marginTop: 2 }}
               />
-              {renderCultureWarning(cultureDisplay)}
+              {renderCultureWarning(cultureDisplay, props?.[PRECISION_KEYS.current])}
             </label>
 
             <label style={{ fontSize: 12, display: "block" }}>
@@ -726,7 +739,7 @@ export default function ParcelleEditor({
                 placeholder="Code ou nom"
                 style={{ width: "90%", padding: "6px 8px", border: "1px solid #ccc", borderRadius: 6, marginTop: 2 }}
               />
-              {renderCultureWarning(culturePrevDisplay)}
+              {renderCultureWarning(culturePrevDisplay, props?.[PRECISION_KEYS.prev1])}
             </label>
 
             <datalist id={listId}>
@@ -1094,6 +1107,8 @@ export default function ParcelleEditor({
     </div>
   );
 }
+
+
 
 
 

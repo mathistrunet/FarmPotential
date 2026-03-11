@@ -256,6 +256,7 @@ export default function ParcellesEditorMap() {
   const [validatedMatches, setValidatedMatches] = useState([]);
   const [validatedMatchesAt, setValidatedMatchesAt] = useState(null);
   const drawLayerFiltersRef = useRef(new Map());
+  const drawLayerAppliedFiltersRef = useRef(new Map());
   const toolbarScrollRef = useRef(null);
   const [backendReady, setBackendReady] = useState(false);
   const lastSavedPayloadRef = useRef("");
@@ -388,15 +389,17 @@ export default function ParcellesEditorMap() {
             ? filters[0]
             : ["all", ...filters]
           : null;
+        const previousApplied = drawLayerAppliedFiltersRef.current.get(layerId);
+        const previousSerialized =
+          previousApplied == null ? "__NULL__" : JSON.stringify(previousApplied);
+        const nextSerialized = nextFilter == null ? "__NULL__" : JSON.stringify(nextFilter);
+        if (previousSerialized === nextSerialized) return;
         map.setFilter(layerId, nextFilter);
+        drawLayerAppliedFiltersRef.current.set(layerId, nextFilter);
       });
     };
 
     applyFilter();
-    map.on("idle", applyFilter);
-    return () => {
-      map.off("idle", applyFilter);
-    };
   }, [mapRef, parcelleYearFilter, parcelleGroupFilter]);
 
   const visibleFeatures = useMemo(() => {
@@ -1922,6 +1925,12 @@ export default function ParcellesEditorMap() {
     </div>
   );
 }
+
+
+
+
+
+
 
 
 
