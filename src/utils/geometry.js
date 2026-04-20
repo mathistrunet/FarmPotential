@@ -12,11 +12,16 @@ export function ringToGml(ringLonLat) {
 
 // Calcule avec la formule du lacet l'aire du polygone
 export function ringAreaM2(ringLonLat) {
-  const pts = ringLonLat.map(([lon, lat]) => toLambert93([lon, lat]));
+  const closed = ensureClosedRing(ringLonLat);
+  if (closed.length < 4) return 0;
+  const pts = closed.map(([lon, lat]) => toLambert93([lon, lat]));
   let sum = 0;
   for (let i = 0; i < pts.length - 1; i++) {
     const [x1, y1] = pts[i];
     const [x2, y2] = pts[i + 1];
+    if (!Number.isFinite(x1) || !Number.isFinite(y1) || !Number.isFinite(x2) || !Number.isFinite(y2)) {
+      continue;
+    }
     sum += x1 * y2 - x2 * y1;
   }
   return Math.abs(sum) / 2;

@@ -8,7 +8,7 @@ import {
   splitCultureKey,
   resolvePrecisionForCode,
 } from "../utils/cultureLabels";
-import { ringAreaM2 } from "../utils/geometry";
+import { featureAreaM2 } from "../utils/geometry";
 import { fetchRpgGeoJSON, getCultureLabel, getMapBoundsCRS84 } from "../services/rpg";
 import { RPG_MIN_ZOOM } from "../Front/useRpgLayer";
 
@@ -544,8 +544,8 @@ export default function ParcelleEditor({
         const num = (props.numero ?? "").toString().trim();
         const titre = ilot && num ? `${ilot}.${num}` : ilot || num || "";
 
-        const ring = f.geometry?.coordinates?.[0];
-        const surfaceHa = ring ? ringAreaM2(ring) / 10000 : null;
+        const featureArea = featureAreaM2(f);
+        const surfaceHa = typeof featureArea === "number" ? featureArea / 10000 : null;
 
         const codeExploit = props.code_exploitation ?? props.CODE_EXPLO ?? "";
         const nomParcelle = props.nom_parcelle ?? props.NOM_PARCEL ?? "";
@@ -933,8 +933,8 @@ export default function ParcelleEditor({
               const selected = String(selectedId) === idKey;
               const listId = `cultures-table-${idKey}`;
 
-              const ring = f.geometry?.coordinates?.[0];
-              const surfaceHa = ring ? ringAreaM2(ring) / 10000 : null;
+              const featureArea = featureAreaM2(f);
+              const surfaceHa = typeof featureArea === "number" ? featureArea / 10000 : null;
               const isBio = parseBioFlag(
                 props.isOrganic ?? props.conduite_bio ?? props.bio ?? props.BIO
               );
