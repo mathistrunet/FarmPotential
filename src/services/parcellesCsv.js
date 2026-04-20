@@ -119,7 +119,11 @@ async function loadAssoliaCulturesExport() {
           bom: true,
           trim: true,
         })
-      );
+      )
+      .catch((error) => {
+        assoliaCulturesPromise = null; // permet une nouvelle tentative au prochain appel
+        throw error;
+      });
   }
   return assoliaCulturesPromise;
 }
@@ -252,6 +256,19 @@ function normalizeRowMap(row) {
   return map;
 }
 
+// Lit la précision pour un indice d'année donné (0 = culture N, 1 = N-1, etc.)
+function getPrecisionByYearIndex(props, yearIndex) {
+  const keys =
+    yearIndex === 0
+      ? ["precision", "precision_n", "precision_n0", "precision_n_0"]
+      : [`precision_n${yearIndex}`, `precision_n_${yearIndex}`];
+  for (const key of keys) {
+    const value = props[key];
+    if (value != null && String(value).trim() !== "") return String(value).trim();
+  }
+  return "";
+}
+
 export async function buildParcellesCsv(
   features,
   secteur,
@@ -267,16 +284,26 @@ export async function buildParcellesCsv(
       console.warn(error);
     }
   }
-  const resolveCulture = (raw, metacodeOverride = "") => {
+
+  // Résout un code culture vers le libellé Assolia.
+  // Essaie d'abord la clé complète CODE|precision pour correspondre à la bonne
+  // culture Assolia (ex. blé bio ≠ blé standard), puis replie sur le code seul.
+  const resolveCulture = (raw, metacodeOverride = "", precision = "") => {
     const value = raw == null ? "" : String(raw).trim();
     if (!value && !metacodeOverride) return "";
     const metacode = metacodeOverride || getMetacodeFromValue(value);
-    if (structureLookup?.byMetacode?.[metacode]) {
-      return structureLookup.byMetacode[metacode];
+    if (!metacode) return formatCultureValue(value);
+    if (structureLookup?.byMetacode) {
+      // Tentative avec précision (ex. "BLE|1" pour blé semence)
+      const precisionTrimmed = String(precision || "").trim();
+      if (precisionTrimmed) {
+        const fullKey = `${metacode}|${precisionTrimmed}`;
+        if (structureLookup.byMetacode[fullKey]) return structureLookup.byMetacode[fullKey];
+      }
+      // Repli sur le code seul
+      if (structureLookup.byMetacode[metacode]) return structureLookup.byMetacode[metacode];
     }
-    if (structureLookup?.fallbackName) {
-      return structureLookup.fallbackName;
-    }
+    if (structureLookup?.fallbackName) return structureLookup.fallbackName;
     return formatCultureValue(value);
   };
 
@@ -300,8 +327,9 @@ export async function buildParcellesCsv(
       props.type_sol ?? props.typeSol ?? props.type_de_sol ?? props.sol ?? "";
     const cultureNValue = displayLabelFromProps(props);
     const cultureNCode = detectCultureCode(props) || getMetacodeFromValue(cultureNValue);
+    const precN = getPrecisionByYearIndex(props, 0);
     const cultureNOutput = structureLookup
-      ? resolveCulture(cultureNValue, cultureNCode)
+      ? resolveCulture(cultureNValue, cultureNCode, precN)
       : cultureNValue;
     const cultureN1Value = props.cultureN1 ?? props.cultureN_1 ?? "";
     const cultureN2Value = props.cultureN2 ?? props.cultureN_2 ?? "";
@@ -318,16 +346,16 @@ export async function buildParcellesCsv(
       typeSol == null ? "" : String(typeSol),
       cultureNOutput,
       structureLookup
-        ? resolveCulture(cultureN1Value)
+        ? resolveCulture(cultureN1Value, "", getPrecisionByYearIndex(props, 1))
         : formatCultureValue(cultureN1Value),
       structureLookup
-        ? resolveCulture(cultureN2Value)
+        ? resolveCulture(cultureN2Value, "", getPrecisionByYearIndex(props, 2))
         : formatCultureValue(cultureN2Value),
       structureLookup
-        ? resolveCulture(cultureN3Value)
+        ? resolveCulture(cultureN3Value, "", getPrecisionByYearIndex(props, 3))
         : formatCultureValue(cultureN3Value),
       structureLookup
-        ? resolveCulture(cultureN4Value)
+        ? resolveCulture(cultureN4Value, "", getPrecisionByYearIndex(props, 4))
         : formatCultureValue(cultureN4Value),
       formatGeometry(feature),
     ];

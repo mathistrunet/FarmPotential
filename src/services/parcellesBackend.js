@@ -1,6 +1,7 @@
 const PARCELLES_ENDPOINT = "/api/parcelles";
 const MATCH_VALIDATE_ENDPOINT = "/api/parcelles/matching/validate";
-const LOCAL_STORAGE_KEY = "parcelles.geojson";
+// Clé unifiée avec ParcellesStore pour éviter deux entrées localStorage désynchronisées
+const LOCAL_STORAGE_KEY = "farmpotential.parcelles-temp";
 
 const normalizeFeature = (feature) => {
   if (!feature || typeof feature !== "object") return null;
@@ -45,6 +46,20 @@ const normalizeFeatureCollection = (payload) => {
 
 const canUseLocalStorage = () =>
   typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+
+// Migration one-shot : déplace les données de l'ancienne clé vers la clé unifiée
+const LEGACY_STORAGE_KEY = "parcelles.geojson";
+const migrateLocalStorageOnce = () => {
+  if (!canUseLocalStorage()) return;
+  try {
+    if (window.localStorage.getItem(LOCAL_STORAGE_KEY)) return; // déjà migré
+    const legacy = window.localStorage.getItem(LEGACY_STORAGE_KEY);
+    if (!legacy) return;
+    window.localStorage.setItem(LOCAL_STORAGE_KEY, legacy);
+    window.localStorage.removeItem(LEGACY_STORAGE_KEY);
+  } catch (_) { /* silencieux */ }
+};
+migrateLocalStorageOnce();
 
 const loadLocalCollection = () => {
   if (!canUseLocalStorage()) return null;

@@ -3,7 +3,7 @@ import React, { useRef, useState } from "react";
 import { parseTelepacXmlToFeatures, buildTelepacXML } from "../services/telepacXml";
 import { parseShapefileZipToFeatures } from "../services/shapefileZip";
 import { buildParcelShapefileZip } from "../services/parcelleShapefile";
-import { resolveOverlappingParcels } from "../utils/overlapResolution";
+import { resolveOverlappingParcelsAsync } from "../utils/overlapResolution";
 
 /** Icônes légères inline (gardées) */
 const iconStyle = { width: 18, height: 18, display: "inline-block", verticalAlign: "-3px" };
@@ -186,11 +186,9 @@ export default function ImportTelepacButton({
 
       // Ajout des features
       // (on peut ajouter un FeatureCollection d’un coup mais on garde l’itératif robuste)
-      const toAdd = feats;
-      const mismatches = [];
-      for (const ft of toAdd) draw.add(ft);
+      for (const ft of feats) draw.add(ft);
 
-      resolveOverlappingParcels(draw, { mode: "warn" });
+      resolveOverlappingParcelsAsync(draw, { mode: "warn" });
 
       // Zoom sur l’emprise (MultiPolygon pris en charge)
       const importedFeatures = draw.getAll()?.features ?? [];
@@ -237,23 +235,6 @@ export default function ImportTelepacButton({
       setFeatures?.(polys);
       if (arr[0]?.id && typeof selectFeatureOnMap === "function") {
         selectFeatureOnMap(arr[0].id, false);
-      }
-
-      if (mismatches.length) {
-        const topMismatches = mismatches.slice(0, 5);
-        const details = topMismatches
-          .map(
-            (entry) =>
-              `- ${entry.label} (similarité max ${(entry.maxSimilarity * 100).toFixed(1)}%)`
-          )
-          .join("\n");
-        alert(
-          "Certaines parcelles se chevauchent mais ne correspondent pas au seuil attendu (95%).\n" +
-            `Parcelles concernées: ${mismatches.length}.\n` +
-            "Elles sont surlignées en orange sur la carte : sélectionne-les pour décider si c'est la même parcelle ou deux parcelles distinctes.\n" +
-            details +
-            (mismatches.length > topMismatches.length ? "\n..." : "")
-        );
       }
 
       onImported?.(feats);

@@ -5,6 +5,26 @@ import { normalizeParcellesCollection } from "./parcellesData";
 
 import { ParcellesContext } from "./ParcellesContext";
 const EMPTY_COLLECTION = { type: "FeatureCollection", features: [] };
+
+// Lightweight structural equality — avoids full JSON.stringify on large GeoJSON.
+// Compares geometry by reference first (same ref = unchanged), then serializes
+// only properties (small) + falls back to coordinate serialization only when needed.
+function featureCollectionsEqual(a, b) {
+  if (a === b) return true;
+  const af = a.features;
+  const bf = b.features;
+  if (af.length !== bf.length) return false;
+  for (let i = 0; i < af.length; i++) {
+    const fa = af[i];
+    const fb = bf[i];
+    if (fa === fb) continue;
+    if (fa.id !== fb.id) return false;
+    if (fa.geometry !== fb.geometry &&
+        JSON.stringify(fa.geometry) !== JSON.stringify(fb.geometry)) return false;
+    if (JSON.stringify(fa.properties) !== JSON.stringify(fb.properties)) return false;
+  }
+  return true;
+}
 const LOCAL_STORAGE_KEY = "farmpotential.parcelles-temp";
 
 const readFromStorage = () => {
@@ -42,11 +62,12 @@ export function ParcellesProvider({ children, initialCollection }) {
 
   const setCollectionState = useCallback((next, { dirty = true, trackHistory = true } = {}) => {
     setParcellesCollectionState((prev) => {
-      const safePrev = normalizeParcellesCollection(prev || EMPTY_COLLECTION);
+      // prev is always normalized (all write paths go through normalizeParcellesCollection)
+      const safePrev = prev || EMPTY_COLLECTION;
       const safeNext = normalizeParcellesCollection(
         typeof next === "function" ? next(safePrev) : next
       );
-      if (JSON.stringify(safePrev) === JSON.stringify(safeNext)) {
+      if (featureCollectionsEqual(safePrev, safeNext)) {
         return safePrev;
       }
       if (trackHistory) {
