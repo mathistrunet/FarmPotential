@@ -170,6 +170,10 @@ export async function loadSoilTypeRows() {
           ucs_id: norm(row.ucs_id),
           combination_label: buildSoilCombinationLabel(row),
         }));
+      })
+      .catch((error) => {
+        soilRowsPromise = null; // permet une nouvelle tentative au prochain appel
+        throw error;
       });
   }
   return soilRowsPromise;

@@ -94,6 +94,73 @@ function filterClippingResult(result, minWidthMeters = 0.5) {
   });
 }
 
+// Instanciation paresseuse du worker — une seule instance partagée
+let _overlapWorker = null;
+function getOverlapWorker() {
+  if (!_overlapWorker) {
+    _overlapWorker = new Worker(
+      new URL("./overlapWorker.js", import.meta.url),
+      { type: "module" }
+    );
+  }
+  return _overlapWorker;
+}
+
+function applyOverlapOps(draw, allFeatures, { warnings, updates, deletes }) {
+  const warningSet = new Set(warnings);
+  const updateMap = new Map(updates.map(({ id, geometry }) => [id, geometry]));
+  const deleteSet = new Set(deletes);
+
+  allFeatures.forEach((feature) => {
+    const id = feature.id;
+    if (!id) return;
+    if (deleteSet.has(id)) {
+      draw.delete(id);
+      return;
+    }
+    if (updateMap.has(id)) {
+      draw.delete(id);
+      draw.add({ ...feature, id, geometry: updateMap.get(id), properties: feature.properties || {} });
+    }
+  });
+
+  allFeatures.forEach((feature) => {
+    const id = feature.id;
+    if (!id || deleteSet.has(id)) return;
+    updateDrawFeatureProperties(draw, feature, { overlap_warning: warningSet.has(id) });
+  });
+}
+
+/**
+ * Version asynchrone — exécute le calcul O(N²) dans un Web Worker.
+ * Utiliser à la place de resolveOverlappingParcels lors d'imports lourds.
+ */
+export async function resolveOverlappingParcelsAsync(draw, { mode = "clip" } = {}) {
+  const features = draw.getAll()?.features ?? [];
+  const polys = features.filter(
+    (f) => f.geometry?.type === "Polygon" || f.geometry?.type === "MultiPolygon"
+  );
+  if (!polys.length) return;
+
+  const worker = getOverlapWorker();
+  const { ok, result, error } = await new Promise((resolve) => {
+    const handler = ({ data }) => {
+      worker.removeEventListener("message", handler);
+      resolve(data);
+    };
+    worker.addEventListener("message", handler);
+    worker.postMessage({ features: polys, mode, toleranceM: 1 });
+  });
+
+  if (!ok) {
+    console.warn("[OVERLAP_WORKER]", error);
+    resolveOverlappingParcels(draw, { mode }); // fallback synchrone
+    return;
+  }
+
+  applyOverlapOps(draw, polys, result);
+}
+
 export function resolveOverlappingParcels(draw, { mode = "clip" } = {}) {
   const overlapWarningToleranceM = 1;
   const features = draw.getAll()?.features ?? [];
