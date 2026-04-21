@@ -327,6 +327,7 @@ export default function ParcellesEditorMap() {
   const drawSyncRef = useRef(false);
   const drawSyncEventRef = useRef(null);
   const suppressDrawSyncRef = useRef(false);
+  const fromStoreRef = useRef(false);
   const emptyParcellesCollection = useMemo(
     () => ({ type: "FeatureCollection", features: [] }),
     []
@@ -527,6 +528,8 @@ export default function ParcellesEditorMap() {
   useEffect(() => {
     if (parcellesLoading) return;
     const nextCollection = parcellesCollection || emptyParcellesCollection;
+    fromStoreRef.current = true;
+    suppressDrawSyncRef.current = true;
     setDrawFeatures(nextCollection);
     lastSavedPayloadRef.current = JSON.stringify(nextCollection);
     lastSyncedPayloadRef.current = JSON.stringify(nextCollection);
@@ -593,6 +596,11 @@ export default function ParcellesEditorMap() {
     const payload = buildCollectionFromFeatures(features);
     const serialized = JSON.stringify(payload);
     if (serialized === lastSyncedPayloadRef.current) return;
+    if (fromStoreRef.current) {
+      fromStoreRef.current = false;
+      lastSyncedPayloadRef.current = serialized;
+      return;
+    }
     const hasFeatures = payload.features.length > 0;
     const storeHasFeatures = (parcellesCollection?.features?.length ?? 0) > 0;
     const isFromDraw = drawSyncRef.current;
