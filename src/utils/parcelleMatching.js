@@ -24,39 +24,60 @@ export function computeFeatureSimilarity(baseFeature, incomingFeature) {
   return interArea / maxArea;
 }
 
+function buildBestMatches(baseFeatures, incomingFeatures) {
+  const bestByIncoming = incomingFeatures.map(() => null);
+  const bestByBase = baseFeatures.map(() => null);
+
+  incomingFeatures.forEach((incomingFeature, incomingIndex) => {
+    baseFeatures.forEach((baseFeature, baseIndex) => {
+      const similarity = computeFeatureSimilarity(baseFeature, incomingFeature);
+
+      if (!bestByIncoming[incomingIndex] || similarity > bestByIncoming[incomingIndex].similarity) {
+        bestByIncoming[incomingIndex] = { baseIndex, similarity };
+      }
+
+      if (!bestByBase[baseIndex] || similarity > bestByBase[baseIndex].similarity) {
+        bestByBase[baseIndex] = { incomingIndex, similarity };
+      }
+    });
+  });
+
+  return { bestByIncoming, bestByBase };
+}
+
 export function buildMatchSuggestions(
   baseFeatures,
   incomingFeatures,
   similarityThreshold = 0.95
 ) {
+  const { bestByIncoming, bestByBase } = buildBestMatches(baseFeatures, incomingFeatures);
+
   return incomingFeatures.map((incomingFeature, incomingIndex) => {
-    let bestMatch = null;
-    baseFeatures.forEach((baseFeature, baseIndex) => {
-      const similarity = computeFeatureSimilarity(baseFeature, incomingFeature);
-      if (!bestMatch || similarity > bestMatch.similarity) {
-        bestMatch = {
-          baseIndex,
-          baseFeature,
-          similarity,
-        };
-      }
-    });
-    if (!bestMatch || bestMatch.similarity < similarityThreshold) {
+    const best = bestByIncoming[incomingIndex];
+    const bestSimilarity = best?.similarity ?? 0;
+    const baseIndex = best?.baseIndex ?? null;
+    const reciprocal =
+      baseIndex != null &&
+      bestByBase[baseIndex] &&
+      bestByBase[baseIndex].incomingIndex === incomingIndex;
+
+    if (baseIndex == null || bestSimilarity < similarityThreshold || !reciprocal) {
       return {
         incomingIndex,
         incomingFeature,
         baseIndex: null,
         baseFeature: null,
-        similarity: bestMatch ? bestMatch.similarity : 0,
+        similarity: bestSimilarity,
         isMatch: false,
       };
     }
+
     return {
       incomingIndex,
       incomingFeature,
-      baseIndex: bestMatch.baseIndex,
-      baseFeature: bestMatch.baseFeature,
-      similarity: bestMatch.similarity,
+      baseIndex,
+      baseFeature: baseFeatures[baseIndex] ?? null,
+      similarity: bestSimilarity,
       isMatch: true,
     };
   });

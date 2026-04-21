@@ -85,6 +85,49 @@ function parseCultureColumnInput(value) {
   return null;
 }
 
+function cultureColumnFromOffset(offset) {
+  if (!Number.isFinite(offset) || offset < 0) return "cultureN";
+  return offset === 0 ? "cultureN" : `cultureN${offset}`;
+}
+
+function resolveCultureValue(props = {}) {
+  const candidates = [
+    props.cultureN,
+    props.culture,
+    props.code_culture,
+    props.code,
+  ];
+  const value = candidates.find((item) => item != null && String(item).trim() !== "");
+  return value == null ? "" : String(value).trim();
+}
+
+function applyXmlImportContext(features, { year, cultureOffset }) {
+  return (features || []).map((feature) => {
+    const props = { ...(feature?.properties || {}) };
+
+    if (Number.isFinite(year)) {
+      props.annee = year;
+    }
+
+    const cultureValue = resolveCultureValue(props);
+    if (cultureValue) {
+      const targetColumn = cultureColumnFromOffset(cultureOffset);
+      props[targetColumn] = cultureValue;
+
+      if (cultureOffset === 0) {
+        props.cultureN = cultureValue;
+        props.culture = cultureValue;
+        if (!props.code_culture) props.code_culture = cultureValue;
+      }
+    }
+
+    return {
+      ...feature,
+      properties: props,
+    };
+  });
+}
+
 async function readFileText(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -99,11 +142,17 @@ async function _resolveTelepacCultureOffset(file, baseCultureYearRef) {
   const { campaign, year, pacage } = detectTelepacMeta(text);
 
   let baseYear = baseCultureYearRef.current;
-  if (baseYear == null && year != null) {
-    if (campaign === "courante") baseYear = year + 1;
-    if (campaign === "precedente") baseYear = year + 2;
-    if (baseYear == null) baseYear = year + 1;
-    if (baseYear != null) baseCultureYearRef.current = baseYear;
+
+  if (year != null) {
+    if (baseYear == null || year > baseYear) {
+      baseYear = year;
+      baseCultureYearRef.current = baseYear;
+    }
+  } else if (baseYear == null && campaign) {
+    // Last fallback when year cannot be parsed from fichier-xsd.
+    const fallbackYear = new Date().getFullYear();
+    baseYear = fallbackYear;
+    baseCultureYearRef.current = fallbackYear;
   }
 
   if (year != null && baseYear != null) {
@@ -112,8 +161,8 @@ async function _resolveTelepacCultureOffset(file, baseCultureYearRef) {
   }
 
   const input = window.prompt(
-    "Impossible de déterminer automatiquement la colonne des cultures. " +
-      "Indique la colonne cible (cultureN, cultureN1, cultureN2...) ou un numéro."
+    "Impossible de determiner automatiquement la colonne des cultures. " +
+      "Indique la colonne cible (cultureN, cultureN1, cultureN2...) ou un numero."
   );
   const parsed = parseCultureColumnInput(input);
   return {
@@ -121,7 +170,6 @@ async function _resolveTelepacCultureOffset(file, baseCultureYearRef) {
     meta: { pacage, year },
   };
 }
-
 
 
 export default function ImportTelepacButton({
@@ -137,6 +185,7 @@ export default function ImportTelepacButton({
   zoomOnImport = true,
   labelImport,
   onImported,
+  onImportMeta,
   onError,
 }) {
   const fileInputRef = useRef(null);
@@ -167,7 +216,24 @@ export default function ImportTelepacButton({
       if (name.endsWith(".zip")) {
         feats = await parseShapefileZipToFeatures(file);
       } else if (name.endsWith(".xml")) {
-        feats = await parseTelepacXmlToFeatures(file);
+        const xmlContext = await _resolveTelepacCultureOffset(file, _baseCultureYearRef);
+        const xmlYear = _resolveXmlYear(file, xmlContext?.meta?.year);
+
+        let cultureOffset = Number.isFinite(xmlContext?.offset) ? xmlContext.offset : 0;
+        const suggestedColumn = cultureColumnFromOffset(cultureOffset);
+        const columnInput = window.prompt(
+          "Colonne culture cible pour cet import XML (cultureN, cultureN1, cultureN2...)",
+          suggestedColumn
+        );
+        const parsedColumn = parseCultureColumnInput(columnInput);
+        if (Number.isFinite(parsedColumn)) {
+          cultureOffset = parsedColumn;
+        }
+
+        feats = applyXmlImportContext(await parseTelepacXmlToFeatures(file), {
+          year: xmlYear,
+          cultureOffset,
+        });
       } else {
         throw new Error("FORMAT_INVALIDE");
       }
@@ -255,6 +321,13 @@ export default function ImportTelepacButton({
             (mismatches.length > topMismatches.length ? "\n..." : "")
         );
       }
+
+      onImportMeta?.({
+        pacage: feats?.[0]?.properties?.code_exploitation || feats?.[0]?.properties?.pacage || null,
+        year: Number.isFinite(Number(feats?.[0]?.properties?.annee))
+          ? Number(feats?.[0]?.properties?.annee)
+          : null,
+      });
 
       onImported?.(feats);
     } catch (err) {
@@ -461,3 +534,4 @@ export function ExportShapefileButton({
     </button>
   );
 }
+

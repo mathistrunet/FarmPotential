@@ -12,6 +12,7 @@ import {
 } from "../src/services/soilgrids.js";
 import { SoilGridsClient, SoilGridsError } from "./soilgrids/SoilGridsClient.mjs";
 import { SoilGridsCacheRepository } from "./soilgrids/SoilGridsCacheRepository.mjs";
+import { SoilGridsGridService } from "./soilgrids/SoilGridsGridService.mjs";
 import { resolveParcelPoint } from "./soilgrids/geometry.mjs";
 import { closeGeoPackageCache, queryGeoPackageByBbox } from "./geopackage-query.mjs";
 
@@ -27,6 +28,7 @@ const CALC_VERSION = "v1.0.0";
 
 const soilClient = new SoilGridsClient({ timeoutMs: 15_000, retries: 2 });
 const soilCacheRepository = new SoilGridsCacheRepository({ dataDir: DATA_DIR, ttlDays: 30 });
+const soilGridService = new SoilGridsGridService({ dataDir: DATA_DIR });
 const inflightSoilRequests = new Map();
 const rateLimitWindow = [];
 
@@ -66,14 +68,54 @@ async function ensureSoilMappingFile() {
   }
 }
 
+function normalizeSoilMappingsPayload(payload) {
+  const source = payload && typeof payload === "object" ? payload : {};
+  let rawMappings = source.mappings && typeof source.mappings === "object" ? source.mappings : {};
+
+  // Backward compatibility: older frontend versions saved nested "mappings" wrappers.
+  while (
+    rawMappings &&
+    typeof rawMappings === "object" &&
+    !Array.isArray(rawMappings) &&
+    Object.keys(rawMappings).length === 1 &&
+    Object.prototype.hasOwnProperty.call(rawMappings, "mappings") &&
+    rawMappings.mappings &&
+    typeof rawMappings.mappings === "object" &&
+    !Array.isArray(rawMappings.mappings)
+  ) {
+    rawMappings = rawMappings.mappings;
+  }
+
+  const mappings = {};
+  Object.entries(rawMappings).forEach(([structure, entry]) => {
+    const structureName = String(structure || "").trim();
+    if (!structureName) return;
+
+    const soilTypes = Array.isArray(entry?.soilTypes)
+      ? entry.soilTypes.map((item) => String(item || "").trim()).filter(Boolean)
+      : [];
+
+    const combinationMap = {};
+    if (entry?.combinationMap && typeof entry.combinationMap === "object") {
+      Object.entries(entry.combinationMap).forEach(([key, value]) => {
+        const mappingKey = String(key || "").trim();
+        const mappingValue = String(value || "").trim();
+        if (mappingKey && mappingValue) combinationMap[mappingKey] = mappingValue;
+      });
+    }
+
+    mappings[structureName] = { soilTypes, combinationMap };
+  });
+
+  return { mappings };
+}
+
 async function readSoilMappings() {
   await ensureSoilMappingFile();
   const raw = await readFile(SOIL_MAPPING_FILE, "utf-8");
   try {
     const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === "object" && parsed.mappings && typeof parsed.mappings === "object") {
-      return parsed;
-    }
+    return normalizeSoilMappingsPayload(parsed);
   } catch {
     // ignore
   }
@@ -82,8 +124,8 @@ async function readSoilMappings() {
 
 async function writeSoilMappings(payload) {
   await ensureSoilMappingFile();
-  const mappings = payload && typeof payload.mappings === "object" ? payload.mappings : {};
-  await writeFile(SOIL_MAPPING_FILE, JSON.stringify({ mappings }, null, 2));
+  const normalized = normalizeSoilMappingsPayload(payload);
+  await writeFile(SOIL_MAPPING_FILE, JSON.stringify(normalized, null, 2));
 }
 
 async function readCollection() {
@@ -245,6 +287,34 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (requestUrl.pathname === "/api/soilgrids/grid") {
+    res.setHeader("Content-Type", "application/json");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET,OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    if (req.method === "OPTIONS") return void res.writeHead(204).end();
+    if (req.method !== "GET") return void res.writeHead(405).end(JSON.stringify({ error: "Method not allowed." }));
+
+    const bbox = parseBboxParam(requestUrl.searchParams.get("bbox"));
+    const limit = parseIntegerParam(requestUrl.searchParams.get("limit"), 5000, 1, 20000);
+    if (!bbox) {
+      res.writeHead(400);
+      res.end(JSON.stringify({ error: "Missing or invalid bbox query parameter." }));
+      return;
+    }
+
+    try {
+      const payload = await soilGridService.queryVisibleGrid({ bboxWgs84: bbox, limit });
+      res.writeHead(200);
+      res.end(JSON.stringify(payload));
+    } catch (error) {
+      const message = error?.message || "SoilGrids grid query failed.";
+      log("SOILGRIDS_GRID_ERROR", { message, bbox, limit });
+      res.writeHead(500);
+      res.end(JSON.stringify({ error: message }));
+    }
+    return;
+  }
   if (requestUrl.pathname === "/api/soil/department") {
     res.setHeader("Content-Type", "application/json");
     res.setHeader("Access-Control-Allow-Origin", "*");
@@ -483,3 +553,4 @@ server.listen(PORT, () => {
 process.on("exit", () => {
   closeGeoPackageCache();
 });
+

@@ -14,6 +14,21 @@ function readCodebookNow() {
   return cb;
 }
 
+function readCodebookPrevious() {
+  const raw = (typeof window !== "undefined" && window.CODEBOOK_PREVIOUS && typeof window.CODEBOOK_PREVIOUS === "object")
+    ? window.CODEBOOK_PREVIOUS
+    : {};
+
+  const cb = Object.create(null);
+  for (const [k, v] of Object.entries(raw)) {
+    const split = splitCultureKey(k);
+    const key = split.code;
+    const label = String(v).trim();
+    if (key && label && !(key in cb)) cb[key] = label;
+  }
+  return cb;
+}
+
 export function splitCultureKey(value) {
   const raw = String(value || "").trim();
   if (!raw) return { code: "", precision: "" };
@@ -42,17 +57,21 @@ function normalizePrecisionValue(value) {
 }
 
 function resolvePrecisionKey(code, precision) {
-  const list = getPrecisionKeysForCode(code);
-  if (!list.length) return "";
   const candidate = String(precision || "").trim();
-  if (!candidate) return list[list.length - 1] || "";
+  if (!candidate) return "";
+
+  const list = getPrecisionKeysForCode(code);
+  if (!list.length) return candidate;
+
   if (list.includes(candidate)) return candidate;
   if (/^\d+$/.test(candidate)) {
     const target = normalizePrecisionValue(candidate);
     const match = list.find((p) => /^\d+$/.test(p) && normalizePrecisionValue(p) == target);
     if (match) return match;
   }
-  return list[list.length - 1] || "";
+
+  // If precision is explicitly present in source data, keep it as-is.
+  return candidate;
 }
 
 function buildReverse(cb) {
@@ -66,13 +85,17 @@ function buildReverse(cb) {
 export function labelFromCode(code, precision) {
   if (!code) return null;
   const cb = readCodebookNow();
+  const previousCb = readCodebookPrevious();
   const { code: baseCode, precision: keyPrecision } = splitCultureKey(code);
   const precisionValue = String(precision || keyPrecision || "").trim();
   if (precisionValue) {
-    const key = buildCultureKey(baseCode, resolvePrecisionKey(baseCode, precisionValue));
-    if (cb[key]) return cb[key];
+    const resolvedPrecision = resolvePrecisionKey(baseCode, precisionValue);
+    if (resolvedPrecision) {
+      const key = buildCultureKey(baseCode, resolvedPrecision);
+      if (cb[key]) return cb[key];
+    }
   }
-  return cb[baseCode] || null;
+  return cb[baseCode] || previousCb[baseCode] || null;
 }
 
 export function codeFromLabel(label) {
@@ -201,3 +224,4 @@ export function displayLabelFromProps(props = {}) {
   }
   return "(inconnu)";
 }
+

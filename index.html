@@ -7,6 +7,12 @@
     <title>FieldInfo Test</title>
   </head>
   <body>
+    <script src="%BASE_URL%codebook.js"></script>
+    <script>
+      window.CODEBOOK_PREVIOUS = {
+        ...(window.CODEBOOK_EXTRA && typeof window.CODEBOOK_EXTRA === "object" ? window.CODEBOOK_EXTRA : {}),
+      };
+    </script>
     <script src="%BASE_URL%codebookV2.js"></script>
     <script src="%BASE_URL%colorbook.js"></script>
     <div id="root"></div>

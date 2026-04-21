@@ -353,11 +353,15 @@ export async function fetchSoilTypeMappings(signal) {
   return response.json();
 }
 
-export async function saveSoilTypeMappings(mappings, signal) {
+export async function saveSoilTypeMappings(payload, signal) {
+  const normalizedPayload = normalizeStructureMappings(
+    payload?.mappings ? payload : { mappings: payload }
+  );
+
   const response = await fetch(SOIL_MAPPING_ENDPOINT, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ mappings }),
+    body: JSON.stringify(normalizedPayload),
     signal,
   });
   if (!response.ok) {
@@ -409,7 +413,19 @@ function normalizeUcsId(value) {
 
 
 export function normalizeStructureMappings(payload) {
-  const rawMappings = payload?.mappings && typeof payload.mappings === "object" ? payload.mappings : {};
+  let rawMappings = payload?.mappings && typeof payload.mappings === "object" ? payload.mappings : {};
+  while (
+    rawMappings &&
+    typeof rawMappings === "object" &&
+    !Array.isArray(rawMappings) &&
+    Object.keys(rawMappings).length === 1 &&
+    Object.prototype.hasOwnProperty.call(rawMappings, "mappings") &&
+    rawMappings.mappings &&
+    typeof rawMappings.mappings === "object" &&
+    !Array.isArray(rawMappings.mappings)
+  ) {
+    rawMappings = rawMappings.mappings;
+  }
   const mappings = {};
   Object.entries(rawMappings).forEach(([structure, entry]) => {
     const soilTypes = Array.isArray(entry?.soilTypes)

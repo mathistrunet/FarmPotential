@@ -51,6 +51,7 @@ import {
   buildSoilCombinationKey,
 } from "../../services/soilTypeMapping";
 import { featureAreaM2 } from "../../utils/geometry";
+import { fetchSoilGridsVisibleGrid } from "../../services/soilgridsGridBackend";
 
 const EARTH_RADIUS = 6378137;
 const DRAW_LAYER_IDS = [
@@ -73,6 +74,7 @@ const DRAW_LAYER_IDS = [
   "draw-line-active",
 ];
 const INVALID_YEAR = -9999;
+const DEFAULT_PARCELLE_YEAR = new Date().getFullYear();
 
 const normalizeYearValue = (value) => {
   if (value == null) return null;
@@ -80,7 +82,37 @@ const normalizeYearValue = (value) => {
   const parsed = Number(trimmed);
   return Number.isFinite(parsed) ? parsed : null;
 };
+
+const ensureFeaturesHaveYear = (inputFeatures) => {
+  const featuresList = Array.isArray(inputFeatures) ? inputFeatures : [];
+  const knownYears = featuresList
+    .map((feature) => normalizeYearValue(feature?.properties?.annee))
+    .filter((value) => value != null);
+
+  const fallbackYear = knownYears.length > 0 ? Math.max(...knownYears) : DEFAULT_PARCELLE_YEAR;
+
+  let changed = false;
+  const nextFeatures = featuresList.map((feature) => {
+    if (!feature || feature.type !== "Feature") return feature;
+    const currentYear = normalizeYearValue(feature?.properties?.annee);
+    if (currentYear != null) return feature;
+
+    changed = true;
+    return {
+      ...feature,
+      properties: {
+        ...(feature.properties || {}),
+        annee: fallbackYear,
+      },
+    };
+  });
+
+  return { changed, nextFeatures };
+};
 const DRAW_LAYER_VARIANTS = ["", ".cold", ".hot"];
+const SOILGRIDS_GRID_SOURCE_ID = "soilgrids-grid-source";
+const SOILGRIDS_GRID_LAYER_ID = "soilgrids-grid-layer";
+const EMPTY_COLLECTION = { type: "FeatureCollection", features: [] };
 
 function buildSoilProbePoints(feature) {
   const probes = [];
@@ -238,6 +270,12 @@ export default function ParcellesEditorMap() {
     });
     return initial;
   });
+  const [soilGridsGridVisible, setSoilGridsGridVisible] = useState(false);
+  const [soilGridsGridMeta, setSoilGridsGridMeta] = useState(null);
+  const [soilGridsGridError, setSoilGridsGridError] = useState(null);
+  const soilGridsGridAbortRef = useRef(null);
+  const soilGridsGridRequestRef = useRef(0);
+  const soilGridsGridPopupRef = useRef(null);
   const [mapClickInfo, setMapClickInfo] = useState(null);
   const [appWarnings, setAppWarnings] = useState([]);
   const defaultCsvCode = useMemo(
@@ -318,6 +356,12 @@ export default function ParcellesEditorMap() {
       setSideExpanded(false);
     }
   }, [sideOpen]);
+
+  useEffect(() => {
+    const { changed, nextFeatures } = ensureFeaturesHaveYear(features);
+    if (!changed) return;
+    setFeatures(nextFeatures);
+  }, [features, setFeatures]);
 
   useEffect(() => {
     if (parcelleYearFilter === "all" || parcelleYearFilter === "unknown") {
@@ -625,9 +669,229 @@ export default function ParcellesEditorMap() {
     [],
   );
 
+  const ensureSoilGridsGridLayer = useCallback(() => {
+    if (!mapInstance || !mapInstance.isStyleLoaded()) return false;
+
+    if (!mapInstance.getSource(SOILGRIDS_GRID_SOURCE_ID)) {
+      mapInstance.addSource(SOILGRIDS_GRID_SOURCE_ID, {
+        type: "geojson",
+        data: EMPTY_COLLECTION,
+      });
+    }
+
+    if (!mapInstance.getLayer(SOILGRIDS_GRID_LAYER_ID)) {
+      mapInstance.addLayer({
+        id: SOILGRIDS_GRID_LAYER_ID,
+        type: "line",
+        source: SOILGRIDS_GRID_SOURCE_ID,
+        paint: {
+          "line-color": "#ef4444",
+          "line-opacity": 0.6,
+          "line-width": 1,
+        },
+        layout: {
+          visibility: soilGridsGridVisible ? "visible" : "none",
+        },
+      });
+    }
+
+    return true;
+  }, [mapInstance, soilGridsGridVisible]);
+
+  const refreshSoilGridsGrid = useCallback(() => {
+    if (!mapInstance || !soilGridsGridVisible) return;
+    if (!ensureSoilGridsGridLayer()) return;
+
+    const bounds = mapInstance.getBounds?.();
+    if (!bounds) return;
+
+    const bbox = [
+      bounds.getWest(),
+      bounds.getSouth(),
+      bounds.getEast(),
+      bounds.getNorth(),
+    ];
+
+    if (soilGridsGridAbortRef.current) {
+      soilGridsGridAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    soilGridsGridAbortRef.current = controller;
+
+    const requestId = soilGridsGridRequestRef.current + 1;
+    soilGridsGridRequestRef.current = requestId;
+    setSoilGridsGridError(null);
+
+    fetchSoilGridsVisibleGrid({ bbox, limit: 6000, signal: controller.signal })
+      .then((payload) => {
+        if (requestId !== soilGridsGridRequestRef.current) return;
+        const source = mapInstance.getSource(SOILGRIDS_GRID_SOURCE_ID);
+        if (source?.setData) {
+          source.setData(payload?.collection || EMPTY_COLLECTION);
+        }
+        setSoilGridsGridMeta({
+          featureCount: payload?.featureCount ?? 0,
+          truncated: !!payload?.truncated,
+          coverageId: payload?.metadata?.coverageId || null,
+          crs: payload?.metadata?.crs || "EPSG:4326",
+        });
+      })
+      .catch((error) => {
+        if (controller.signal.aborted) return;
+        if (requestId !== soilGridsGridRequestRef.current) return;
+        const source = mapInstance.getSource(SOILGRIDS_GRID_SOURCE_ID);
+        if (source?.setData) {
+          source.setData(EMPTY_COLLECTION);
+        }
+        setSoilGridsGridMeta(null);
+        setSoilGridsGridError(error?.message || "Erreur de chargement de la grille SoilGrids");
+      });
+  }, [mapInstance, soilGridsGridVisible, ensureSoilGridsGridLayer]);
+
+  useEffect(() => {
+    if (!mapInstance) return;
+
+    if (!mapInstance.isStyleLoaded()) {
+      const onLoad = () => {
+        ensureSoilGridsGridLayer();
+      };
+      mapInstance.once("load", onLoad);
+      return () => mapInstance.off("load", onLoad);
+    }
+
+    ensureSoilGridsGridLayer();
+  }, [mapInstance, ensureSoilGridsGridLayer]);
+
+  useEffect(() => {
+    if (!mapInstance || !mapInstance.getLayer(SOILGRIDS_GRID_LAYER_ID)) return;
+
+    mapInstance.setLayoutProperty(
+      SOILGRIDS_GRID_LAYER_ID,
+      "visibility",
+      soilGridsGridVisible ? "visible" : "none",
+    );
+
+    if (!soilGridsGridVisible) {
+      if (soilGridsGridAbortRef.current) {
+        soilGridsGridAbortRef.current.abort();
+      }
+      const source = mapInstance.getSource(SOILGRIDS_GRID_SOURCE_ID);
+      if (source?.setData) source.setData(EMPTY_COLLECTION);
+      setSoilGridsGridMeta(null);
+      setSoilGridsGridError(null);
+      if (soilGridsGridPopupRef.current) {
+        soilGridsGridPopupRef.current.remove();
+        soilGridsGridPopupRef.current = null;
+      }
+      return;
+    }
+
+    refreshSoilGridsGrid();
+  }, [mapInstance, soilGridsGridVisible, refreshSoilGridsGrid]);
+
+  useEffect(() => {
+    if (!mapInstance || !soilGridsGridVisible) return;
+    let timer = null;
+
+    const handleMoveEnd = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        refreshSoilGridsGrid();
+      }, 120);
+    };
+
+    mapInstance.on("moveend", handleMoveEnd);
+    return () => {
+      mapInstance.off("moveend", handleMoveEnd);
+      clearTimeout(timer);
+    };
+  }, [mapInstance, soilGridsGridVisible, refreshSoilGridsGrid]);
+
+  useEffect(() => {
+    if (!mapInstance) return;
+
+    const parseBboxValue = (value) => {
+      if (Array.isArray(value) && value.length === 4) return value.map((item) => Number(item));
+      if (typeof value !== "string") return null;
+      const values = value.split(",").map((item) => Number(item.trim()));
+      if (values.length !== 4 || values.some((item) => !Number.isFinite(item))) return null;
+      return values;
+    };
+
+    const handleGridClick = (event) => {
+      const feature = event?.features?.[0];
+      if (!feature) return;
+      const props = feature.properties || {};
+      const centerLon = Number(props?.centerLon);
+      const centerLat = Number(props?.centerLat);
+      const center = Number.isFinite(centerLon) && Number.isFinite(centerLat) ? [centerLon, centerLat] : null;
+      const bbox = parseBboxValue(props?.bboxWgs84);
+
+      const html = [
+        `<strong>${props.pixelId || "Pixel SoilGrids"}</strong>`,
+        `Ligne / colonne : ${props.row ?? "?"} / ${props.col ?? "?"}`,
+        center ? `Centre : ${Number(center[1]).toFixed(6)}, ${Number(center[0]).toFixed(6)}` : null,
+        Array.isArray(bbox)
+          ? `BBox : ${bbox.map((v) => Number(v).toFixed(6)).join(", ")}`
+          : null,
+      ]
+        .filter(Boolean)
+        .join("<br />");
+
+      if (soilGridsGridPopupRef.current) {
+        soilGridsGridPopupRef.current.remove();
+      }
+      soilGridsGridPopupRef.current = new maplibregl.Popup({ closeButton: true })
+        .setLngLat(event.lngLat)
+        .setHTML(`<div style="font-size:12px;">${html}</div>`)
+        .addTo(mapInstance);
+    };
+
+    const handleMouseEnter = () => {
+      mapInstance.getCanvas().style.cursor = "pointer";
+    };
+    const handleMouseLeave = () => {
+      mapInstance.getCanvas().style.cursor = "";
+    };
+
+    const bindLayerEvents = () => {
+      if (!mapInstance.getLayer(SOILGRIDS_GRID_LAYER_ID)) return false;
+      mapInstance.on("click", SOILGRIDS_GRID_LAYER_ID, handleGridClick);
+      mapInstance.on("mouseenter", SOILGRIDS_GRID_LAYER_ID, handleMouseEnter);
+      mapInstance.on("mouseleave", SOILGRIDS_GRID_LAYER_ID, handleMouseLeave);
+      return true;
+    };
+
+    let bound = bindLayerEvents();
+    const handleStyleData = () => {
+      if (!bound) {
+        bound = bindLayerEvents();
+      }
+    };
+    if (!bound) {
+      mapInstance.on("styledata", handleStyleData);
+    }
+
+    return () => {
+      if (bound) {
+        mapInstance.off("click", SOILGRIDS_GRID_LAYER_ID, handleGridClick);
+        mapInstance.off("mouseenter", SOILGRIDS_GRID_LAYER_ID, handleMouseEnter);
+        mapInstance.off("mouseleave", SOILGRIDS_GRID_LAYER_ID, handleMouseLeave);
+      }
+      mapInstance.off("styledata", handleStyleData);
+      if (soilGridsGridPopupRef.current) {
+        soilGridsGridPopupRef.current.remove();
+        soilGridsGridPopupRef.current = null;
+      }
+    };
+  }, [mapInstance]);
   useEffect(() => () => {
     infoAbortControllers.current.forEach((controller) => controller.abort());
     infoAbortControllers.current = [];
+    if (soilGridsGridAbortRef.current) {
+      soilGridsGridAbortRef.current.abort();
+      soilGridsGridAbortRef.current = null;
+    }
   }, []);
 
   useEffect(() => {
@@ -1442,76 +1706,27 @@ export default function ParcellesEditorMap() {
               }}
             >
               <div style={{ fontWeight: 600, marginBottom: 8 }}>
-                Affichage par année
+                Association inter-annees
               </div>
-              <div
+              <button
+                type="button"
+                onClick={handleOpenParcelleMatch}
+                disabled={yearOptions.years.length < 2}
                 style={{
-                  display: "flex",
-                  flexWrap: "wrap",
-                  gap: 8,
-                  alignItems: "center",
+                  padding: "8px 12px",
+                  borderRadius: 8,
+                  border: "1px solid #d1d5db",
+                  background: yearOptions.years.length < 2 ? "#f3f4f6" : "#fff",
+                  cursor: yearOptions.years.length < 2 ? "not-allowed" : "pointer",
+                  fontWeight: 600,
                 }}
               >
-                <select
-                  value={parcelleYearFilter}
-                  onChange={(e) => setParcelleYearFilter(e.target.value)}
-                  style={{
-                    padding: "6px 10px",
-                    borderRadius: 6,
-                    border: "1px solid #d1d5db",
-                    background: "#fff",
-                  }}
-                >
-                  <option value="all">Toutes les années</option>
-                  {yearOptions.years.map((year) => (
-                    <option key={year} value={String(year)}>
-                      {year}
-                    </option>
-                  ))}
-                  {yearOptions.hasUnknown && (
-                    <option value="unknown">Sans année</option>
-                  )}
-                </select>
-                <select
-                  value={parcelleGroupFilter}
-                  onChange={(e) => setParcelleGroupFilter(e.target.value)}
-                  style={{
-                    padding: "6px 10px",
-                    borderRadius: 6,
-                    border: "1px solid #d1d5db",
-                    background: "#fff",
-                  }}
-                >
-                  <option value="all">Tous les groupes</option>
-                  {groupOptions.groups.map((group) => (
-                    <option key={group} value={group}>
-                      {group}
-                    </option>
-                  ))}
-                  {groupOptions.hasUngrouped && (
-                    <option value="ungrouped">Sans groupe</option>
-                  )}
-                </select>
-                <button
-                  type="button"
-                  onClick={handleOpenParcelleMatch}
-                  disabled={yearOptions.years.length < 2}
-                  style={{
-                    padding: "6px 10px",
-                    borderRadius: 6,
-                    border: "1px solid #d1d5db",
-                    background: yearOptions.years.length < 2 ? "#f3f4f6" : "#fff",
-                    cursor:
-                      yearOptions.years.length < 2 ? "not-allowed" : "pointer",
-                  }}
-                >
-                  Comparer les parcelles
-                </button>
-                <div style={{ marginLeft: "auto" }} />
-              </div>
+                {yearOptions.years.length < 2
+                  ? "Associer les parcelles (2 annees minimum)"
+                  : `Associer les parcelles (${yearOptions.years.length} annees detectees)`}
+              </button>
               <p style={{ margin: "8px 0 0", fontSize: 12, color: "#666" }}>
-                Ouvre une vue dédiée pour comparer deux années côte à côte et
-                valider les correspondances proposées.
+                Ouvre l'interface de comparaison pour valider les associations entre parcelles de millesimes differents.
               </p>
               {validatedMatches.length > 0 && (
                 <p style={{ margin: "6px 0 0", fontSize: 12, color: "#334155" }}>
@@ -1575,6 +1790,41 @@ export default function ParcellesEditorMap() {
                 onLayerToggle={handleLayerToggle}
                 onLayerOpacityChange={handleLayerOpacityChange}
               />
+              <div
+                style={{
+                  border: "1px solid #eee",
+                  borderRadius: 8,
+                  padding: 8,
+                  marginTop: 8,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                }}
+              >
+                <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <input
+                    type="checkbox"
+                    checked={soilGridsGridVisible}
+                    onChange={(event) => setSoilGridsGridVisible(event.target.checked)}
+                  />
+                  <span>Grille SoilGrids</span>
+                </label>
+                <p style={{ margin: 0, fontSize: 12, color: "#666" }}>
+                  Decoupage reel des pixels SoilGrids (WCS) sur l'emprise visible.
+                </p>
+                {soilGridsGridMeta ? (
+                  <p style={{ margin: 0, fontSize: 11, color: "#475569" }}>
+                    {soilGridsGridMeta.featureCount} pixel{soilGridsGridMeta.featureCount > 1 ? "s" : ""} affiche
+                    {soilGridsGridMeta.featureCount > 1 ? "s" : ""}
+                    {soilGridsGridMeta.truncated ? " (limite atteinte)" : ""}
+                    {soilGridsGridMeta.coverageId ? ` - ${soilGridsGridMeta.coverageId}` : ""}
+                    {soilGridsGridMeta.crs ? ` (${soilGridsGridMeta.crs})` : ""}
+                  </p>
+                ) : null}
+                {soilGridsGridError ? (
+                  <p style={{ margin: 0, fontSize: 11, color: "#b91c1c" }}>{soilGridsGridError}</p>
+                ) : null}
+              </div>
               <div
                 style={{
                   marginTop: 12,
@@ -1925,24 +2175,5 @@ export default function ParcellesEditorMap() {
     </div>
   );
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 

@@ -2210,6 +2210,743 @@
       "source": "SoilGrids v2",
       "cache_key": "49.2887:0.8943:",
       "calc_version": "v1.0.0"
+    },
+    {
+      "parcel_id": "aOUhnWkYjR86f5ex4rDmxYGTbNYY9W9Y",
+      "lat": 43.26371398050778,
+      "lon": 1.0009403321930888,
+      "response_raw_json": {
+        "type": "Feature",
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            1.0009403321930888,
+            43.26371398050778
+          ]
+        },
+        "properties": {
+          "layers": [
+            {
+              "name": "bdod",
+              "unit_measure": {
+                "d_factor": 100,
+                "mapped_units": "cg/cm³",
+                "target_units": "kg/dm³",
+                "uncertainty_unit": ""
+              },
+              "depths": [
+                {
+                  "range": {
+                    "top_depth": 0,
+                    "bottom_depth": 5,
+                    "unit_depth": "cm"
+                  },
+                  "label": "0-5cm",
+                  "values": {
+                    "mean": 136
+                  }
+                },
+                {
+                  "range": {
+                    "top_depth": 5,
+                    "bottom_depth": 15,
+                    "unit_depth": "cm"
+                  },
+                  "label": "5-15cm",
+                  "values": {
+                    "mean": 150
+                  }
+                },
+                {
+                  "range": {
+                    "top_depth": 15,
+                    "bottom_depth": 30,
+                    "unit_depth": "cm"
+                  },
+                  "label": "15-30cm",
+                  "values": {
+                    "mean": 153
+                  }
+                },
+                {
+                  "range": {
+                    "top_depth": 30,
+                    "bottom_depth": 60,
+                    "unit_depth": "cm"
+                  },
+                  "label": "30-60cm",
+                  "values": {
+                    "mean": 155
+                  }
+                },
+                {
+                  "range": {
+                    "top_depth": 60,
+                    "bottom_depth": 100,
+                    "unit_depth": "cm"
+                  },
+                  "label": "60-100cm",
+                  "values": {
+                    "mean": 156
+                  }
+                }
+              ]
+            },
+            {
+              "name": "cec",
+              "unit_measure": {
+                "d_factor": 10,
+                "mapped_units": "mmol(c)/kg",
+                "target_units": "cmol(c)/kg",
+                "uncertainty_unit": ""
+              },
+              "depths": [
+                {
+                  "range": {
+                    "top_depth": 0,
+                    "bottom_depth": 5,
+                    "unit_depth": "cm"
+                  },
+                  "label": "0-5cm",
+                  "values": {
+                    "mean": 262
+                  }
+                },
+                {
+                  "range": {
+                    "top_depth": 5,
+                    "bottom_depth": 15,
+                    "unit_depth": "cm"
+                  },
+                  "label": "5-15cm",
+                  "values": {
+                    "mean": 205
+                  }
+                },
+                {
+                  "range": {
+                    "top_depth": 15,
+                    "bottom_depth": 30,
+                    "unit_depth": "cm"
+                  },
+                  "label": "15-30cm",
+                  "values": {
+                    "mean": 195
+                  }
+                },
+                {
+                  "range": {
+                    "top_depth": 30,
+                    "bottom_depth": 60,
+                    "unit_depth": "cm"
+                  },
+                  "label": "30-60cm",
+                  "values": {
+                    "mean": 189
+                  }
+                },
+                {
+                  "range": {
+                    "top_depth": 60,
+                    "bottom_depth": 100,
+                    "unit_depth": "cm"
+                  },
+                  "label": "60-100cm",
+                  "values": {
+                    "mean": 208
+                  }
+                }
+              ]
+            },
+            {
+              "name": "cfvo",
+              "unit_measure": {
+                "d_factor": 10,
+                "mapped_units": "cm³/dm³",
+                "target_units": "cm³/100cm³",
+                "uncertainty_unit": ""
+              },
+              "depths": [
+                {
+                  "range": {
+                    "top_depth": 0,
+                    "bottom_depth": 5,
+                    "unit_depth": "cm"
+                  },
+                  "label": "0-5cm",
+                  "values": {
+                    "mean": 118
+                  }
+                },
+                {
+                  "range": {
+                    "top_depth": 5,
+                    "bottom_depth": 15,
+                    "unit_depth": "cm"
+                  },
+                  "label": "5-15cm",
+                  "values": {
+                    "mean": 133
+                  }
+                },
+                {
+                  "range": {
+                    "top_depth": 15,
+                    "bottom_depth": 30,
+                    "unit_depth": "cm"
+                  },
+                  "label": "15-30cm",
+                  "values": {
+                    "mean": 111
+                  }
+                },
+                {
+                  "range": {
+                    "top_depth": 30,
+                    "bottom_depth": 60,
+                    "unit_depth": "cm"
+                  },
+                  "label": "30-60cm",
+                  "values": {
+                    "mean": 109
+                  }
+                },
+                {
+                  "range": {
+                    "top_depth": 60,
+                    "bottom_depth": 100,
+                    "unit_depth": "cm"
+                  },
+                  "label": "60-100cm",
+                  "values": {
+                    "mean": 112
+                  }
+                }
+              ]
+            },
+            {
+              "name": "clay",
+              "unit_measure": {
+                "d_factor": 10,
+                "mapped_units": "g/kg",
+                "target_units": "%",
+                "uncertainty_unit": ""
+              },
+              "depths": [
+                {
+                  "range": {
+                    "top_depth": 0,
+                    "bottom_depth": 5,
+                    "unit_depth": "cm"
+                  },
+                  "label": "0-5cm",
+                  "values": {
+                    "mean": 318
+                  }
+                },
+                {
+                  "range": {
+                    "top_depth": 5,
+                    "bottom_depth": 15,
+                    "unit_depth": "cm"
+                  },
+                  "label": "5-15cm",
+                  "values": {
+                    "mean": 329
+                  }
+                },
+                {
+                  "range": {
+                    "top_depth": 15,
+                    "bottom_depth": 30,
+                    "unit_depth": "cm"
+                  },
+                  "label": "15-30cm",
+                  "values": {
+                    "mean": 339
+                  }
+                },
+                {
+                  "range": {
+                    "top_depth": 30,
+                    "bottom_depth": 60,
+                    "unit_depth": "cm"
+                  },
+                  "label": "30-60cm",
+                  "values": {
+                    "mean": 317
+                  }
+                },
+                {
+                  "range": {
+                    "top_depth": 60,
+                    "bottom_depth": 100,
+                    "unit_depth": "cm"
+                  },
+                  "label": "60-100cm",
+                  "values": {
+                    "mean": 328
+                  }
+                }
+              ]
+            },
+            {
+              "name": "nitrogen",
+              "unit_measure": {
+                "d_factor": 100,
+                "mapped_units": "cg/kg",
+                "target_units": "g/kg",
+                "uncertainty_unit": ""
+              },
+              "depths": [
+                {
+                  "range": {
+                    "top_depth": 0,
+                    "bottom_depth": 5,
+                    "unit_depth": "cm"
+                  },
+                  "label": "0-5cm",
+                  "values": {
+                    "mean": 454
+                  }
+                },
+                {
+                  "range": {
+                    "top_depth": 5,
+                    "bottom_depth": 15,
+                    "unit_depth": "cm"
+                  },
+                  "label": "5-15cm",
+                  "values": {
+                    "mean": 156
+                  }
+                },
+                {
+                  "range": {
+                    "top_depth": 15,
+                    "bottom_depth": 30,
+                    "unit_depth": "cm"
+                  },
+                  "label": "15-30cm",
+                  "values": {
+                    "mean": 149
+                  }
+                },
+                {
+                  "range": {
+                    "top_depth": 30,
+                    "bottom_depth": 60,
+                    "unit_depth": "cm"
+                  },
+                  "label": "30-60cm",
+                  "values": {
+                    "mean": 145
+                  }
+                },
+                {
+                  "range": {
+                    "top_depth": 60,
+                    "bottom_depth": 100,
+                    "unit_depth": "cm"
+                  },
+                  "label": "60-100cm",
+                  "values": {
+                    "mean": 76
+                  }
+                }
+              ]
+            },
+            {
+              "name": "phh2o",
+              "unit_measure": {
+                "d_factor": 10,
+                "mapped_units": "pH*10",
+                "target_units": "-",
+                "uncertainty_unit": ""
+              },
+              "depths": [
+                {
+                  "range": {
+                    "top_depth": 0,
+                    "bottom_depth": 5,
+                    "unit_depth": "cm"
+                  },
+                  "label": "0-5cm",
+                  "values": {
+                    "mean": 70
+                  }
+                },
+                {
+                  "range": {
+                    "top_depth": 5,
+                    "bottom_depth": 15,
+                    "unit_depth": "cm"
+                  },
+                  "label": "5-15cm",
+                  "values": {
+                    "mean": 71
+                  }
+                },
+                {
+                  "range": {
+                    "top_depth": 15,
+                    "bottom_depth": 30,
+                    "unit_depth": "cm"
+                  },
+                  "label": "15-30cm",
+                  "values": {
+                    "mean": 71
+                  }
+                },
+                {
+                  "range": {
+                    "top_depth": 30,
+                    "bottom_depth": 60,
+                    "unit_depth": "cm"
+                  },
+                  "label": "30-60cm",
+                  "values": {
+                    "mean": 71
+                  }
+                },
+                {
+                  "range": {
+                    "top_depth": 60,
+                    "bottom_depth": 100,
+                    "unit_depth": "cm"
+                  },
+                  "label": "60-100cm",
+                  "values": {
+                    "mean": 71
+                  }
+                }
+              ]
+            },
+            {
+              "name": "sand",
+              "unit_measure": {
+                "d_factor": 10,
+                "mapped_units": "g/kg",
+                "target_units": "%",
+                "uncertainty_unit": ""
+              },
+              "depths": [
+                {
+                  "range": {
+                    "top_depth": 0,
+                    "bottom_depth": 5,
+                    "unit_depth": "cm"
+                  },
+                  "label": "0-5cm",
+                  "values": {
+                    "mean": 208
+                  }
+                },
+                {
+                  "range": {
+                    "top_depth": 5,
+                    "bottom_depth": 15,
+                    "unit_depth": "cm"
+                  },
+                  "label": "5-15cm",
+                  "values": {
+                    "mean": 197
+                  }
+                },
+                {
+                  "range": {
+                    "top_depth": 15,
+                    "bottom_depth": 30,
+                    "unit_depth": "cm"
+                  },
+                  "label": "15-30cm",
+                  "values": {
+                    "mean": 212
+                  }
+                },
+                {
+                  "range": {
+                    "top_depth": 30,
+                    "bottom_depth": 60,
+                    "unit_depth": "cm"
+                  },
+                  "label": "30-60cm",
+                  "values": {
+                    "mean": 222
+                  }
+                },
+                {
+                  "range": {
+                    "top_depth": 60,
+                    "bottom_depth": 100,
+                    "unit_depth": "cm"
+                  },
+                  "label": "60-100cm",
+                  "values": {
+                    "mean": 221
+                  }
+                }
+              ]
+            },
+            {
+              "name": "silt",
+              "unit_measure": {
+                "d_factor": 10,
+                "mapped_units": "g/kg",
+                "target_units": "%",
+                "uncertainty_unit": ""
+              },
+              "depths": [
+                {
+                  "range": {
+                    "top_depth": 0,
+                    "bottom_depth": 5,
+                    "unit_depth": "cm"
+                  },
+                  "label": "0-5cm",
+                  "values": {
+                    "mean": 474
+                  }
+                },
+                {
+                  "range": {
+                    "top_depth": 5,
+                    "bottom_depth": 15,
+                    "unit_depth": "cm"
+                  },
+                  "label": "5-15cm",
+                  "values": {
+                    "mean": 473
+                  }
+                },
+                {
+                  "range": {
+                    "top_depth": 15,
+                    "bottom_depth": 30,
+                    "unit_depth": "cm"
+                  },
+                  "label": "15-30cm",
+                  "values": {
+                    "mean": 450
+                  }
+                },
+                {
+                  "range": {
+                    "top_depth": 30,
+                    "bottom_depth": 60,
+                    "unit_depth": "cm"
+                  },
+                  "label": "30-60cm",
+                  "values": {
+                    "mean": 462
+                  }
+                },
+                {
+                  "range": {
+                    "top_depth": 60,
+                    "bottom_depth": 100,
+                    "unit_depth": "cm"
+                  },
+                  "label": "60-100cm",
+                  "values": {
+                    "mean": 451
+                  }
+                }
+              ]
+            },
+            {
+              "name": "soc",
+              "unit_measure": {
+                "d_factor": 10,
+                "mapped_units": "dg/kg",
+                "target_units": "g/kg",
+                "uncertainty_unit": ""
+              },
+              "depths": [
+                {
+                  "range": {
+                    "top_depth": 0,
+                    "bottom_depth": 5,
+                    "unit_depth": "cm"
+                  },
+                  "label": "0-5cm",
+                  "values": {
+                    "mean": 582
+                  }
+                },
+                {
+                  "range": {
+                    "top_depth": 5,
+                    "bottom_depth": 15,
+                    "unit_depth": "cm"
+                  },
+                  "label": "5-15cm",
+                  "values": {
+                    "mean": 221
+                  }
+                },
+                {
+                  "range": {
+                    "top_depth": 15,
+                    "bottom_depth": 30,
+                    "unit_depth": "cm"
+                  },
+                  "label": "15-30cm",
+                  "values": {
+                    "mean": 175
+                  }
+                },
+                {
+                  "range": {
+                    "top_depth": 30,
+                    "bottom_depth": 60,
+                    "unit_depth": "cm"
+                  },
+                  "label": "30-60cm",
+                  "values": {
+                    "mean": 117
+                  }
+                },
+                {
+                  "range": {
+                    "top_depth": 60,
+                    "bottom_depth": 100,
+                    "unit_depth": "cm"
+                  },
+                  "label": "60-100cm",
+                  "values": {
+                    "mean": 61
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "query_time_s": 3.9924304485321045
+      },
+      "normalized_json": {
+        "parcelId": "aOUhnWkYjR86f5ex4rDmxYGTbNYY9W9Y",
+        "source": {
+          "name": "SoilGrids",
+          "endpoint": "properties/query",
+          "resolution": "250m",
+          "fetchedAt": "2026-03-11T13:45:34.258Z",
+          "lat": 43.26371398050778,
+          "lon": 1.0009403321930888,
+          "pointStrategy": "centroid",
+          "calcVersion": "v1.0.0"
+        },
+        "summary": {
+          "textureClass": "équilibré",
+          "texture": {
+            "clay_pct": 31.8,
+            "silt_pct": 47.4,
+            "sand_pct": 20.8
+          },
+          "ph": 70,
+          "organicMatter_pct": 100.34,
+          "nitrogen_pct": 45.4,
+          "cec_cmolkg": 262,
+          "bulkDensity_gcm3": 1.36,
+          "porosity_pct": 48.7,
+          "availableWater_mm": 39,
+          "drainage": "bon",
+          "depth_cm": 80,
+          "confidence": "high",
+          "warnings": []
+        },
+        "profile": [
+          {
+            "depth": "0-5cm",
+            "clay_pct": 31.8,
+            "silt_pct": 47.4,
+            "sand_pct": 20.8,
+            "ph": 70,
+            "soc": {
+              "value": 58.2,
+              "unit": "dg/kg"
+            },
+            "organicMatter_pct": 100.34,
+            "nitrogen_pct": 45.4,
+            "cec_cmolkg": 262,
+            "bulkDensity_gcm3": 1.36,
+            "cfvo_pct": 118,
+            "warnings": []
+          },
+          {
+            "depth": "5-15cm",
+            "clay_pct": 32.9,
+            "silt_pct": 47.3,
+            "sand_pct": 19.7,
+            "ph": 71,
+            "soc": {
+              "value": 22.1,
+              "unit": "dg/kg"
+            },
+            "organicMatter_pct": 38.1,
+            "nitrogen_pct": 15.6,
+            "cec_cmolkg": 205,
+            "bulkDensity_gcm3": 1.5,
+            "cfvo_pct": 133,
+            "warnings": []
+          },
+          {
+            "depth": "15-30cm",
+            "clay_pct": 33.9,
+            "silt_pct": 45,
+            "sand_pct": 21.2,
+            "ph": 71,
+            "soc": {
+              "value": 17.5,
+              "unit": "dg/kg"
+            },
+            "organicMatter_pct": 30.17,
+            "nitrogen_pct": 14.9,
+            "cec_cmolkg": 195,
+            "bulkDensity_gcm3": 1.53,
+            "cfvo_pct": 111,
+            "warnings": []
+          },
+          {
+            "depth": "30-60cm",
+            "clay_pct": 31.7,
+            "silt_pct": 46.2,
+            "sand_pct": 22.2,
+            "ph": 71,
+            "soc": {
+              "value": 11.7,
+              "unit": "dg/kg"
+            },
+            "organicMatter_pct": 20.17,
+            "nitrogen_pct": 14.5,
+            "cec_cmolkg": 189,
+            "bulkDensity_gcm3": 1.55,
+            "cfvo_pct": 109,
+            "warnings": []
+          },
+          {
+            "depth": "60-100cm",
+            "clay_pct": 32.8,
+            "silt_pct": 45.1,
+            "sand_pct": 22.1,
+            "ph": 71,
+            "soc": {
+              "value": 6.1,
+              "unit": "dg/kg"
+            },
+            "organicMatter_pct": 10.52,
+            "nitrogen_pct": 7.6,
+            "cec_cmolkg": 208,
+            "bulkDensity_gcm3": 1.56,
+            "cfvo_pct": 112,
+            "warnings": []
+          }
+        ]
+      },
+      "fetched_at": "2026-03-11T13:45:34.258Z",
+      "source": "SoilGrids v2",
+      "cache_key": "43.2637:1.0009:",
+      "calc_version": "v1.0.0"
     }
   ]
 }

@@ -1,8 +1,35 @@
 import { PARCELLES_VIEWER_FILL_ID, PARCELLES_VIEWER_LINE_ID } from "./parcellesLayers";
 
+const UNKNOWN_YEAR_VALUE = -999999;
+
+function normalizeYear(value) {
+  if (value == null || value === "") return null;
+  const parsed = Number.parseInt(String(value), 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 const buildFilterExpression = (filters) => {
   if (!filters) return null;
   const clauses = [];
+
+  const selectedYear = typeof filters.year === "string" ? filters.year.trim().toLowerCase() : filters.year;
+  if (selectedYear === "unknown") {
+    clauses.push([
+      "==",
+      ["to-number", ["coalesce", ["get", "annee"], UNKNOWN_YEAR_VALUE], UNKNOWN_YEAR_VALUE],
+      UNKNOWN_YEAR_VALUE,
+    ]);
+  } else {
+    const year = normalizeYear(selectedYear);
+    if (year != null) {
+      clauses.push([
+        "==",
+        ["to-number", ["coalesce", ["get", "annee"], UNKNOWN_YEAR_VALUE], UNKNOWN_YEAR_VALUE],
+        year,
+      ]);
+    }
+  }
+
   const cultures = Array.isArray(filters.cultures)
     ? filters.cultures.map((value) => String(value).trim()).filter(Boolean)
     : [];
@@ -13,6 +40,7 @@ const buildFilterExpression = (filters) => {
       ["literal", cultures],
     ]);
   }
+
   const precedent =
     typeof filters.precedent === "string"
       ? filters.precedent.trim()
@@ -20,10 +48,12 @@ const buildFilterExpression = (filters) => {
   if (precedent) {
     clauses.push(["==", ["coalesce", ["get", "precedent"], ""], precedent]);
   }
+
   const ilot = typeof filters.ilot === "string" ? filters.ilot.trim() : filters.ilot;
   if (ilot) {
     clauses.push(["==", ["coalesce", ["get", "ilot"], ""], ilot]);
   }
+
   const exploitation =
     typeof filters.exploitation === "string"
       ? filters.exploitation.trim()

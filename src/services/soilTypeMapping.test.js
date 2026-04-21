@@ -4,6 +4,7 @@ import {
   buildDetectedSoilCombinations,
   buildMappingCsv,
   matchesSoilTypeRule,
+  normalizeStructureMappings,
   parseMappingCsv,
   resolveFileUcs,
   resolveUcsId,
@@ -120,4 +121,24 @@ describe("soilTypeMapping sequential engine", () => {
       },
     })).toBe(false);
   });
+
+  it("deplie les payloads imbriques mappings.mappings.*", () => {
+    const normalized = normalizeStructureMappings({
+      mappings: {
+        mappings: {
+          Arterris: {
+            soilTypes: ["Sol profond", "Terrefort"],
+            combinationMap: { "argileux||profond||__NULL__||__NULL__||__NULL__||__NULL__": "Terrefort" },
+          },
+        },
+      },
+    });
+
+    expect(Object.keys(normalized.mappings)).toEqual(["Arterris"]);
+    expect(normalized.mappings.Arterris.soilTypes).toEqual(["Sol profond", "Terrefort"]);
+    expect(
+      normalized.mappings.Arterris.combinationMap["argileux||profond||__NULL__||__NULL__||__NULL__||__NULL__"]
+    ).toBe("Terrefort");
+  });
+
 });

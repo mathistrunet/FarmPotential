@@ -1,12 +1,16 @@
 {
   "mappings": {
     "mappings": {
+      "mappings": {
+        "soilTypes": [],
+        "combinationMap": {}
+      },
       "Arterris": {
         "soilTypes": [
           "Boulbène légère",
           "Coteau superficiel",
           "Sol profond",
-          "Terrefort Moyen"
+          "Terrefort moyen"
         ],
         "combinationMap": {}
       }

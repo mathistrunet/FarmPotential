@@ -73,13 +73,18 @@ function ensureSelectedLayer(map, sourceId, layerId) {
   }
 }
 
-function updateSelectedFilter(map, layerId, selectedId) {
+function updateSelectedFilter(map, layerId, selectedIdOrList) {
   if (!map || !map.getLayer(layerId)) return;
-  if (!selectedId) {
+  const selectedIds = Array.isArray(selectedIdOrList)
+    ? selectedIdOrList.map((item) => String(item)).filter(Boolean)
+    : selectedIdOrList
+      ? [String(selectedIdOrList)]
+      : [];
+  if (!selectedIds.length) {
     map.setFilter(layerId, ["==", ["to-string", ["id"]], ""]);
     return;
   }
-  map.setFilter(layerId, ["==", ["to-string", ["id"]], String(selectedId)]);
+  map.setFilter(layerId, ["in", ["to-string", ["id"]], ["literal", selectedIds]]);
 }
 
 function getFeatureById(collection, featureId) {
@@ -272,6 +277,8 @@ function ParcelleMatchViewContent({
   const [rightColor, setRightColor] = useState(DEFAULT_RIGHT_COLOR);
   const [matchRows, setMatchRows] = useState([]);
   const [validatedAt, setValidatedAt] = useState(null);
+  const [highlightBaseKeys, setHighlightBaseKeys] = useState([]);
+  const [highlightIncomingKeys, setHighlightIncomingKeys] = useState([]);
   const ensureRaster = useRasterLayers();
   const rowRefs = useRef(new Map());
   const matchRowsRef = useRef(matchRows);
@@ -580,9 +587,27 @@ function ParcelleMatchViewContent({
     label: entry.label,
   }));
 
+  const zoomToSelectionTargets = useCallback((incomingKey, baseKeys = []) => {
+    const leftMap = leftMapRef.current;
+    const rightMap = rightMapRef.current;
+
+    if (incomingKey && rightMap) {
+      const incomingFeature = getFeatureById(rightCollectionRef.current, incomingKey);
+      if (incomingFeature) easeToFeature(rightMap, incomingFeature);
+    }
+
+    if (leftMap && Array.isArray(baseKeys) && baseKeys.length > 0) {
+      const baseFeature = getFeatureById(leftCollectionRef.current, baseKeys[0]);
+      if (baseFeature) easeToFeature(leftMap, baseFeature);
+    }
+  }, []);
+
   const handleMatchChange = useCallback((incomingKey, nextBaseKey) => {
     setSelectedIncomingKey(incomingKey);
     setSelectedBaseKey(nextBaseKey || null);
+    setHighlightIncomingKeys(incomingKey ? [incomingKey] : []);
+    setHighlightBaseKeys(nextBaseKey ? [nextBaseKey] : []);
+    zoomToSelectionTargets(incomingKey, nextBaseKey ? [nextBaseKey] : []);
     setMatchRows((prev) =>
       prev.map((row) => {
         if (row.incomingKey !== incomingKey) return row;
@@ -616,13 +641,32 @@ function ParcelleMatchViewContent({
         };
       })
     );
-  }, [baseByKey, incomingByKey, leftEntries, setSelectedBaseKey, setSelectedIncomingKey]);
+  }, [baseByKey, incomingByKey, leftEntries, setSelectedBaseKey, setSelectedIncomingKey, zoomToSelectionTargets]);
 
   const handleRowSelect = useCallback((incomingKey) => {
     setSelectedIncomingKey(incomingKey);
     const row = matchRowsRef.current.find((entry) => entry.incomingKey === incomingKey);
     setSelectedBaseKey(row?.baseKey || null);
-  }, [setSelectedBaseKey, setSelectedIncomingKey]);
+    setHighlightIncomingKeys(incomingKey ? [incomingKey] : []);
+    if (row?.baseKey) {
+      setHighlightBaseKeys([row.baseKey]);
+      zoomToSelectionTargets(incomingKey, [row.baseKey]);
+      return;
+    }
+
+    const rankedCandidates = leftEntries
+      .map((entry) => ({
+        key: entry.key,
+        similarity: computeFeatureSimilarity(entry.feature, incomingByKey.get(incomingKey)),
+      }))
+      .filter((entry) => entry.similarity > 0)
+      .sort((a, b) => b.similarity - a.similarity)
+      .slice(0, 3)
+      .map((entry) => entry.key);
+
+    setHighlightBaseKeys(rankedCandidates);
+    zoomToSelectionTargets(incomingKey, rankedCandidates);
+  }, [incomingByKey, leftEntries, setSelectedBaseKey, setSelectedIncomingKey, zoomToSelectionTargets]);
 
   const handleValidate = async () => {
     if (typeof onValidate !== "function") {
@@ -648,6 +692,7 @@ function ParcelleMatchViewContent({
     const baseKey = String(feature.id ?? feature.properties?.id ?? "");
     if (!baseKey) return;
     setSelectedBaseKey(baseKey);
+    setHighlightBaseKeys([baseKey]);
     const incomingKey = selectedIncomingKeyRef.current;
     if (!incomingKey) return;
     if (handleMatchChangeRef.current) {
@@ -724,9 +769,9 @@ function ParcelleMatchViewContent({
   useEffect(() => {
     const leftMap = leftMapRef.current;
     const rightMap = rightMapRef.current;
-    updateSelectedFilter(leftMap, LEFT_SELECTED_ID, selectedBaseKey);
-    updateSelectedFilter(rightMap, RIGHT_SELECTED_ID, selectedIncomingKey);
-  }, [selectedBaseKey, selectedIncomingKey]);
+    updateSelectedFilter(leftMap, LEFT_SELECTED_ID, highlightBaseKeys);
+    updateSelectedFilter(rightMap, RIGHT_SELECTED_ID, highlightIncomingKeys);
+  }, [highlightBaseKeys, highlightIncomingKeys]);
 
   useEffect(() => {
     const leftMap = leftMapRef.current;

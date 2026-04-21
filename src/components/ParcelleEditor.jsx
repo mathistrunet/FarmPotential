@@ -8,7 +8,7 @@ import {
   splitCultureKey,
   resolvePrecisionForCode,
 } from "../utils/cultureLabels";
-import { ringAreaM2 } from "../utils/geometry";
+import { featureAreaM2 } from "../utils/geometry";
 import { fetchRpgGeoJSON, getCultureLabel, getMapBoundsCRS84 } from "../services/rpg";
 import { RPG_MIN_ZOOM } from "../Front/useRpgLayer";
 
@@ -41,6 +41,24 @@ function parseBioFlag(value) {
     if (normalized === "false" || normalized === "0" || normalized === "non") return false;
   }
   return false;
+}
+
+
+function formatIlotParcelle(props = {}) {
+  const ilot = String(props.ilot_numero ?? "").trim();
+  const numero = String(props.numero ?? "").trim();
+  if (ilot && numero) return `${ilot}.${numero}`;
+  return ilot || numero;
+}
+
+function splitIlotParcelle(rawValue) {
+  const text = String(rawValue ?? "").trim();
+  if (!text) return { ilot: "", numero: "" };
+  const dotIndex = text.indexOf(".");
+  if (dotIndex < 0) return { ilot: text, numero: "" };
+  const ilot = text.slice(0, dotIndex).trim();
+  const numero = text.slice(dotIndex + 1).trim();
+  return { ilot, numero };
 }
 
 const CULTURE_COLUMNS = [
@@ -544,10 +562,8 @@ export default function ParcelleEditor({
         const num = (props.numero ?? "").toString().trim();
         const titre = ilot && num ? `${ilot}.${num}` : ilot || num || "";
 
-        const ring = f.geometry?.coordinates?.[0];
-        const surfaceHa = ring ? ringAreaM2(ring) / 10000 : null;
-
-        const codeExploit = props.code_exploitation ?? props.CODE_EXPLO ?? "";
+        const featureArea = featureAreaM2(f);
+        const surfaceHa = typeof featureArea === "number" ? featureArea / 10000 : null;
         const nomParcelle = props.nom_parcelle ?? props.NOM_PARCEL ?? "";
         const typeSol = props.type_sol ?? props.TYPE_SOL ?? "";
 
@@ -645,54 +661,26 @@ export default function ParcelleEditor({
             </label>
 
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 6 }}>
-              <label style={{ fontSize: 12, flex: "1 1 120px" }}>
-                Ilot
+              <label style={{ fontSize: 12, flex: "1 1 180px" }}>
+                Ilot.Parcelle
                 <input
-                  value={props.ilot_numero ?? ""}
+                  value={formatIlotParcelle(props)}
                   onChange={(e) => {
-                    f.properties = { ...props, ilot_numero: e.target.value };
-                    setFeatures([...features]);
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                  placeholder="Ex. 9"
-                  style={{ width: "100%", padding: "4px 6px", border: "1px solid #ccc", borderRadius: 4, marginTop: 2 }}
-                />
-              </label>
-
-              <label style={{ fontSize: 12, flex: "1 1 140px" }}>
-                N parcelle
-                <input
-                  value={props.numero ?? ""}
-                  onChange={(e) => {
-                    f.properties = { ...props, numero: e.target.value };
-                    setFeatures([...features]);
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                  placeholder="Ex. 1"
-                  style={{ width: "100%", padding: "4px 6px", border: "1px solid #ccc", borderRadius: 4, marginTop: 2 }}
-                />
-              </label>
-
-              <label style={{ fontSize: 12, flex: "1 1 150px" }}>
-                Code exploitation
-                <input
-                  value={codeExploit}
-                  onChange={(e) => {
-                    const val = e.target.value;
+                    const next = splitIlotParcelle(e.target.value);
                     f.properties = {
                       ...props,
-                      code_exploitation: val,
-                      CODE_EXPLO: val,
+                      ilot_numero: next.ilot,
+                      numero: next.numero,
                     };
                     setFeatures([...features]);
                   }}
                   onClick={(e) => e.stopPropagation()}
-                  placeholder="Ex. 1234"
+                  placeholder="Ex. 9.1"
                   style={{ width: "100%", padding: "4px 6px", border: "1px solid #ccc", borderRadius: 4, marginTop: 2 }}
                 />
               </label>
 
-              <label style={{ fontSize: 12, flex: "1 1 150px" }}>
+              <label style={{ fontSize: 12, flex: "1 1 180px" }}>
                 Type de sol
                 <input
                   value={typeSol}
@@ -856,8 +844,7 @@ export default function ParcelleEditor({
           <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1400 }}>
           <thead>
             <tr>
-              <th style={headerStyle}>Îlot</th>
-              <th style={headerStyle}>N° parcelle</th>
+              <th style={headerStyle}>Ilot.Parcelle</th>
               <th style={headerStyle}>
                 <div>Nom</div>
                 {onFillNames ? (
@@ -933,8 +920,8 @@ export default function ParcelleEditor({
               const selected = String(selectedId) === idKey;
               const listId = `cultures-table-${idKey}`;
 
-              const ring = f.geometry?.coordinates?.[0];
-              const surfaceHa = ring ? ringAreaM2(ring) / 10000 : null;
+              const featureArea = featureAreaM2(f);
+              const surfaceHa = typeof featureArea === "number" ? featureArea / 10000 : null;
               const isBio = parseBioFlag(
                 props.isOrganic ?? props.conduite_bio ?? props.bio ?? props.BIO
               );
@@ -953,20 +940,14 @@ export default function ParcelleEditor({
                 >
                   <td style={{ padding: "6px", borderBottom: "1px solid #e5e7eb" }}>
                     <input
-                      value={props.ilot_numero ?? ""}
+                      value={formatIlotParcelle(props)}
                       onChange={(e) => {
-                        f.properties = { ...props, ilot_numero: e.target.value };
-                        setFeatures([...features]);
-                      }}
-                      onClick={(e) => e.stopPropagation()}
-                      style={{ width: "100%", padding: "4px", border: "1px solid #d1d5db", borderRadius: 4 }}
-                    />
-                  </td>
-                  <td style={{ padding: "6px", borderBottom: "1px solid #e5e7eb" }}>
-                    <input
-                      value={props.numero ?? ""}
-                      onChange={(e) => {
-                        f.properties = { ...props, numero: e.target.value };
+                        const next = splitIlotParcelle(e.target.value);
+                        f.properties = {
+                          ...props,
+                          ilot_numero: next.ilot,
+                          numero: next.numero,
+                        };
                         setFeatures([...features]);
                       }}
                       onClick={(e) => e.stopPropagation()}
