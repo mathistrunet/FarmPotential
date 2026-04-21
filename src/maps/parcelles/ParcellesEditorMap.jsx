@@ -10,11 +10,7 @@ import { DEFAULT_FILL_OPACITY } from "../../config/soilsLocalConfig";
 import { GEO_PORTAIL_SOIL_DEFAULT_OPACITY } from "../../config/soilGeoportal";
 import { RASTER_LAYERS, DEFAULT_FEATURE_INFO_PARSER } from "../../config/rasterLayers";
 
-// ⛔️ retirés car liés aux calques/queries en ligne (Géoportail)
-// import SoilsControl from "./features/soils/components/SoilsControl";
-// import { useSoilsLayer } from "./features/soils/hooks/useSoilsLayer";
 import MapInfoPanel from "../../components/MapInfoPanel";
-// import { getRrpAtPoint } from "./utils/rrpGetFeatureInfo";
 
 // ✅ composant RPG autonome (chemin conservé)
 import RpgFeature from "../../Front/useRpgLayer";
@@ -240,9 +236,36 @@ export default function ParcellesEditorMap() {
     setFeatureCollection,
     reset: resetParcellesStore,
     loading: parcellesLoading,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
   } = useParcelles();
 
   const { fillToponymieNames, isNaming: isToponymieNaming } = useToponymieAutoNaming(setFeatures);
+
+  // Ctrl+Z / Ctrl+Y — undo/redo global (géométrie + propriétés)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      const tag = e.target?.tagName?.toLowerCase();
+      // Laisser le navigateur gérer l'annulation dans les champs texte
+      if (tag === "input" || tag === "textarea" || e.target?.isContentEditable) return;
+      // Ne pas interférer pendant un tracé actif
+      const drawMode = drawRef.current?.getMode?.();
+      if (drawMode === "draw_polygon" || drawMode === "draw_line_string") return;
+
+      const ctrl = e.ctrlKey || e.metaKey;
+      if (ctrl && e.key === "z" && !e.shiftKey) {
+        e.preventDefault();
+        if (canUndo) undo();
+      } else if (ctrl && (e.key === "y" || (e.key === "z" && e.shiftKey))) {
+        e.preventDefault();
+        if (canRedo) redo();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [undo, redo, canUndo, canRedo, drawRef]);
 
   // Onglets + panneau latéral repliable
   const [sideOpen, setSideOpen] = useState(true);          // panneau latéral ouvert/fermé
@@ -1217,13 +1240,6 @@ export default function ParcellesEditorMap() {
       });
     };
 
-    const schedulePageRefresh = () => {
-      if (typeof window === "undefined") return;
-      window.setTimeout(() => {
-        window.location.reload();
-      }, 150);
-    };
-
     try {
       const response = await validateParcellesMatching({
         oldYear: olderYear,
@@ -1240,7 +1256,6 @@ export default function ParcellesEditorMap() {
       setValidatedMatches(rows);
       setValidatedMatchesAt(new Date());
       setMatchViewOpen(false);
-      schedulePageRefresh();
       return true;
     } catch (error) {
       console.warn(
@@ -1251,7 +1266,6 @@ export default function ParcellesEditorMap() {
       setValidatedMatches(rows);
       setValidatedMatchesAt(new Date());
       setMatchViewOpen(false);
-      schedulePageRefresh();
       alert(
         "Validation appliquée localement (backend indisponible). " +
           "Démarrez `npm run backend` pour persister les correspondances."
@@ -1329,19 +1343,23 @@ export default function ParcellesEditorMap() {
       return undefined;
     }
     let cancelled = false;
-    setSoilMappingLoading(true);
-    resolveParcelsWithSoilRows()
-      .then((candidates) => {
-        if (!cancelled) setSoilMappingParcelCandidates(candidates);
-      })
-      .catch(() => {
-        if (!cancelled) setSoilMappingParcelCandidates([]);
-      })
-      .finally(() => {
-        if (!cancelled) setSoilMappingLoading(false);
-      });
+    // Debounce 300ms : évite N×probes queryRenderedFeatures à chaque frappe/édition
+    const timeoutId = setTimeout(() => {
+      setSoilMappingLoading(true);
+      resolveParcelsWithSoilRows()
+        .then((candidates) => {
+          if (!cancelled) setSoilMappingParcelCandidates(candidates);
+        })
+        .catch(() => {
+          if (!cancelled) setSoilMappingParcelCandidates([]);
+        })
+        .finally(() => {
+          if (!cancelled) setSoilMappingLoading(false);
+        });
+    }, 300);
     return () => {
       cancelled = true;
+      clearTimeout(timeoutId);
     };
   }, [resolveParcelsWithSoilRows, rrpVisible, loadingTiles, polygonsShown, soilMappingRefreshTick]);
 
@@ -2136,6 +2154,10 @@ export default function ParcellesEditorMap() {
                 selectFeatureOnMap={selectFeatureOnMap}
                 onReset={handleResetParcelles}
                 compact={compact}
+                onUndo={undo}
+                onRedo={redo}
+                canUndo={canUndo}
+                canRedo={canRedo}
               />
             </div>
           </div>

@@ -6,9 +6,13 @@ export async function fetchParcelSoilGrids(parcelId, { refresh = false, depthPro
   }
   const url = `/api/parcels/${encodeURIComponent(parcelId)}/soilgrids${params.toString() ? `?${params.toString()}` : ""}`;
   const response = await fetch(url, { signal });
-  const payload = await response.json();
   if (!response.ok) {
-    throw new Error(payload?.error || "SoilGrids indisponible");
+    let message = "SoilGrids indisponible";
+    try {
+      const payload = await response.json();
+      if (payload?.error) message = payload.error;
+    } catch (_) { /* réponse non-JSON (ex. 502 HTML) */ }
+    throw new Error(message);
   }
-  return payload;
+  return response.json();
 }

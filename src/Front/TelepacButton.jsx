@@ -3,7 +3,7 @@ import React, { useRef, useState } from "react";
 import { parseTelepacXmlToFeatures, buildTelepacXML } from "../services/telepacXml";
 import { parseShapefileZipToFeatures } from "../services/shapefileZip";
 import { buildParcelShapefileZip } from "../services/parcelleShapefile";
-import { resolveOverlappingParcels } from "../utils/overlapResolution";
+import { resolveOverlappingParcelsAsync } from "../utils/overlapResolution";
 
 /** Icônes légères inline (gardées) */
 const iconStyle = { width: 18, height: 18, display: "inline-block", verticalAlign: "-3px" };
@@ -252,11 +252,9 @@ export default function ImportTelepacButton({
 
       // Ajout des features
       // (on peut ajouter un FeatureCollection d’un coup mais on garde l’itératif robuste)
-      const toAdd = feats;
-      const mismatches = [];
-      for (const ft of toAdd) draw.add(ft);
+      for (const ft of feats) draw.add(ft);
 
-      resolveOverlappingParcels(draw, { mode: "warn" });
+      void resolveOverlappingParcelsAsync(draw, { mode: "warn" });
 
       // Zoom sur l’emprise (MultiPolygon pris en charge)
       const importedFeatures = draw.getAll()?.features ?? [];
@@ -305,30 +303,12 @@ export default function ImportTelepacButton({
         selectFeatureOnMap(arr[0].id, false);
       }
 
-      if (mismatches.length) {
-        const topMismatches = mismatches.slice(0, 5);
-        const details = topMismatches
-          .map(
-            (entry) =>
-              `- ${entry.label} (similarité max ${(entry.maxSimilarity * 100).toFixed(1)}%)`
-          )
-          .join("\n");
-        alert(
-          "Certaines parcelles se chevauchent mais ne correspondent pas au seuil attendu (95%).\n" +
-            `Parcelles concernées: ${mismatches.length}.\n` +
-            "Elles sont surlignées en orange sur la carte : sélectionne-les pour décider si c'est la même parcelle ou deux parcelles distinctes.\n" +
-            details +
-            (mismatches.length > topMismatches.length ? "\n..." : "")
-        );
-      }
-
       onImportMeta?.({
         pacage: feats?.[0]?.properties?.code_exploitation || feats?.[0]?.properties?.pacage || null,
         year: Number.isFinite(Number(feats?.[0]?.properties?.annee))
           ? Number(feats?.[0]?.properties?.annee)
           : null,
       });
-
       onImported?.(feats);
     } catch (err) {
       console.error(err);

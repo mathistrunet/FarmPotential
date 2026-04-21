@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { fetchParcellesGeojson } from "../../services/parcellesBackend";
 import { normalizeParcellesCollection } from "./parcellesData";
+import { featureCollectionsEqual } from "../../utils/featureCollectionEquality";
 
 import { ParcellesContext } from "./ParcellesContext";
 const EMPTY_COLLECTION = { type: "FeatureCollection", features: [] };
@@ -42,11 +43,12 @@ export function ParcellesProvider({ children, initialCollection }) {
 
   const setCollectionState = useCallback((next, { dirty = true, trackHistory = true } = {}) => {
     setParcellesCollectionState((prev) => {
-      const safePrev = normalizeParcellesCollection(prev || EMPTY_COLLECTION);
+      // prev is always normalized (all write paths go through normalizeParcellesCollection)
+      const safePrev = prev || EMPTY_COLLECTION;
       const safeNext = normalizeParcellesCollection(
         typeof next === "function" ? next(safePrev) : next
       );
-      if (JSON.stringify(safePrev) === JSON.stringify(safeNext)) {
+      if (featureCollectionsEqual(safePrev, safeNext)) {
         return safePrev;
       }
       if (trackHistory) {
