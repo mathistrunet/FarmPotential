@@ -819,6 +819,9 @@ function ParcelleMatchViewContent({
             L’algorithme propose des correspondances, rien n’est fusionné sans votre
             validation.
           </p>
+          <p style={{ margin: "6px 0 0", color: "#92400e", fontSize: 12, background: "#fef3c7", padding: "4px 8px", borderRadius: 6 }}>
+            Après validation : les parcelles de droite disparaîtront (géométries + lignes du tableau), leurs cultures seront fusionnées dans les parcelles de gauche.
+          </p>
         </div>
         <button
           type="button"
@@ -837,8 +840,8 @@ function ParcelleMatchViewContent({
 
       <div style={{ padding: "12px 20px" }}>
         <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-          <label style={{ fontSize: 12, color: "#475569" }}>
-            Année gauche
+          <label style={{ fontSize: 12, color: "#166534", fontWeight: 600 }}>
+            Année conservée (gauche)
             <select
               value={leftYear ?? ""}
               onChange={(event) => setLeftYear(event.target.value)}
@@ -865,8 +868,8 @@ function ParcelleMatchViewContent({
               style={{ marginLeft: 8, width: 36, height: 28, padding: 0 }}
             />
           </label>
-          <label style={{ fontSize: 12, color: "#475569" }}>
-            Année droite
+          <label style={{ fontSize: 12, color: "#1d4ed8", fontWeight: 600 }}>
+            Année disparaissant (droite)
             <select
               value={rightYear ?? ""}
               onChange={(event) => setRightYear(event.target.value)}
@@ -942,7 +945,7 @@ function ParcelleMatchViewContent({
               color: "#166534",
             }}
           >
-            Carte {leftYear ?? "—"}
+            Parcelles conservées — {leftYear ?? "—"}
           </div>
           <div ref={leftContainerRef} style={{ flex: 1, minHeight: 320 }} />
         </div>
@@ -964,7 +967,7 @@ function ParcelleMatchViewContent({
               color: "#1d4ed8",
             }}
           >
-            Carte {rightYear ?? "—"}
+            Parcelles disparaissant — {rightYear ?? "—"}
           </div>
           <div ref={rightContainerRef} style={{ flex: 1, minHeight: 320 }} />
         </div>

@@ -1146,20 +1146,19 @@ export default function ParcellesEditorMap() {
     if (!rows.length || leftYearValue == null || rightYearValue == null) return false;
     if (leftYearValue === rightYearValue) return false;
 
-    const olderYear = Math.min(leftYearValue, rightYearValue);
-    const newerYear = Math.max(leftYearValue, rightYearValue);
-    const olderIsLeft = leftYearValue < rightYearValue;
+    // Gauche = conservée (newYear), Droite = disparaissant (oldYear)
+    const keptYear = leftYearValue;
+    const disappearingYear = rightYearValue;
 
     const correspondancesValidated = {};
     const matchesPayload = rows.flatMap((row) => {
       if (!row?.baseKey || !row?.incomingKey) return [];
-      const olderKey = olderIsLeft ? row.baseKey : row.incomingKey;
-      const newerKey = olderIsLeft ? row.incomingKey : row.baseKey;
-      correspondancesValidated[String(olderKey)] = String(newerKey);
+      // incomingKey = droite (disparaît) = oldKey ; baseKey = gauche (conservée) = newKey
+      correspondancesValidated[String(row.incomingKey)] = String(row.baseKey);
       return [
         {
-          oldId: String(olderKey),
-          newId: String(newerKey),
+          oldId: String(row.incomingKey),
+          newId: String(row.baseKey),
           previousValue: row?.previousValue ?? null,
         },
       ];
@@ -1177,8 +1176,8 @@ export default function ParcellesEditorMap() {
         } =
           applyCorrespondencesAndMerge({
             parcellesByYear,
-            oldYear: olderYear,
-            newYear: newerYear,
+            oldYear: disappearingYear,
+            newYear: keptYear,
             correspondancesValidated,
             dropOldYear: true,
           });
@@ -1209,14 +1208,15 @@ export default function ParcellesEditorMap() {
             }
             return updatedNewByKey?.get(String(featureKey)) ?? feature;
           })
-          .filter(Boolean);
+          .filter(Boolean)
+          .filter((feature) => Number(feature?.properties?.annee) !== disappearingYear);
       });
     };
 
     try {
       const response = await validateParcellesMatching({
-        oldYear: olderYear,
-        newYear: newerYear,
+        oldYear: disappearingYear,
+        newYear: keptYear,
         matches: matchesPayload,
       });
 
