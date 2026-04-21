@@ -32,6 +32,18 @@ function computeCultureWarning(raw, fallbackPrecision = "") {
   return null;
 }
 
+function renderCultureWarningPure(raw, precision, displayLookup) {
+  if (!raw) return null;
+  if (displayLookup.has(String(raw).trim().toLowerCase())) return null;
+  const warn = computeCultureWarning(raw, precision);
+  if (!warn) return null;
+  return (
+    <div style={{ fontSize: 12, color: "#a00", marginTop: 4 }}>
+      "{warn.value}" n'est pas un {warn.type === "code" ? <b>code culture</b> : <b>nom de culture</b>} reconnu.
+    </div>
+  );
+}
+
 function parseBioFlag(value) {
   if (typeof value === "boolean") return value;
   if (typeof value === "number") return value === 1;
@@ -42,7 +54,6 @@ function parseBioFlag(value) {
   }
   return false;
 }
-
 
 function formatIlotParcelle(props = {}) {
   const ilot = String(props.ilot_numero ?? "").trim();
@@ -103,6 +114,7 @@ const CULTURE_COLUMNS = [
     targetKeys: ["cultureN_6", "cultureN6", "culture_prec6", "CULT_PREC6"],
   },
 ];
+
 const PRECISION_KEYS = {
   next1: "precision_n_plus1",
   current: "precision",
@@ -113,6 +125,16 @@ const PRECISION_KEYS = {
   prev5: "precision_n5",
   prev6: "precision_n6",
 };
+
+const ADVANCED_COLUMNS = [
+  { id: "production_semences", label: "Production semences", type: "bool" },
+  { id: "production_fermiers", label: "Production fermiers", type: "bool" },
+  { id: "deshydratation", label: "Deshydratation", type: "bool" },
+  { id: "derogation_ukraine", label: "Derogation Ukraine", type: "bool" },
+  { id: "accident_culture", label: "Accident culture", type: "bool" },
+  { id: "culture_secondaire", label: "Culture secondaire", type: "text" },
+  { id: "maec_elevage_monogastrique", label: "MAEC monogastrique", type: "bool" },
+];
 
 const buildEmptyTypedState = () =>
   CULTURE_COLUMNS.reduce((acc, col) => {
@@ -224,6 +246,347 @@ function buildRpgIndex(features) {
     .filter((item) => Array.isArray(item.bbox));
 }
 
+// ---------------------------------------------------------------------------
+// Memoized table row — re-renders only when its own feature or typed values change
+// ---------------------------------------------------------------------------
+const TableRow = React.memo(function TableRow({
+  feature,
+  idKey,
+  isSelected,
+  rowParity,
+  showAdvancedColumns,
+  typedNext1,
+  typedCurrent,
+  typedPrev1,
+  typedPrev2,
+  typedPrev3,
+  typedPrev4,
+  typedPrev5,
+  typedPrev6,
+  onSelect,
+  onUpdateField,
+  onUpdateCulture,
+  onRegisterRef,
+}) {
+  const ref = useCallback((el) => onRegisterRef(idKey, el), [onRegisterRef, idKey]);
+
+  const props = feature.properties || {};
+  const featureArea = featureAreaM2(feature);
+  const surfaceHa = typeof featureArea === "number" ? featureArea / 10000 : null;
+  const isBio = parseBioFlag(props.isOrganic ?? props.conduite_bio ?? props.bio ?? props.BIO);
+
+  const typedByColId = {
+    next1: typedNext1,
+    current: typedCurrent,
+    prev1: typedPrev1,
+    prev2: typedPrev2,
+    prev3: typedPrev3,
+    prev4: typedPrev4,
+    prev5: typedPrev5,
+    prev6: typedPrev6,
+  };
+
+  const rowStyle = {
+    background: isSelected ? "#eef2ff" : rowParity === 0 ? "#fff" : "#f9fafb",
+    cursor: "pointer",
+  };
+
+  const cellStyle = { padding: "6px", borderBottom: "1px solid #e5e7eb" };
+  const inputStyle = { width: "100%", padding: "4px", border: "1px solid #d1d5db", borderRadius: 4 };
+
+  return (
+    <tr ref={ref} onClick={() => onSelect?.(feature.id ?? idKey)} style={rowStyle}>
+      <td style={cellStyle}>
+        <input
+          value={formatIlotParcelle(props)}
+          onChange={(e) => {
+            const next = splitIlotParcelle(e.target.value);
+            onUpdateField(idKey, (p) => ({ ...p, ilot_numero: next.ilot, numero: next.numero }));
+          }}
+          onClick={(e) => e.stopPropagation()}
+          style={inputStyle}
+        />
+      </td>
+      <td style={cellStyle}>
+        <input
+          value={props.nom_parcelle ?? props.NOM_PARCEL ?? ""}
+          onChange={(e) => {
+            const val = e.target.value;
+            onUpdateField(idKey, (p) => ({
+              ...p,
+              nom_parcelle: val,
+              NOM_PARCEL: val,
+              nom_affiche: val || p.nom_affiche,
+            }));
+          }}
+          onClick={(e) => e.stopPropagation()}
+          style={inputStyle}
+        />
+      </td>
+      <td style={{ ...cellStyle, fontSize: 13 }}>
+        {surfaceHa != null && !Number.isNaN(surfaceHa) ? surfaceHa.toFixed(2) : "-"}
+      </td>
+      <td style={cellStyle}>
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+          <input
+            type="checkbox"
+            checked={isBio}
+            onChange={(e) => {
+              const next = e.target.checked;
+              onUpdateField(idKey, (p) => {
+                const updated = { ...p };
+                if (next) {
+                  updated.conduite_bio = true;
+                  updated.isOrganic = true;
+                  if (!updated.organicType) updated.organicType = "AB";
+                } else {
+                  delete updated.conduite_bio;
+                  delete updated.isOrganic;
+                  delete updated.organicType;
+                }
+                return updated;
+              });
+            }}
+            onClick={(e) => e.stopPropagation()}
+          />
+          <span>AB</span>
+        </label>
+      </td>
+      {showAdvancedColumns
+        ? ADVANCED_COLUMNS.map((col) => (
+            <td key={col.id} style={cellStyle}>
+              {col.type === "bool" ? (
+                <input
+                  type="checkbox"
+                  checked={parseBioFlag(props[col.id])}
+                  onChange={(e) => {
+                    onUpdateField(idKey, (p) => ({ ...p, [col.id]: e.target.checked }));
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              ) : (
+                <input
+                  value={props[col.id] ?? ""}
+                  onChange={(e) => {
+                    onUpdateField(idKey, (p) => ({ ...p, [col.id]: e.target.value }));
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  style={{ width: "100%", padding: "4px 6px", border: "1px solid #d1d5db", borderRadius: 4 }}
+                />
+              )}
+            </td>
+          ))
+        : null}
+      {CULTURE_COLUMNS.map((col) => (
+        <td key={col.id} style={cellStyle}>
+          <input
+            list={`cultures-col-${col.id}`}
+            value={typedByColId[col.id] ?? ""}
+            onChange={(e) => onUpdateCulture(col.id, idKey, e.target.value, col.targetKeys, PRECISION_KEYS[col.id])}
+            onClick={(e) => e.stopPropagation()}
+            style={inputStyle}
+          />
+        </td>
+      ))}
+      <td style={cellStyle}>
+        <input
+          value={props.type_sol ?? props.TYPE_SOL ?? ""}
+          onChange={(e) => {
+            const val = e.target.value;
+            onUpdateField(idKey, (p) => ({ ...p, type_sol: val, TYPE_SOL: val }));
+          }}
+          onClick={(e) => e.stopPropagation()}
+          style={inputStyle}
+        />
+      </td>
+    </tr>
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Memoized card — re-renders only when its own feature or typed values change
+// ---------------------------------------------------------------------------
+const CardItem = React.memo(function CardItem({
+  feature,
+  idKey,
+  isSelected,
+  typedCurrent,
+  typedPrev1,
+  displayLookup,
+  onSelect,
+  onUpdateField,
+  onUpdateCulture,
+  onRegisterRef,
+}) {
+  const ref = useCallback((el) => onRegisterRef(idKey, el), [onRegisterRef, idKey]);
+
+  const props = feature.properties || {};
+  const rawId = feature.id ?? idKey;
+  const featureArea = featureAreaM2(feature);
+  const surfaceHa = typeof featureArea === "number" ? featureArea / 10000 : null;
+  const nomParcelle = props.nom_parcelle ?? props.NOM_PARCEL ?? "";
+  const typeSol = props.type_sol ?? props.TYPE_SOL ?? "";
+  const ilot = (props.ilot_numero ?? "").toString().trim();
+  const num = (props.numero ?? "").toString().trim();
+  const titre = ilot && num ? `${ilot}.${num}` : ilot || num || "";
+
+  const currentCol = CULTURE_COLUMNS.find((c) => c.id === "current");
+  const prev1Col = CULTURE_COLUMNS.find((c) => c.id === "prev1");
+
+  return (
+    <div
+      ref={ref}
+      onClick={() => onSelect?.(rawId)}
+      style={{
+        border: isSelected ? "2px solid #2563eb" : "1px solid #ddd",
+        boxShadow: isSelected ? "0 0 0 2px rgba(37,99,235,0.15)" : "none",
+        borderRadius: 10,
+        padding: 10,
+        marginTop: 8,
+        cursor: "pointer",
+        transition: "box-shadow .15s ease, border-color .15s ease",
+        background: "#fff",
+      }}
+      title="Cliquer pour selectionner la parcelle sur la carte"
+    >
+      <div style={{ fontWeight: 600, marginBottom: 6 }}>
+        Parcelle {titre || nomParcelle || rawId}
+      </div>
+      {surfaceHa != null && !Number.isNaN(surfaceHa) && (
+        <div style={{ fontSize: 12, color: "#555", marginBottom: 6 }}>
+          Surface : {surfaceHa.toFixed(2)} ha
+        </div>
+      )}
+      {(feature.properties?.overlap_warning || feature.properties?.import_mismatch) && (
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
+          {feature.properties?.overlap_warning && (
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+                padding: "2px 8px",
+                borderRadius: 999,
+                background: "#fee2e2",
+                color: "#991b1b",
+                fontSize: 11,
+                fontWeight: 600,
+              }}
+            >
+              Chevauchement detecte
+            </span>
+          )}
+          {feature.properties?.import_mismatch && (
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+                padding: "2px 8px",
+                borderRadius: 999,
+                background: "#ffedd5",
+                color: "#9a3412",
+                fontSize: 11,
+                fontWeight: 600,
+              }}
+            >
+              Import mismatch
+            </span>
+          )}
+        </div>
+      )}
+
+      <label style={{ fontSize: 12, display: "block", marginBottom: 6 }}>
+        Nom de la parcelle
+        <input
+          value={nomParcelle}
+          onChange={(e) => {
+            const val = e.target.value;
+            onUpdateField(idKey, (p) => ({
+              ...p,
+              nom_parcelle: val,
+              NOM_PARCEL: val,
+              nom_affiche: val || p.nom_affiche,
+            }));
+          }}
+          onClick={(e) => e.stopPropagation()}
+          placeholder="Ex. Parcelle 1"
+          style={{
+            width: "100%",
+            padding: "4px 6px",
+            border: "1px solid #ccc",
+            borderRadius: 4,
+            marginTop: 2,
+          }}
+        />
+      </label>
+
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 6 }}>
+        <label style={{ fontSize: 12, flex: "1 1 180px" }}>
+          Ilot.Parcelle
+          <input
+            value={formatIlotParcelle(props)}
+            onChange={(e) => {
+              const next = splitIlotParcelle(e.target.value);
+              onUpdateField(idKey, (p) => ({ ...p, ilot_numero: next.ilot, numero: next.numero }));
+            }}
+            onClick={(e) => e.stopPropagation()}
+            placeholder="Ex. 9.1"
+            style={{ width: "100%", padding: "4px 6px", border: "1px solid #ccc", borderRadius: 4, marginTop: 2 }}
+          />
+        </label>
+
+        <label style={{ fontSize: 12, flex: "1 1 180px" }}>
+          Type de sol
+          <input
+            value={typeSol}
+            onChange={(e) => {
+              const val = e.target.value;
+              onUpdateField(idKey, (p) => ({ ...p, type_sol: val, TYPE_SOL: val }));
+            }}
+            onClick={(e) => e.stopPropagation()}
+            placeholder="Ex. Argile"
+            style={{ width: "100%", padding: "4px 6px", border: "1px solid #ccc", borderRadius: 4, marginTop: 2 }}
+          />
+        </label>
+      </div>
+
+      <label style={{ fontSize: 12, display: "block", marginBottom: 6 }}>
+        Culture (Assolia)
+        <input
+          list="cultures-card-current"
+          value={typedCurrent}
+          onChange={(e) =>
+            onUpdateCulture("current", idKey, e.target.value, currentCol.targetKeys, PRECISION_KEYS.current)
+          }
+          onClick={(e) => e.stopPropagation()}
+          placeholder="Tapez le nom (ou le code)..."
+          style={{ width: "90%", padding: "6px 8px", border: "1px solid #ccc", borderRadius: 6, marginTop: 2 }}
+        />
+        {renderCultureWarningPure(typedCurrent, props?.[PRECISION_KEYS.current], displayLookup)}
+      </label>
+
+      <label style={{ fontSize: 12, display: "block" }}>
+        Culture N-1
+        <input
+          list="cultures-card-prev1"
+          value={typedPrev1}
+          onChange={(e) =>
+            onUpdateCulture("prev1", idKey, e.target.value, prev1Col.targetKeys, PRECISION_KEYS.prev1)
+          }
+          onClick={(e) => e.stopPropagation()}
+          placeholder="Code ou nom"
+          style={{ width: "90%", padding: "6px 8px", border: "1px solid #ccc", borderRadius: 6, marginTop: 2 }}
+        />
+        {renderCultureWarningPure(typedPrev1, props?.[PRECISION_KEYS.prev1], displayLookup)}
+      </label>
+    </div>
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Main component
+// ---------------------------------------------------------------------------
 export default function ParcelleEditor({
   features,
   setFeatures,
@@ -307,15 +670,11 @@ export default function ParcelleEditor({
     });
   }, [features]);
 
-
-  const registerRowRef = (idKey) => (el) => {
-    if (!rowsRef.current) rowsRef.current = new Map();
-    if (el) {
-      rowsRef.current.set(idKey, el);
-    } else {
-      rowsRef.current.delete(idKey);
-    }
-  };
+  // Stable ref registration — never changes identity
+  const onRegisterRef = useCallback((idKey, el) => {
+    if (el) rowsRef.current.set(idKey, el);
+    else rowsRef.current.delete(idKey);
+  }, []);
 
   useEffect(() => {
     if (selectedId == null) return;
@@ -327,9 +686,24 @@ export default function ParcelleEditor({
     }
   }, [selectedId, resolvedViewMode]);
 
+  // Only rebuild typed when ids change or values are missing — not on every feature property edit
   useEffect(() => {
     setTyped((prev) => {
       const ids = features.map((f, idx) => String(f.id ?? idx));
+
+      const firstColPrev = prev[CULTURE_COLUMNS[0].id] || {};
+      const prevIds = Object.keys(firstColPrev);
+      const idSet = new Set(ids);
+      const prevIdSet = new Set(prevIds);
+
+      const hasRemovedIds = prevIds.some((id) => !idSet.has(id));
+      const hasNewIds = ids.some((id) => !prevIdSet.has(id));
+      const hasMissingValues =
+        hasNewIds ||
+        CULTURE_COLUMNS.some((col) => ids.some((id) => prev[col.id]?.[id] == null));
+
+      if (!hasMissingValues && !hasRemovedIds) return prev;
+
       const prune = (map) => {
         const out = {};
         ids.forEach((id) => {
@@ -355,7 +729,7 @@ export default function ParcelleEditor({
     });
   }, [features, resolveCultureDisplay]);
 
-    const parseCultureInput = (rawValue) => {
+  const parseCultureInput = useCallback((rawValue) => {
     const value = rawValue ?? "";
     const trimmed = value.trim();
     if (!trimmed) return { display: "", code: "", precision: "" };
@@ -379,63 +753,73 @@ export default function ParcelleEditor({
       return { display, code: split.code, precision: resolvedPrecision };
     }
     return { display: trimmed, code: "", precision: "" };
-  };
+  }, [displayLookup]);
 
-  function updateCultureField(fieldKey, feature, idKey, rawValue, targetKeys, precisionKey) {
+  // Immutable feature update — finds feature by idKey and replaces only that entry
+  const updateFeatureByIdKey = useCallback((idKey, propsUpdater) => {
+    setFeatures((prev) => {
+      const idx = prev.findIndex((f, i) => String(f.id ?? i) === idKey);
+      if (idx === -1) return prev;
+      const feature = prev[idx];
+      const newProps = propsUpdater(feature.properties || {});
+      if (newProps === feature.properties) return prev;
+      const next = [...prev];
+      next[idx] = { ...feature, properties: newProps };
+      return next;
+    });
+  }, [setFeatures]);
+
+  const updateCultureField = useCallback((colId, idKey, rawValue, targetKeys, precisionKey) => {
     const value = rawValue ?? "";
     const trimmed = value.trim();
-    const props = { ...(feature.properties || {}) };
     let display = value;
-    let changed = false;
 
     if (trimmed === "") {
-      targetKeys.forEach((key) => {
-        if (props[key] !== undefined) delete props[key];
+      updateFeatureByIdKey(idKey, (props) => {
+        const next = { ...props };
+        targetKeys.forEach((key) => { if (key in next) delete next[key]; });
+        if (precisionKey && precisionKey in next) delete next[precisionKey];
+        return next;
       });
-      if (precisionKey && props[precisionKey] !== undefined) delete props[precisionKey];
       display = "";
-      changed = true;
     } else {
       const parsed = parseCultureInput(trimmed);
       if (parsed.code) {
-        targetKeys.forEach((key) => {
-          props[key] = parsed.code;
-        });
-        if (precisionKey) {
-          if (parsed.precision) {
-            props[precisionKey] = parsed.precision;
-          } else {
-            const fallbackPrecision = resolvePrecisionForCode(parsed.code, "");
-            if (fallbackPrecision) {
-              props[precisionKey] = fallbackPrecision;
-            } else if (props[precisionKey] !== undefined) {
-              delete props[precisionKey];
+        updateFeatureByIdKey(idKey, (props) => {
+          const next = { ...props };
+          targetKeys.forEach((key) => { next[key] = parsed.code; });
+          if (precisionKey) {
+            if (parsed.precision) {
+              next[precisionKey] = parsed.precision;
+            } else {
+              const fallback = resolvePrecisionForCode(parsed.code, "");
+              if (fallback) {
+                next[precisionKey] = fallback;
+              } else if (precisionKey in next) {
+                delete next[precisionKey];
+              }
             }
           }
-        }
+          return next;
+        });
         display = parsed.display;
-        changed = true;
       } else if (/^[A-Za-z0-9]{2,10}$/.test(trimmed)) {
         const upper = trimmed.toUpperCase();
-        targetKeys.forEach((key) => {
-          props[key] = upper;
+        updateFeatureByIdKey(idKey, (props) => {
+          const next = { ...props };
+          targetKeys.forEach((key) => { next[key] = upper; });
+          if (precisionKey && precisionKey in next) delete next[precisionKey];
+          return next;
         });
-        if (precisionKey && props[precisionKey] !== undefined) delete props[precisionKey];
         display = upper;
-        changed = true;
       }
-    }
-
-    if (changed) {
-      feature.properties = props;
-      setFeatures([...features]);
     }
 
     setTyped((prev) => ({
       ...prev,
-      [fieldKey]: { ...(prev[fieldKey] || {}), [idKey]: display },
+      [colId]: { ...(prev[colId] || {}), [idKey]: display },
     }));
-  }
+  }, [updateFeatureByIdKey, parseCultureInput]);
 
   const fillCultureFromRpg = async (column) => {
     const targetYear = getRpgYearForColumn(column.id);
@@ -532,224 +916,7 @@ export default function ParcelleEditor({
     }
   };
 
-
-
-  
-  const renderCultureWarning = (raw, precision) => {
-    if (!raw) return null;
-    if (displayLookup.has(String(raw).trim().toLowerCase())) return null;
-    const warn = computeCultureWarning(raw, precision);
-    if (!warn) return null;
-    return (
-      <div style={{ fontSize: 12, color: "#a00", marginTop: 4 }}>
-        "{warn.value}" n'est pas un {warn.type === "code" ? <b>code culture</b> : <b>nom de culture</b>} reconnu.
-      </div>
-    );
-  };
-  const renderCardView = () => (
-    <>
-      {features.map((f, idx) => {
-        const rawId = f.id ?? idx;
-        const idKey = String(rawId);
-        const props = f.properties || {};
-        const listId = `cultures-list-${idKey}`;
-        const selected = String(selectedId) === idKey;
-
-        const cultureDisplay = typed.current[idKey] ?? "";
-        const culturePrevDisplay = typed.prev1[idKey] ?? "";
-
-        const ilot = (props.ilot_numero ?? "").toString().trim();
-        const num = (props.numero ?? "").toString().trim();
-        const titre = ilot && num ? `${ilot}.${num}` : ilot || num || "";
-
-        const featureArea = featureAreaM2(f);
-        const surfaceHa = typeof featureArea === "number" ? featureArea / 10000 : null;
-        const nomParcelle = props.nom_parcelle ?? props.NOM_PARCEL ?? "";
-        const typeSol = props.type_sol ?? props.TYPE_SOL ?? "";
-
-        return (
-          <div
-            key={idKey}
-            ref={registerRowRef(idKey)}
-            onClick={() => onSelect?.(rawId)}
-            style={{
-              border: selected ? "2px solid #2563eb" : "1px solid #ddd",
-              boxShadow: selected ? "0 0 0 2px rgba(37,99,235,0.15)" : "none",
-              borderRadius: 10,
-              padding: 10,
-              marginTop: 8,
-              cursor: "pointer",
-              transition: "box-shadow .15s ease, border-color .15s ease",
-              background: "#fff",
-            }}
-            title="Cliquer pour selectionner la parcelle sur la carte"
-          >
-            <div style={{ fontWeight: 600, marginBottom: 6 }}>
-              Parcelle {titre || nomParcelle || rawId}
-            </div>
-            {surfaceHa != null && !Number.isNaN(surfaceHa) && (
-              <div style={{ fontSize: 12, color: "#555", marginBottom: 6 }}>
-                Surface : {surfaceHa.toFixed(2)} ha
-              </div>
-            )}
-            {(f.properties?.overlap_warning || f.properties?.import_mismatch) && (
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
-                {f.properties?.overlap_warning && (
-                  <span
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: 4,
-                      padding: "2px 8px",
-                      borderRadius: 999,
-                      background: "#fee2e2",
-                      color: "#991b1b",
-                      fontSize: 11,
-                      fontWeight: 600,
-                    }}
-                  >
-                    Chevauchement detecte
-                  </span>
-                )}
-                {f.properties?.import_mismatch && (
-                  <span
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: 4,
-                      padding: "2px 8px",
-                      borderRadius: 999,
-                      background: "#ffedd5",
-                      color: "#9a3412",
-                      fontSize: 11,
-                      fontWeight: 600,
-                    }}
-                  >
-                    Import mismatch
-                  </span>
-                )}
-              </div>
-            )}
-
-            <label style={{ fontSize: 12, display: "block", marginBottom: 6 }}>
-              Nom de la parcelle
-              <input
-                value={nomParcelle}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  const nextProps = {
-                    ...props,
-                    nom_parcelle: val,
-                    NOM_PARCEL: val,
-                  };
-                  if (val) {
-                    nextProps.nom_affiche = val;
-                  }
-                  f.properties = nextProps;
-                  setFeatures([...features]);
-                }}
-                onClick={(e) => e.stopPropagation()}
-                placeholder="Ex. Parcelle 1"
-                style={{
-                  width: "100%",
-                  padding: "4px 6px",
-                  border: "1px solid #ccc",
-                  borderRadius: 4,
-                  marginTop: 2,
-                }}
-              />
-            </label>
-
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 6 }}>
-              <label style={{ fontSize: 12, flex: "1 1 180px" }}>
-                Ilot.Parcelle
-                <input
-                  value={formatIlotParcelle(props)}
-                  onChange={(e) => {
-                    const next = splitIlotParcelle(e.target.value);
-                    f.properties = {
-                      ...props,
-                      ilot_numero: next.ilot,
-                      numero: next.numero,
-                    };
-                    setFeatures([...features]);
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                  placeholder="Ex. 9.1"
-                  style={{ width: "100%", padding: "4px 6px", border: "1px solid #ccc", borderRadius: 4, marginTop: 2 }}
-                />
-              </label>
-
-              <label style={{ fontSize: 12, flex: "1 1 180px" }}>
-                Type de sol
-                <input
-                  value={typeSol}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    f.properties = {
-                      ...props,
-                      type_sol: val,
-                      TYPE_SOL: val,
-                    };
-                    setFeatures([...features]);
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                  placeholder="Ex. Argile"
-                  style={{ width: "100%", padding: "4px 6px", border: "1px solid #ccc", borderRadius: 4, marginTop: 2 }}
-                />
-              </label>
-            </div>
-
-            <label style={{ fontSize: 12, display: "block", marginBottom: 6 }}>
-              Culture (Assolia)
-              <input
-                list={listId}
-                value={cultureDisplay}
-                onChange={(e) => {
-                  updateCultureField("current", f, idKey, e.target.value, ["cultureN", "cultureN_0", "cultureN0", "culture", "code", "code_culture", "CP_CULTU"], PRECISION_KEYS.current);
-                }}
-                onClick={(e) => e.stopPropagation()}
-                placeholder="Tapez le nom (ou le code)..."
-                style={{ width: "90%", padding: "6px 8px", border: "1px solid #ccc", borderRadius: 6, marginTop: 2 }}
-              />
-              {renderCultureWarning(cultureDisplay, props?.[PRECISION_KEYS.current])}
-            </label>
-
-            <label style={{ fontSize: 12, display: "block" }}>
-              Culture N-1
-              <input
-                list={`${listId}-prev`}
-                value={culturePrevDisplay}
-                onChange={(e) => {
-                  updateCultureField("prev1", f, idKey, e.target.value, ["cultureN_1", "cultureN1", "culture_prec", "CULT_PREC"], PRECISION_KEYS.prev1);
-                }}
-                onClick={(e) => e.stopPropagation()}
-                placeholder="Code ou nom"
-                style={{ width: "90%", padding: "6px 8px", border: "1px solid #ccc", borderRadius: 6, marginTop: 2 }}
-              />
-              {renderCultureWarning(culturePrevDisplay, props?.[PRECISION_KEYS.prev1])}
-            </label>
-
-            <datalist id={listId}>
-              {cultureOptions.map((opt) => (
-                <option key={`${opt.code}-${opt.precision || ""}-${opt.display}`} value={opt.display}>
-                  {opt.code}
-                </option>
-              ))}
-            </datalist>
-            <datalist id={`${listId}-prev`}>
-              {cultureOptions.map((opt) => (
-                <option key={`${opt.code}-${opt.precision || ""}-${opt.display}`} value={opt.display}>
-                  {opt.code}
-                </option>
-              ))}
-            </datalist>
-          </div>
-        );
-      })}
-    </>
-  );
-    const updateGeneralInfo = (field, value) => {
+  const updateGeneralInfo = useCallback((field, value) => {
     const next = { ...generalInfo, [field]: value };
     setGeneralInfo(next);
     setFeatures((prev) =>
@@ -771,23 +938,49 @@ export default function ParcelleEditor({
         return { ...feature, properties: props };
       })
     );
-  };
+  }, [generalInfo, setFeatures]);
 
-  const ADVANCED_COLUMNS = [
-    { id: "production_semences", label: "Production semences", type: "bool" },
-    { id: "production_fermiers", label: "Production fermiers", type: "bool" },
-    { id: "deshydratation", label: "Deshydratation", type: "bool" },
-    { id: "derogation_ukraine", label: "Derogation Ukraine", type: "bool" },
-    { id: "accident_culture", label: "Accident culture", type: "bool" },
-    { id: "culture_secondaire", label: "Culture secondaire", type: "text" },
-    { id: "maec_elevage_monogastrique", label: "MAEC monogastrique", type: "bool" },
-  ];
+  const renderCardView = () => (
+    <>
+      {/* Shared datalists for cards — one per column instead of one per card */}
+      <datalist id="cultures-card-current">
+        {cultureOptions.map((opt) => (
+          <option key={`${opt.code}-${opt.precision || ""}-${opt.display}`} value={opt.display}>
+            {opt.code}
+          </option>
+        ))}
+      </datalist>
+      <datalist id="cultures-card-prev1">
+        {cultureOptions.map((opt) => (
+          <option key={`${opt.code}-${opt.precision || ""}-${opt.display}`} value={opt.display}>
+            {opt.code}
+          </option>
+        ))}
+      </datalist>
+      {features.map((f, idx) => {
+        const rawId = f.id ?? idx;
+        const idKey = String(rawId);
+        return (
+          <CardItem
+            key={idKey}
+            feature={f}
+            idKey={idKey}
+            isSelected={String(selectedId) === idKey}
+            typedCurrent={typed.current?.[idKey] ?? ""}
+            typedPrev1={typed.prev1?.[idKey] ?? ""}
+            displayLookup={displayLookup}
+            onSelect={onSelect}
+            onUpdateField={updateFeatureByIdKey}
+            onUpdateCulture={updateCultureField}
+            onRegisterRef={onRegisterRef}
+          />
+        );
+      })}
+    </>
+  );
 
-
-    const renderTableView = () => {
-
-
-      const headerStyle = {
+  const renderTableView = () => {
+    const headerStyle = {
       padding: "8px 6px",
       borderBottom: "1px solid #e5e7eb",
       background: "#f3f4f6",
@@ -841,242 +1034,115 @@ export default function ParcelleEditor({
         </div>
 
         <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1400 }}>
-          <thead>
-            <tr>
-              <th style={headerStyle}>Ilot.Parcelle</th>
-              <th style={headerStyle}>
-                <div>Nom</div>
-                {onFillNames ? (
-                  <button
-                    type="button"
-                    onClick={() => onFillNames()}
-                    disabled={isFillingNames}
-                    style={{
-                      ...headerButtonStyle,
-                      opacity: isFillingNames ? 0.6 : 1,
-                      cursor: isFillingNames ? "not-allowed" : "pointer",
-                    }}
-                  >
-                    {isFillingNames ? "Remplissage..." : "Remplir"}
-                  </button>
-                ) : null}
-              </th>
-                            <th style={headerStyle}>Surface (ha)</th>
-              <th style={headerStyle}>Bio</th>
-              {showAdvancedColumns
-                ? ADVANCED_COLUMNS.map((col) => (
-                    <th key={col.id} style={headerStyle}>{col.label}</th>
-                  ))
-                : null}
-              {CULTURE_COLUMNS.map((col) => (
-                <th key={col.id} style={headerStyle}>
-                  <div
-                    onClick={
-                      col.id === "current"
-                        ? () => setShowAdvancedColumns((prev) => !prev)
-                        : undefined
-                    }
-                    title={
-                      col.id === "current"
-                        ? showAdvancedColumns
-                          ? "Masquer les options semences/fermiere/etc."
-                          : "Afficher les options semences/fermiere/etc."
-                        : undefined
-                    }
-                    style={{
-                      cursor: col.id === "current" ? "pointer" : "default",
-                      fontWeight: 600,
-                    }}
-                  >
-                    {col.label}
-                    {col.id === "current" ? (showAdvancedColumns ? " [-]" : " [+]") : ""}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      fillCultureFromRpg(col);
-                    }}
-                    disabled={isFillingRpg}
-                    style={{
-                      ...headerButtonStyle,
-                      opacity: isFillingRpg ? 0.6 : 1,
-                      cursor: isFillingRpg ? "not-allowed" : "pointer",
-                    }}
-                  >
-                    {isFillingRpg ? "Remplissage..." : "Remplir"}
-                  </button>
-                </th>
-              ))}
-              <th style={headerStyle}>Type de sol</th>
-            </tr>
-          </thead>
-          <tbody>
-            {features.map((f, idx) => {
-              const rawId = f.id ?? idx;
-              const idKey = String(rawId);
-              const props = f.properties || {};
-              const selected = String(selectedId) === idKey;
-              const listId = `cultures-table-${idKey}`;
-
-              const featureArea = featureAreaM2(f);
-              const surfaceHa = typeof featureArea === "number" ? featureArea / 10000 : null;
-              const isBio = parseBioFlag(
-                props.isOrganic ?? props.conduite_bio ?? props.bio ?? props.BIO
-              );
-
-              const rowStyle = {
-                background: selected ? "#eef2ff" : idx % 2 === 0 ? "#fff" : "#f9fafb",
-                cursor: "pointer",
-              };
-
-              return (
-                <tr
-                  key={idKey}
-                  ref={registerRowRef(idKey)}
-                  onClick={() => onSelect?.(rawId)}
-                  style={rowStyle}
-                >
-                  <td style={{ padding: "6px", borderBottom: "1px solid #e5e7eb" }}>
-                    <input
-                      value={formatIlotParcelle(props)}
-                      onChange={(e) => {
-                        const next = splitIlotParcelle(e.target.value);
-                        f.properties = {
-                          ...props,
-                          ilot_numero: next.ilot,
-                          numero: next.numero,
-                        };
-                        setFeatures([...features]);
-                      }}
-                      onClick={(e) => e.stopPropagation()}
-                      style={{ width: "100%", padding: "4px", border: "1px solid #d1d5db", borderRadius: 4 }}
-                    />
-                  </td>
-                  <td style={{ padding: "6px", borderBottom: "1px solid #e5e7eb" }}>
-                    <input
-                      value={props.nom_parcelle ?? props.NOM_PARCEL ?? ""}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        f.properties = {
-                          ...props,
-                          nom_parcelle: val,
-                          NOM_PARCEL: val,
-                          nom_affiche: val || props.nom_affiche,
-                        };
-                        setFeatures([...features]);
-                      }}
-                      onClick={(e) => e.stopPropagation()}
-                      style={{ width: "100%", padding: "4px", border: "1px solid #d1d5db", borderRadius: 4 }}
-                    />
-                  </td>
-
-
-                  <td style={{ padding: "6px", borderBottom: "1px solid #e5e7eb", fontSize: 13 }}>
-                    {surfaceHa != null && !Number.isNaN(surfaceHa) ? surfaceHa.toFixed(2) : "-"}
-                  </td>
-                  <td style={{ padding: "6px", borderBottom: "1px solid #e5e7eb" }}>
-                    <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13 }}>
-                      <input
-                        type="checkbox"
-                        checked={isBio}
-                        onChange={(e) => {
-                          const next = e.target.checked;
-                          const updated = { ...props };
-                          if (next) {
-                            updated.conduite_bio = true;
-                            updated.isOrganic = true;
-                            if (!updated.organicType) {
-                              updated.organicType = "AB";
-                            }
-                          } else {
-                            delete updated.conduite_bio;
-                            delete updated.isOrganic;
-                            delete updated.organicType;
-                          }
-                          f.properties = updated;
-                          setFeatures([...features]);
-                        }}
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                      <span>AB</span>
-                    </label>
-                  </td>
-                  {showAdvancedColumns
-                    ? ADVANCED_COLUMNS.map((col) => (
-                        <td key={col.id} style={{ padding: "6px", borderBottom: "1px solid #e5e7eb" }}>
-                          {col.type === "bool" ? (
-                            <input
-                              type="checkbox"
-                              checked={parseBioFlag(props[col.id])}
-                              onChange={(e) => {
-                                const updated = { ...props, [col.id]: e.target.checked };
-                                f.properties = updated;
-                                setFeatures([...features]);
-                              }}
-                              onClick={(e) => e.stopPropagation()}
-                            />
-                          ) : (
-                            <input
-                              value={props[col.id] ?? ""}
-                              onChange={(e) => {
-                                const updated = { ...props, [col.id]: e.target.value };
-                                f.properties = updated;
-                                setFeatures([...features]);
-                              }}
-                              onClick={(e) => e.stopPropagation()}
-                              style={{ width: "100%", padding: "4px 6px", border: "1px solid #d1d5db", borderRadius: 4 }}
-                            />
-                          )}
-                        </td>
-                      ))
-                    : null}
-
-                  {CULTURE_COLUMNS.map((col) => {
-                    const value = typed[col.id]?.[idKey] ?? "";
-                    return (
-                      <td key={col.id} style={{ padding: "6px", borderBottom: "1px solid #e5e7eb" }}>
-                        <input
-                          list={`${listId}-${col.id}`}
-                          value={value}
-                          onChange={(e) => {
-                            updateCultureField(col.id, f, idKey, e.target.value, col.targetKeys, PRECISION_KEYS[col.id]);
-                          }}
-                          onClick={(e) => e.stopPropagation()}
-                          style={{ width: "100%", padding: "4px", border: "1px solid #d1d5db", borderRadius: 4 }}
-                        />
-                        <datalist id={`${listId}-${col.id}`}>
-                          {cultureOptions.map((opt) => (
+          {/* Shared datalists — one per culture column, not one per row */}
+          {CULTURE_COLUMNS.map((col) => (
+            <datalist key={col.id} id={`cultures-col-${col.id}`}>
+              {cultureOptions.map((opt) => (
                 <option key={`${opt.code}-${opt.precision || ""}-${opt.display}`} value={opt.display}>
                   {opt.code}
                 </option>
               ))}
-                        </datalist>
-                      </td>
-                    );
-                  })}
-                  <td style={{ padding: "6px", borderBottom: "1px solid #e5e7eb" }}>
-                    <input
-                      value={props.type_sol ?? props.TYPE_SOL ?? ""}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        f.properties = {
-                          ...props,
-                          type_sol: val,
-                          TYPE_SOL: val,
-                        };
-                        setFeatures([...features]);
+            </datalist>
+          ))}
+          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1400 }}>
+            <thead>
+              <tr>
+                <th style={headerStyle}>Ilot.Parcelle</th>
+                <th style={headerStyle}>
+                  <div>Nom</div>
+                  {onFillNames ? (
+                    <button
+                      type="button"
+                      onClick={() => onFillNames()}
+                      disabled={isFillingNames}
+                      style={{
+                        ...headerButtonStyle,
+                        opacity: isFillingNames ? 0.6 : 1,
+                        cursor: isFillingNames ? "not-allowed" : "pointer",
                       }}
-                      onClick={(e) => e.stopPropagation()}
-                      style={{ width: "100%", padding: "4px", border: "1px solid #d1d5db", borderRadius: 4 }}
-                    />
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                    >
+                      {isFillingNames ? "Remplissage..." : "Remplir"}
+                    </button>
+                  ) : null}
+                </th>
+                <th style={headerStyle}>Surface (ha)</th>
+                <th style={headerStyle}>Bio</th>
+                {showAdvancedColumns
+                  ? ADVANCED_COLUMNS.map((col) => (
+                      <th key={col.id} style={headerStyle}>{col.label}</th>
+                    ))
+                  : null}
+                {CULTURE_COLUMNS.map((col) => (
+                  <th key={col.id} style={headerStyle}>
+                    <div
+                      onClick={
+                        col.id === "current"
+                          ? () => setShowAdvancedColumns((prev) => !prev)
+                          : undefined
+                      }
+                      title={
+                        col.id === "current"
+                          ? showAdvancedColumns
+                            ? "Masquer les options semences/fermiere/etc."
+                            : "Afficher les options semences/fermiere/etc."
+                          : undefined
+                      }
+                      style={{
+                        cursor: col.id === "current" ? "pointer" : "default",
+                        fontWeight: 600,
+                      }}
+                    >
+                      {col.label}
+                      {col.id === "current" ? (showAdvancedColumns ? " [-]" : " [+]") : ""}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        fillCultureFromRpg(col);
+                      }}
+                      disabled={isFillingRpg}
+                      style={{
+                        ...headerButtonStyle,
+                        opacity: isFillingRpg ? 0.6 : 1,
+                        cursor: isFillingRpg ? "not-allowed" : "pointer",
+                      }}
+                    >
+                      {isFillingRpg ? "Remplissage..." : "Remplir"}
+                    </button>
+                  </th>
+                ))}
+                <th style={headerStyle}>Type de sol</th>
+              </tr>
+            </thead>
+            <tbody>
+              {features.map((f, idx) => {
+                const idKey = String(f.id ?? idx);
+                return (
+                  <TableRow
+                    key={idKey}
+                    feature={f}
+                    idKey={idKey}
+                    isSelected={String(selectedId) === idKey}
+                    rowParity={idx % 2}
+                    showAdvancedColumns={showAdvancedColumns}
+                    typedNext1={typed.next1?.[idKey] ?? ""}
+                    typedCurrent={typed.current?.[idKey] ?? ""}
+                    typedPrev1={typed.prev1?.[idKey] ?? ""}
+                    typedPrev2={typed.prev2?.[idKey] ?? ""}
+                    typedPrev3={typed.prev3?.[idKey] ?? ""}
+                    typedPrev4={typed.prev4?.[idKey] ?? ""}
+                    typedPrev5={typed.prev5?.[idKey] ?? ""}
+                    typedPrev6={typed.prev6?.[idKey] ?? ""}
+                    onSelect={onSelect}
+                    onUpdateField={updateFeatureByIdKey}
+                    onUpdateCulture={updateCultureField}
+                    onRegisterRef={onRegisterRef}
+                  />
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       </div>
     );
@@ -1088,54 +1154,3 @@ export default function ParcelleEditor({
     </div>
   );
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

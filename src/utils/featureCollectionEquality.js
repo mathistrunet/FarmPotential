@@ -18,7 +18,10 @@ export function featureCollectionsEqual(a, b) {
       JSON.stringify(fa.geometry) !== JSON.stringify(fb.geometry)
     )
       return false;
-    if (JSON.stringify(fa.properties) !== JSON.stringify(fb.properties))
+    if (
+      fa.properties !== fb.properties &&
+      JSON.stringify(fa.properties) !== JSON.stringify(fb.properties)
+    )
       return false;
   }
   return true;
