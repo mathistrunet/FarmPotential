@@ -1,5 +1,5 @@
 // src/features/draw/DrawToolbar.jsx
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { featureAreaM2 } from "../utils/geometry";
 import { resolveOverlappingParcels } from "../utils/overlapResolution";
 import { mergeFeaturesByIds } from "../utils/parcelleFusion";
@@ -56,6 +56,15 @@ const BORDER_LAYER_ID  = "split-border-layer";
 // Rayon d'accrochage ~40 m en degrés
 const SNAP_THRESHOLD = 0.0004;
 
+const DRAW_LINE_SOURCE_ID   = "split-draw-line-src";
+const DRAW_LINE_LAYER_ID    = "split-draw-line-layer";
+const DRAW_VERTS_SOURCE_ID  = "split-draw-verts-src";
+const DRAW_VERTS_LAYER_ID   = "split-draw-verts-layer";
+const PREVIEW_SOURCE_ID     = "split-preview-src";
+const PREVIEW_LAYER_ID      = "split-preview-layer";
+
+const EMPTY_FC = { type: "FeatureCollection", features: [] };
+
 function addSplitLayers(map, targetFeature) {
   if (!map) return;
   try {
@@ -92,6 +101,44 @@ function addSplitLayers(map, targetFeature) {
         },
       });
     }
+    if (!map.getSource(DRAW_LINE_SOURCE_ID)) {
+      map.addSource(DRAW_LINE_SOURCE_ID, { type: "geojson", data: EMPTY_FC });
+    }
+    if (!map.getLayer(DRAW_LINE_LAYER_ID)) {
+      map.addLayer({
+        id: DRAW_LINE_LAYER_ID,
+        type: "line",
+        source: DRAW_LINE_SOURCE_ID,
+        paint: { "line-color": "#16a34a", "line-width": 2 },
+      });
+    }
+    if (!map.getSource(DRAW_VERTS_SOURCE_ID)) {
+      map.addSource(DRAW_VERTS_SOURCE_ID, { type: "geojson", data: EMPTY_FC });
+    }
+    if (!map.getLayer(DRAW_VERTS_LAYER_ID)) {
+      map.addLayer({
+        id: DRAW_VERTS_LAYER_ID,
+        type: "circle",
+        source: DRAW_VERTS_SOURCE_ID,
+        paint: {
+          "circle-radius": 5,
+          "circle-color": "#16a34a",
+          "circle-stroke-width": 2,
+          "circle-stroke-color": "#fff",
+        },
+      });
+    }
+    if (!map.getSource(PREVIEW_SOURCE_ID)) {
+      map.addSource(PREVIEW_SOURCE_ID, { type: "geojson", data: EMPTY_FC });
+    }
+    if (!map.getLayer(PREVIEW_LAYER_ID)) {
+      map.addLayer({
+        id: PREVIEW_LAYER_ID,
+        type: "line",
+        source: PREVIEW_SOURCE_ID,
+        paint: { "line-color": "#16a34a", "line-width": 1.5, "line-dasharray": [4, 3] },
+      });
+    }
   } catch {
     /* ignore layer add errors */
   }
@@ -99,10 +146,10 @@ function addSplitLayers(map, targetFeature) {
 
 function removeSplitLayers(map) {
   if (!map) return;
-  for (const id of [SNAP_LAYER_ID, BORDER_LAYER_ID]) {
+  for (const id of [PREVIEW_LAYER_ID, DRAW_VERTS_LAYER_ID, DRAW_LINE_LAYER_ID, SNAP_LAYER_ID, BORDER_LAYER_ID]) {
     try { if (map.getLayer(id)) map.removeLayer(id); } catch { /* ignore */ }
   }
-  for (const id of [SNAP_SOURCE_ID, BORDER_SOURCE_ID]) {
+  for (const id of [PREVIEW_SOURCE_ID, DRAW_VERTS_SOURCE_ID, DRAW_LINE_SOURCE_ID, SNAP_SOURCE_ID, BORDER_SOURCE_ID]) {
     try { if (map.getSource(id)) map.removeSource(id); } catch { /* ignore */ }
   }
 }
@@ -132,7 +179,8 @@ export default function DrawToolbar({
 }) {
   const [mode, setMode] = useState("simple_select");
   const [splitTargetId, setSplitTargetId] = useState(null);
-  const [splitLineId, setSplitLineId] = useState(null);
+  const [splitLineCoords, setSplitLineCoords] = useState([]);
+  const splitLineCoordsRef = useRef([]);
 
   const btn = {
     display: "inline-flex", alignItems: "center", gap: 8,
@@ -206,12 +254,10 @@ export default function DrawToolbar({
       alert("La sélection doit être une parcelle polygonale.");
       return;
     }
-    if (splitLineId) {
-      draw.delete(splitLineId);
-      setSplitLineId(null);
-    }
+    splitLineCoordsRef.current = [];
+    setSplitLineCoords([]);
     setSplitTargetId(targetId);
-    draw.changeMode("draw_line_string");
+    draw.changeMode("simple_select");
   }
 
   function applySplitFromLine(lineFeature) {
@@ -239,9 +285,9 @@ export default function DrawToolbar({
     const draw = drawRef?.current;
     const map = mapRef?.current;
     if (!draw) return;
-    if (splitLineId) draw.delete(splitLineId);
     removeSplitLayers(map);
-    setSplitLineId(null);
+    splitLineCoordsRef.current = [];
+    setSplitLineCoords([]);
     setSplitTargetId(null);
     draw.changeMode("simple_select");
   }
@@ -249,19 +295,21 @@ export default function DrawToolbar({
   function confirmSplitParcel() {
     const draw = drawRef?.current;
     const map = mapRef?.current;
-    if (!draw || !splitTargetId || !splitLineId) return;
-    const lineFeature = draw.get?.(splitLineId);
+    const coords = splitLineCoordsRef.current;
+    if (!draw || !splitTargetId || coords.length < 2) return;
     const targetFeature = draw.get?.(splitTargetId);
-    if (!lineFeature || !targetFeature) return;
+    if (!targetFeature) return;
 
-    // Re-snap en cas d'ajustements manuels des extrémités
+    const lineFeature = {
+      type: "Feature",
+      geometry: { type: "LineString", coordinates: coords },
+      properties: {},
+    };
     const snappedLineFeature = snapLineExtremitiesToParcelBorder(targetFeature, lineFeature);
-    draw.add({ ...snappedLineFeature, id: splitLineId });
-
     const splitDone = applySplitFromLine(snappedLineFeature);
-    if (splitLineId) draw.delete(splitLineId);
     removeSplitLayers(map);
-    setSplitLineId(null);
+    splitLineCoordsRef.current = [];
+    setSplitLineCoords([]);
     if (splitDone) {
       setSplitTargetId(null);
       draw.changeMode("simple_select");
@@ -339,31 +387,9 @@ export default function DrawToolbar({
       if (m === "draw_polygon" || m === "direct_select") {
         setTimeout(() => enlargeVertexHitbox(9, 4), 0);
       }
-      // Si l'utilisateur quitte draw_line_string sans terminer (ex: Echap), annuler le split
-      if (splitTargetId && !splitLineId && m !== "draw_line_string") {
-        removeSplitLayers(map);
-        setSplitLineId(null);
-        setSplitTargetId(null);
-      }
     };
 
     const onCreate = (event) => {
-      if (splitTargetId) {
-        const lineFeature = (event?.features || []).find((f) => f.geometry?.type === "LineString");
-        if (lineFeature?.id) {
-          // Accrochage immédiat des extrémités : l'utilisateur voit directement le résultat final
-          const targetFeature = draw.get?.(splitTargetId);
-          let snappedLine = lineFeature;
-          if (targetFeature) {
-            snappedLine = snapLineExtremitiesToParcelBorder(targetFeature, lineFeature);
-            draw.add({ ...snappedLine, id: lineFeature.id });
-          }
-          setSplitLineId(lineFeature.id);
-          draw.setFeatureProperty?.(lineFeature.id, "split_preview", true);
-          draw.changeMode("direct_select", { featureId: lineFeature.id });
-          return;
-        }
-      }
       refreshFromDraw();
     };
 
@@ -379,16 +405,9 @@ export default function DrawToolbar({
       map.off("draw.modechange", onMode);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    mapRef?.current,
-    drawRef?.current,
-    refreshFromDraw,
-    enlargeVertexHitbox,
-    splitTargetId,
-    splitLineId,
-  ]);
+  }, [mapRef?.current, drawRef?.current, refreshFromDraw, enlargeVertexHitbox]);
 
-  /** Indicateur de snap en temps réel pendant le tracé de la ligne de découpe */
+  /** Dessin clic-à-clic + indicateur de snap en temps réel pendant le tracé de la ligne de découpe */
   useEffect(() => {
     const map = mapRef?.current;
     const draw = drawRef?.current;
@@ -402,24 +421,62 @@ export default function DrawToolbar({
     if (!targetFeature) return;
 
     addSplitLayers(map, targetFeature);
+    map.getCanvas().style.cursor = "crosshair";
+
+    const updateDrawLayers = (coords) => {
+      if (coords.length >= 2) {
+        map.getSource(DRAW_LINE_SOURCE_ID)?.setData({
+          type: "Feature",
+          geometry: { type: "LineString", coordinates: coords },
+          properties: {},
+        });
+      } else {
+        map.getSource(DRAW_LINE_SOURCE_ID)?.setData(EMPTY_FC);
+      }
+      map.getSource(DRAW_VERTS_SOURCE_ID)?.setData({
+        type: "FeatureCollection",
+        features: coords.map((c) => ({ type: "Feature", geometry: { type: "Point", coordinates: c }, properties: {} })),
+      });
+    };
+
+    const handleClick = (e) => {
+      const cursor = [e.lngLat.lng, e.lngLat.lat];
+      const snapPt = findNearestBorderPoint(cursor, targetFeature, SNAP_THRESHOLD);
+      const newCoord = snapPt || cursor;
+      const newCoords = [...splitLineCoordsRef.current, newCoord];
+      splitLineCoordsRef.current = newCoords;
+      setSplitLineCoords(newCoords);
+      updateDrawLayers(newCoords);
+      map.getSource(PREVIEW_SOURCE_ID)?.setData(EMPTY_FC);
+    };
 
     const handleMouseMove = (e) => {
       const cursor = [e.lngLat.lng, e.lngLat.lat];
       const snapPt = findNearestBorderPoint(cursor, targetFeature, SNAP_THRESHOLD);
-      const src = map.getSource(SNAP_SOURCE_ID);
-      if (!src) return;
-      src.setData({
+      map.getSource(SNAP_SOURCE_ID)?.setData({
         type: "FeatureCollection",
         features: snapPt
           ? [{ type: "Feature", geometry: { type: "Point", coordinates: snapPt }, properties: {} }]
           : [],
       });
+      const coords = splitLineCoordsRef.current;
+      if (coords.length > 0) {
+        const last = coords[coords.length - 1];
+        map.getSource(PREVIEW_SOURCE_ID)?.setData({
+          type: "Feature",
+          geometry: { type: "LineString", coordinates: [last, snapPt || cursor] },
+          properties: {},
+        });
+      }
     };
 
+    map.on("click", handleClick);
     map.on("mousemove", handleMouseMove);
 
     return () => {
+      map.off("click", handleClick);
       map.off("mousemove", handleMouseMove);
+      map.getCanvas().style.cursor = "";
       removeSplitLayers(map);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -475,36 +532,27 @@ export default function DrawToolbar({
         style={{ ...btn, background: splitTargetId ? "#eef6ff" : "#fff" }}
         title="Tracer la ligne de découpe de la parcelle sélectionnée"
       >
-        <IconSplit /> {label(splitTargetId && !splitLineId ? "Tracer découpe…" : "Découper parcelle")}
+        <IconSplit /> {label(splitTargetId ? "Tracer découpe…" : "Découper parcelle")}
       </button>
 
-      {splitTargetId && !splitLineId && (
+      {splitTargetId && splitLineCoords.length >= 2 && (
+        <button
+          onClick={confirmSplitParcel}
+          style={{ ...btn, background: "#dcfce7", borderColor: "#86efac" }}
+          title="Valider la découpe tracée"
+        >
+          <IconCheck /> {label("Valider découpe")}
+        </button>
+      )}
+
+      {splitTargetId && (
         <button
           onClick={cancelSplitParcel}
           style={{ ...btn, background: "#fee2e2", borderColor: "#fca5a5" }}
           title="Annuler le tracé de découpe"
         >
-          <IconTrash /> {label("Annuler")}
+          <IconTrash /> {label(splitLineCoords.length ? "Annuler découpe" : "Annuler")}
         </button>
-      )}
-
-      {splitTargetId && splitLineId && (
-        <>
-          <button
-            onClick={confirmSplitParcel}
-            style={{ ...btn, background: "#dcfce7", borderColor: "#86efac" }}
-            title="Valider la découpe tracée"
-          >
-            <IconCheck /> {label("Valider découpe")}
-          </button>
-          <button
-            onClick={cancelSplitParcel}
-            style={{ ...btn, background: "#fee2e2", borderColor: "#fca5a5" }}
-            title="Annuler le tracé de découpe"
-          >
-            <IconTrash /> {label("Annuler découpe")}
-          </button>
-        </>
       )}
 
       <button onClick={deleteSelection} style={btn} title="Supprimer la sélection">
@@ -518,11 +566,8 @@ export default function DrawToolbar({
       {!compact && (
         <span style={{ marginLeft: 6, fontSize: 12, color: "#666" }}>
           Mode : <code>{mode}</code>
-          {splitTargetId && !splitLineId
-            ? " · Cliquez pour poser les sommets. Approchez d'une bordure pour voir l'accroche (●). Double-clic pour terminer."
-            : ""}
-          {splitTargetId && splitLineId
-            ? " · Ajustez le tracé si besoin. Les extrémités sont accrochées à la bordure. Validez pour découper."
+          {splitTargetId
+            ? ` · Cliquez pour poser les sommets (${splitLineCoords.length} posé${splitLineCoords.length !== 1 ? "s" : ""}). Approchez d'une bordure pour l'accroche (●). Cliquez "Valider" pour découper.`
             : ""}
         </span>
       )}
