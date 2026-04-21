@@ -1,55 +1,133 @@
 # FP-006 - Rapprochement inter-annees
 
 - ID : `FP-006`
-- Statut : `Implante`
+- Statut : `En cours d'optimisation`
 - Priorite : `P1`
+
+---
 
 ## Objectif utilisateur
 
-Relier les parcelles d'annees differentes pour conserver une lecture coherente des evolutions de parcellaire.
+Permettre a l'utilisateur de relier des parcelles provenant d'annees differentes afin de :
+- conserver un suivi coherent de l'evolution du parcellaire dans le temps
+- propager automatiquement l'historique culturel (precedent, N-1, N-2, etc.) lors d'une fusion
+- supprimer proprement l'annee "entrante" (geometries + lignes tableau) apres validation
 
-## Perimetre actuel
+---
 
-- choix de deux annees
-- affichage comparatif sur deux cartes
-- suggestions automatiques
-- ajustement manuel
-- validation backend
+## Comportement attendu - Vue d'ensemble
 
-## Attendus fonctionnels
+### Etape 1 : Import d'un fichier XML
 
-- l'utilisateur doit pouvoir confirmer ou corriger les rapprochements
-- les donnees inter-annees doivent rester coherentes apres validation
+Lors de l'import d'un fichier XML via le bouton Telepac :
+
+1. L'utilisateur choisit dans quelle **colonne culturale** le fichier sera affecte :
+   - N+1, N, N-1, N-2, N-3, N-4, N-5 ou N-6
+2. Les **cultures** presentes dans le XML sont ecrites uniquement dans la colonne choisie (ex. `cultureN`, `cultureN_1`, `cultureN_2`, etc.).
+3. Les **parcelles** sont importees avec une metadonnee `annee` correspondant a la campagne du fichier (extraite du nom de fichier, des metadonnees XML, ou saisie par l'utilisateur).
+4. Chaque feature recoit donc : `{ annee: 2023, cultureN_1: "BLE", ... }` si l'offset choisi est N-1.
+
+### Etape 2 : Detection du besoin de rapprochement
+
+Des que **plusieurs annees distinctes** sont presentes dans les parcelles chargees, et que des **geometries se superposent** entre ces annees, le rapprochement devient disponible.
+
+- Le bouton "Associer les parcelles" s'active (minimum 2 annees detectees).
+- L'utilisateur ouvre la fenetre de rapprochement.
+
+### Etape 3 : Fenetre de rapprochement
+
+La fenetre presente deux cotes :
+
+- **Gauche (annee conservee)** : l'annee dont les **geometries seront gardees** dans le parcellaire final.
+- **Droite (annee disparaissant)** : l'annee dont les **geometries et les lignes seront supprimees** apres validation.
+
+L'utilisateur choisit explicitement quelle annee disparait et laquelle reste.
+
+La fenetre contient :
+- Deux cartes cote a cote affichant les parcelles des deux annees selectionnees.
+- Un tableau de correspondances en dessous avec :
+  - Les parcelles de l'annee "entrante" (droite) a faire correspondre avec des parcelles de l'annee "conservee" (gauche).
+  - Des propositions automatiques de correspondance basees sur le taux de recouvrement geometrique (seuil : 95%).
+  - La possibilite de modifier manuellement les correspondances avant validation.
+
+### Etape 4 : Validation et effet sur la vue principale
+
+Apres confirmation par l'utilisateur :
+
+1. Les **donnees culturales** de l'annee disparaissant sont propagees dans les proprietes des parcelles de l'annee conservee (logique de fusion : l'ancienne culture devient `precedent`, l'ancien precedent devient `precedent_N2`, etc.).
+2. L'annee disparaissant est **entierement supprimee** :
+   - Toutes ses **geometries** disparaissent de la carte.
+   - Toutes ses **lignes** disparaissent du tableau parcellaire.
+3. Seules restent les parcelles de l'annee conservee, enrichies de l'historique culturel de l'annee disparue.
+4. L'etat est persiste (backend ou local selon disponibilite).
+
+---
 
 ## Donnees d'entree
 
-- collection de parcelles multi-annees
-- correspondances proposees ou corrigees
+- Collection de parcelles multi-annees (chaque feature a une propriete `annee`)
+- Offset de colonne choisi a l'import (determine `cultureN`, `cultureN_1`, etc.)
+- Correspondances proposees ou corrigees manuellement dans l'interface
+
+---
 
 ## Donnees produites
 
-- correspondances validees
-- fusion logique backend selon la strategie en place
+- Parcelles de l'annee conservee, enrichies des donnees culturales de l'annee disparue
+- Suppression complete de toutes les features de l'annee disparue
+- Collection persistee sur disque (ou en local si backend indisponible)
+
+---
+
+## Regles metier
+
+| Regle | Detail |
+|---|---|
+| Annee gauche = annee conservee | Ses geometries restent, ses donnees sont enrichies |
+| Annee droite = annee disparaissant | Ses geometries ET ses lignes disparaissent apres validation |
+| Propagation culture | `cultureN` ancienne → `precedent` nouvelle ; `precedent` ancienne → `precedent_N2` nouvelle |
+| Seuil auto-match | 95% de recouvrement geometrique reciproque |
+| Colonne a l'import | Determinee par l'utilisateur (N+1 a N-6) ; la culture est ecrite dans la cle correspondante |
+| Metadonnee `annee` | Extraite du fichier XML ou saisie manuellement ; obligatoire pour le rapprochement |
+
+---
 
 ## Technique
 
-- composant : `src/components/ParcelleMatchView.jsx`
-- backend : `/api/parcelles/matching/validate`
-- logique metier : `src/domain/parcelles/fusion.js`
+- Composant UI : `src/components/ParcelleMatchView.jsx`
+- Algorithme de suggestion : `src/utils/parcelleMatching.js`
+- Logique de fusion : `src/domain/parcelles/fusion.js`
+- Integration editeur : `src/maps/parcelles/ParcellesEditorMap.jsx` (handlers `handleOpenParcelleMatch`, `handleValidateParcelleMatch`)
+- Backend : `POST /api/parcelles/matching/validate` (`scripts/geojson-server.mjs`)
+- Import XML : `src/Front/TelepacButton.jsx`
+
+---
+
+## Limites actuelles / Points a corriger
+
+- Apres validation, la suppression des lignes du tableau et des geometries de l'annee disparue doit etre verifiee et completee si necessaire.
+- La fenetre de rapprochement doit clairement indiquer laquelle des deux annees va disparaitre (libelle explicite, pas seulement "gauche/droite").
+- La strategie de fusion (quelle propriete va ou) merite d'etre plus explicite dans l'UI.
+
+---
+
+## Evolutions recommandees (backlog)
+
+- Afficher le taux de similarite dans l'UI de suggestion
+- Permettre des cas de split / merge de parcelles (1 ancienne → N nouvelles)
+- Tracer les decisions de rapprochement dans un historique consultable
+- Exposer les regles de similarite configurables par l'utilisateur
+
+---
 
 ## Documentation utilisateur
 
-- ouvrir l'outil d'association depuis l'onglet parcelles
-- verifier les propositions
-- valider les correspondances
-
-## Limites / dette
-
-- la strategie de fusion merite d'etre formalisee plus explicitement
-- besoin de tracer davantage les decisions de rapprochement
-
-## Evolutions recommandees
-
-- exposer les regles de similarite dans l'UI
-- ajouter des cas de split / merge plus explicites
-
+1. Importer un fichier XML via "Telepac", choisir la colonne cible (ex. N-1).
+2. Repeter pour chaque annee a charger.
+3. Une fois plusieurs annees detectees, cliquer "Associer les parcelles".
+4. Dans la fenetre :
+   - Choisir a gauche l'annee dont les geometries sont **gardees**.
+   - Choisir a droite l'annee dont les geometries **disparaissent**.
+   - Verifier ou ajuster les correspondances.
+   - Valider.
+5. De retour sur la vue principale : seules les parcelles de l'annee conservee restent, avec l'historique culturel mis a jour.

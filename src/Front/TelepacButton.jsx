@@ -76,17 +76,21 @@ function parseCultureColumnInput(value) {
   if (value == null) return null;
   const trimmed = String(value).trim().toLowerCase();
   if (!trimmed) return null;
-  if (/^\d+$/.test(trimmed)) return Number.parseInt(trimmed, 10);
+  if (/^-?\d+$/.test(trimmed)) return Number.parseInt(trimmed, 10);
+  if (trimmed === "n+1" || trimmed === "+1") return -1;
   if (trimmed.startsWith("culturen")) {
     const suffix = trimmed.replace(/^culturen[_-]?/, "");
     if (!suffix) return 0;
     if (/^\d+$/.test(suffix)) return Number.parseInt(suffix, 10);
+    if (suffix === "+1" || suffix === "plus1") return -1;
   }
   return null;
 }
 
 function cultureColumnFromOffset(offset) {
-  if (!Number.isFinite(offset) || offset < 0) return "cultureN";
+  if (!Number.isFinite(offset)) return "cultureN";
+  if (offset === -1) return "cultureN_plus1";
+  if (offset < 0) return "cultureN";
   return offset === 0 ? "cultureN" : `cultureN${offset}`;
 }
 
@@ -157,7 +161,7 @@ async function _resolveTelepacCultureOffset(file, baseCultureYearRef) {
 
   if (year != null && baseYear != null) {
     const offset = baseYear - year;
-    if (offset >= 0 && offset <= 6) return { offset, meta: { pacage, year } };
+    if (offset >= -1 && offset <= 6) return { offset, meta: { pacage, year } };
   }
 
   const input = window.prompt(
@@ -222,7 +226,7 @@ export default function ImportTelepacButton({
         let cultureOffset = Number.isFinite(xmlContext?.offset) ? xmlContext.offset : 0;
         const suggestedColumn = cultureColumnFromOffset(cultureOffset);
         const columnInput = window.prompt(
-          "Colonne culture cible pour cet import XML (cultureN, cultureN1, cultureN2...)",
+          "Colonne culture cible pour cet import XML.\nOptions : N+1, N, N-1, N-2, N-3, N-4, N-5, N-6\n(entrez : N+1, cultureN, cultureN1, cultureN2...)",
           suggestedColumn
         );
         const parsedColumn = parseCultureColumnInput(columnInput);
