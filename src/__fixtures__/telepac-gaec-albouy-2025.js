@@ -1,0 +1,119 @@
+// Fixture dérivée du vrai fichier PAC 2025 de GAEC ALBOUY (dossier 031158368).
+// Contient 4 parcelles représentatives avec différentes cultures et précisions.
+// Coordonnées Lambert93 (EPSG:2154) réalistes pour la région Occitanie (~LON 1.5, LAT 43.6).
+
+export const EXPECTED_PACAGE = "031158368";
+export const EXPECTED_PARCEL_COUNT = 4;
+
+// ilot 1 / parcelle 1 → SNE (Seigle non ensemencé)
+// ilot 1 / parcelle 2 → PPH (Prairie permanente humide)
+// ilot 2 / parcelle 1 → PPH avec conduite bio
+// ilot 2 / parcelle 2 → LUZ (Luzerne) avec précision
+export const EXPECTED_CULTURE_CODES = ["SNE", "PPH", "PPH", "LUZ"];
+export const EXPECTED_PRECISIONS = [null, null, null, "1"];
+export const EXPECTED_SURFACE_ADMISSIBLE = [1.23, 2.47, 3.01, 0.98];
+export const EXPECTED_ILOTS = [1, 1, 2, 2];
+export const EXPECTED_PARCELLES = [1, 2, 1, 2];
+
+// Lambert93 coords for a small field near Montauban (Tarn-et-Garonne)
+// ~LON=1.3566 LAT=44.0120 → X≈551000, Y≈6229000
+const FIELD_A = "551000,6229000 551100,6229000 551100,6229100 551000,6229100 551000,6229000";
+const FIELD_B = "551200,6229000 551400,6229000 551400,6229200 551200,6229200 551200,6229000";
+const FIELD_C = "552000,6230000 552300,6230000 552300,6230300 552000,6230300 552000,6230000";
+const FIELD_D = "552400,6230000 552500,6230000 552500,6230100 552400,6230100 552400,6230000";
+
+export const TELEPAC_XML_GAEC_ALBOUY = `<?xml version="1.0" encoding="ISO-8859-1"?>
+<exploitation xmlns:gml="http://www.opengis.net/gml">
+  <producteur numero-pacage="${EXPECTED_PACAGE}">
+    <raison-sociale>GAEC ALBOUY</raison-sociale>
+    <siret>12345678901234</siret>
+    <rpg>
+      <ilots>
+        <ilot numero-ilot="1" numero-ilot-reference="031158368000001">
+          <commune>82121</commune>
+          <parcelles>
+            <parcelle>
+              <descriptif-parcelle numero-parcelle="1">
+                <surface-admissible>1.23</surface-admissible>
+                <culture-principale>
+                  <code-culture>SNE</code-culture>
+                </culture-principale>
+                <agri-bio conduite-bio="false"/>
+              </descriptif-parcelle>
+              <geometrie>
+                <gml:Polygon srsName="urn:ogc:def:crs:EPSG::2154">
+                  <gml:exterior>
+                    <gml:LinearRing>
+                      <gml:coordinates>${FIELD_A}</gml:coordinates>
+                    </gml:LinearRing>
+                  </gml:exterior>
+                </gml:Polygon>
+              </geometrie>
+            </parcelle>
+            <parcelle>
+              <descriptif-parcelle numero-parcelle="2">
+                <surface-admissible>2.47</surface-admissible>
+                <culture-principale>
+                  <code-culture>PPH</code-culture>
+                </culture-principale>
+                <agri-bio conduite-bio="false"/>
+              </descriptif-parcelle>
+              <geometrie>
+                <gml:Polygon srsName="urn:ogc:def:crs:EPSG::2154">
+                  <gml:exterior>
+                    <gml:LinearRing>
+                      <gml:coordinates>${FIELD_B}</gml:coordinates>
+                    </gml:LinearRing>
+                  </gml:exterior>
+                </gml:Polygon>
+              </geometrie>
+            </parcelle>
+          </parcelles>
+        </ilot>
+        <ilot numero-ilot="2" numero-ilot-reference="031158368000002">
+          <commune>82121</commune>
+          <parcelles>
+            <parcelle>
+              <descriptif-parcelle numero-parcelle="1">
+                <surface-admissible>3.01</surface-admissible>
+                <culture-principale>
+                  <code-culture>PPH</code-culture>
+                </culture-principale>
+                <agri-bio conduite-bio="true"/>
+              </descriptif-parcelle>
+              <geometrie>
+                <gml:Polygon srsName="urn:ogc:def:crs:EPSG::2154">
+                  <gml:exterior>
+                    <gml:LinearRing>
+                      <gml:coordinates>${FIELD_C}</gml:coordinates>
+                    </gml:LinearRing>
+                  </gml:exterior>
+                </gml:Polygon>
+              </geometrie>
+            </parcelle>
+            <parcelle>
+              <descriptif-parcelle numero-parcelle="2">
+                <surface-admissible>0.98</surface-admissible>
+                <culture-principale>
+                  <code-culture>LUZ</code-culture>
+                  <precision>1</precision>
+                </culture-principale>
+                <agri-bio conduite-bio="false"/>
+              </descriptif-parcelle>
+              <geometrie>
+                <gml:Polygon srsName="urn:ogc:def:crs:EPSG::2154">
+                  <gml:exterior>
+                    <gml:LinearRing>
+                      <gml:coordinates>${FIELD_D}</gml:coordinates>
+                    </gml:LinearRing>
+                  </gml:exterior>
+                </gml:Polygon>
+              </geometrie>
+            </parcelle>
+          </parcelles>
+        </ilot>
+      </ilots>
+    </rpg>
+  </producteur>
+</exploitation>
+`;
