@@ -291,6 +291,11 @@ export function buildTelepacXML(features, options = {}) {
         const derogationUkraine = getBooleanProp(props, ["derogation_ukraine", "derogation-ukraine"]);
         const accidentCulture = getBooleanProp(props, ["accident_culture", "accident-culture"]);
         const maecElevage = getBooleanProp(props, ["maec_elevage_monogastrique", "elevage_monogastrique"]);
+        const isOrganic = isTruthyBoolean(firstProperty(props, ["isOrganic", "conduite_bio", "conduite-bio"]));
+        const organicType = isOrganic
+          ? (firstProperty(props, ["organicType", "type_conduite_bio", "type-conduite-bio"]) || "AB")
+          : null;
+        const conduiteMaraichage = getBooleanProp(props, ["conduite_maraichage", "conduite-maraichage"]);
 
         xml += `<parcelle>`;
         xml += `<descriptif-parcelle numero-parcelle="${esc(numero)}">`;
@@ -300,6 +305,9 @@ export function buildTelepacXML(features, options = {}) {
           xml += `<precision>${esc(precision)}</precision>`;
         }
         xml += `</culture-principale>`;
+        if (isOrganic) {
+          xml += `<agri-bio conduite-bio="true" type-conduite-bio="${esc(organicType)}" conduite-maraichage="${conduiteMaraichage}" />`;
+        }
         xml += `<engagements-maec elevage-monogastrique="${maecElevage}"/>`;
         xml += `</descriptif-parcelle>`;
         xml += `<geometrie><gml:Polygon><gml:outerBoundaryIs><gml:LinearRing><gml:coordinates>${gmlCoords}</gml:coordinates></gml:LinearRing></gml:outerBoundaryIs></gml:Polygon></geometrie>`;
