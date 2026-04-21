@@ -1,9 +1,15 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const _require = createRequire(import.meta.url);
+// Resolve polygon-clipping ESM via Node module resolution (works in worktrees where
+// node_modules is hoisted to the repo root, not the worktree subdirectory).
+const polygonClippingEsm = _require.resolve(
+  "polygon-clipping/dist/polygon-clipping.esm.js",
+);
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -19,13 +25,17 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      "polygon-clipping": path.resolve(
-        __dirname,
-        "node_modules/polygon-clipping/dist/polygon-clipping.esm.js",
-      ),
+      "polygon-clipping": polygonClippingEsm,
     },
   },
   optimizeDeps: {
     include: ["polygon-clipping"],
+  },
+  test: {
+    resolve: {
+      alias: {
+        "polygon-clipping": polygonClippingEsm,
+      },
+    },
   },
 });
