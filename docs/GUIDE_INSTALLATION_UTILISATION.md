@@ -75,8 +75,6 @@ L'application propose deux modes principaux :
 1. Utiliser la barre de dessin pour creer ou modifier une geometrie.
 2. Cliquer sur une parcelle sur la carte ou dans la liste.
 3. Modifier les champs utiles : nom, ilot/parcelle, cultures, bio, type de sol.
-4. Utiliser `undo` et `redo` si besoin.
-
 ### 6.3 Completer les cultures
 
 1. Passer en vue tableau si une edition en masse est plus pratique.

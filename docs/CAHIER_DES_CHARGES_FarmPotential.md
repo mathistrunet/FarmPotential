@@ -56,7 +56,6 @@ Fonctions disponibles :
 - edition de geometries existantes
 - suppression / reinitialisation du parcellaire
 - selection d'une ou plusieurs parcelles
-- undo / redo global
 - filtrage par annee
 - filtrage par groupe `layerType`
 - stockage temporaire local via `localStorage`

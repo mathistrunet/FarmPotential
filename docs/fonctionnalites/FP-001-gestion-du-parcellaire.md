@@ -15,7 +15,6 @@ Permettre de charger, afficher, modifier, organiser et sauvegarder un parcellair
 - dessin et edition de polygones
 - suppression / reinitialisation
 - selection simple et multiple
-- undo / redo
 - filtrage par annee et groupe
 - persistance locale et backend
 
