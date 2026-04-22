@@ -120,16 +120,18 @@ function getFeatureBounds(feature) {
   ];
 }
 
+function expandBounds(bounds, factor) {
+  const [[minX, minY], [maxX, maxY]] = bounds;
+  const dX = Math.max((maxX - minX) * factor, 0.001);
+  const dY = Math.max((maxY - minY) * factor, 0.001);
+  return [[minX - dX, minY - dY], [maxX + dX, maxY + dY]];
+}
+
 function easeToFeature(map, feature) {
   if (!map || !feature) return;
   const bounds = getFeatureBounds(feature);
   if (!bounds) return;
-  const mapBounds = typeof map.getBounds === "function" ? map.getBounds() : null;
-  if (mapBounds && typeof mapBounds.contains === "function") {
-    const [sw, ne] = bounds;
-    if (mapBounds.contains(sw) && mapBounds.contains(ne)) return;
-  }
-  map.fitBounds(bounds, { padding: 60, duration: 500 });
+  map.fitBounds(expandBounds(bounds, 0.5), { padding: 20, duration: 500 });
 }
 
 function attachViewerInteractions({
