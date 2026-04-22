@@ -14,9 +14,10 @@ Permettre de charger, afficher, modifier, organiser et sauvegarder un parcellair
 - mode `Editor` et mode `Viewer`
 - dessin et edition de polygones
 - suppression / reinitialisation
-- selection simple et multiple
+- selection simple et multiple (box-select clic gauche en mode multi-selection)
 - filtrage par annee et groupe
 - persistance locale et backend
+- carte sans inclinaison (pitch desactive)
 
 ## Attendus fonctionnels
 
@@ -40,6 +41,8 @@ Permettre de charger, afficher, modifier, organiser et sauvegarder un parcellair
 - importer ou dessiner des parcelles
 - modifier les formes et proprietes
 - utiliser `undo/redo` au besoin
+- cliquer sur "Multi-selection" dans la barre d'outils pour passer en mode selection multiple, puis maintenir le clic gauche et faire glisser la souris pour selectionner plusieurs parcelles par rectangle
+- la rotation et l'inclinaison de la carte sont desactivees (vue 2D plane uniquement)
 
 ## Limites / dette
 

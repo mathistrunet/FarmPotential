@@ -211,6 +211,8 @@ useEffect(() => {
         style,
         center: [2.2137, 46.2276],
         zoom: 5,
+        pitchWithRotate: false,
+        maxPitch: 0,
       });
     } catch (error) {
       setMapInitError(
@@ -223,6 +225,7 @@ useEffect(() => {
       return;
     }
     mapRef.current = map;
+    map.dragRotate.disable();
     map.addControl(new maplibregl.NavigationControl(), "top-left");
 
     let soilTilesTemplate = SOIL_TILES;
@@ -304,6 +307,7 @@ useEffect(() => {
         displayControlsDefault: false,
         controls: {},
         defaultMode: "simple_select",
+        boxSelect: true,
 
         modes: { ...MapboxDraw.modes, multiple_selection: MultipleSelectionMode },
 

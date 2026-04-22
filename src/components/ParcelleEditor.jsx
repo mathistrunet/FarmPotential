@@ -603,6 +603,11 @@ export default function ParcelleEditor({
   const [isFillingRpg, setIsFillingRpg] = useState(false);
   const [showAdvancedColumns, setShowAdvancedColumns] = useState(false);
   const [generalInfo, setGeneralInfo] = useState({ exploitation: "", pacage: "", siret: "" });
+  const [showMoveCulturesDialog, setShowMoveCulturesDialog] = useState(false);
+  const [moveSrcCol, setMoveSrcCol] = useState(CULTURE_COLUMNS[0].id);
+  const [moveDestCol, setMoveDestCol] = useState("");
+  const [moveKeepSource, setMoveKeepSource] = useState(false);
+  const [moveOverwriteDest, setMoveOverwriteDest] = useState(true);
 
   const resolvedViewMode = externalViewMode ?? "cards";
 
@@ -979,6 +984,150 @@ export default function ParcelleEditor({
     </>
   );
 
+  const applyMoveCultures = () => {
+    const srcDef = CULTURE_COLUMNS.find((c) => c.id === moveSrcCol);
+    const destDef = moveDestCol ? CULTURE_COLUMNS.find((c) => c.id === moveDestCol) : null;
+    if (!srcDef) return;
+
+    setFeatures((prev) =>
+      prev.map((feature) => {
+        const props = { ...(feature.properties || {}) };
+        const srcKey = srcDef.targetKeys[0];
+        const srcPrecKey = PRECISION_KEYS[srcDef.id];
+        const srcValue = props[srcKey];
+        const srcPrec = props[srcPrecKey];
+
+        if (destDef) {
+          const destKey = destDef.targetKeys[0];
+          const destPrecKey = PRECISION_KEYS[destDef.id];
+          const destHasValue = props[destKey] != null && String(props[destKey]).trim() !== "";
+          if (moveOverwriteDest || !destHasValue) {
+            if (srcValue != null && String(srcValue).trim() !== "") {
+              props[destKey] = srcValue;
+              destDef.targetKeys.slice(1).forEach((k) => { props[k] = srcValue; });
+              if (srcPrec != null) props[destPrecKey] = srcPrec;
+              else delete props[destPrecKey];
+            } else {
+              destDef.targetKeys.forEach((k) => { delete props[k]; });
+              delete props[destPrecKey];
+            }
+          }
+        }
+
+        if (!moveKeepSource) {
+          srcDef.targetKeys.forEach((k) => { delete props[k]; });
+          delete props[srcPrecKey];
+        }
+
+        return { ...feature, properties: props };
+      })
+    );
+
+    setTyped((prev) => {
+      const next = { ...prev };
+      if (!moveKeepSource) {
+        next[srcDef.id] = {};
+      }
+      if (destDef) {
+        next[destDef.id] = {};
+      }
+      return next;
+    });
+
+    setShowMoveCulturesDialog(false);
+  };
+
+  const renderMoveCulturesDialog = () => {
+    if (!showMoveCulturesDialog) return null;
+    const overlayStyle = {
+      position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)",
+      zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center",
+    };
+    const dialogStyle = {
+      background: "#fff", borderRadius: 10, padding: 24, width: 400,
+      boxShadow: "0 8px 32px rgba(0,0,0,0.18)", display: "flex", flexDirection: "column", gap: 14,
+    };
+    const labelStyle = { fontSize: 13, fontWeight: 500, display: "flex", flexDirection: "column", gap: 4 };
+    const selectStyle = { padding: "6px 8px", border: "1px solid #d1d5db", borderRadius: 6, fontSize: 13 };
+    const rowStyle = { display: "flex", alignItems: "center", gap: 8, fontSize: 13 };
+
+    const srcIsValid = !!moveSrcCol;
+    const destIsDifferent = !moveDestCol || moveDestCol !== moveSrcCol;
+    const canApply = srcIsValid && destIsDifferent;
+
+    return (
+      <div style={overlayStyle} onClick={() => setShowMoveCulturesDialog(false)}>
+        <div style={dialogStyle} onClick={(e) => e.stopPropagation()}>
+          <div style={{ fontWeight: 700, fontSize: 15 }}>Déplacer / supprimer cultures</div>
+
+          <label style={labelStyle}>
+            Colonne source (données à déplacer)
+            <select value={moveSrcCol} onChange={(e) => setMoveSrcCol(e.target.value)} style={selectStyle}>
+              {CULTURE_COLUMNS.map((col) => (
+                <option key={col.id} value={col.id}>{col.label}</option>
+              ))}
+            </select>
+          </label>
+
+          <label style={labelStyle}>
+            Colonne destination <span style={{ fontWeight: 400, color: "#666" }}>(laisser vide pour supprimer sans déplacer)</span>
+            <select value={moveDestCol} onChange={(e) => setMoveDestCol(e.target.value)} style={selectStyle}>
+              <option value="">— Aucune destination (suppression) —</option>
+              {CULTURE_COLUMNS.filter((c) => c.id !== moveSrcCol).map((col) => (
+                <option key={col.id} value={col.id}>{col.label}</option>
+              ))}
+            </select>
+          </label>
+
+          <label style={rowStyle}>
+            <input type="checkbox" checked={moveKeepSource} onChange={(e) => setMoveKeepSource(e.target.checked)} />
+            Conserver les données dans la colonne source
+          </label>
+
+          {moveDestCol && (
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4, color: "#374151" }}>Données destination :</div>
+              <label style={rowStyle}>
+                <input type="radio" name="overwrite" checked={moveOverwriteDest} onChange={() => setMoveOverwriteDest(true)} />
+                Écraser les données existantes
+              </label>
+              <label style={{ ...rowStyle, marginTop: 4 }}>
+                <input type="radio" name="overwrite" checked={!moveOverwriteDest} onChange={() => setMoveOverwriteDest(false)} />
+                Compléter seulement les cellules vides
+              </label>
+            </div>
+          )}
+
+          {!destIsDifferent && (
+            <div style={{ fontSize: 12, color: "#dc2626" }}>La colonne source et destination doivent être différentes.</div>
+          )}
+
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 4 }}>
+            <button
+              type="button"
+              onClick={() => setShowMoveCulturesDialog(false)}
+              style={{ padding: "7px 16px", borderRadius: 6, border: "1px solid #d1d5db", background: "#f9fafb", cursor: "pointer", fontSize: 13 }}
+            >
+              Annuler
+            </button>
+            <button
+              type="button"
+              onClick={applyMoveCultures}
+              disabled={!canApply}
+              style={{
+                padding: "7px 16px", borderRadius: 6, border: "none",
+                background: canApply ? "#2563eb" : "#93c5fd", color: "#fff",
+                cursor: canApply ? "pointer" : "not-allowed", fontSize: 13, fontWeight: 600,
+              }}
+            >
+              {moveDestCol ? "Déplacer" : "Supprimer"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderTableView = () => {
     const headerStyle = {
       padding: "8px 6px",
@@ -1003,6 +1152,24 @@ export default function ParcelleEditor({
 
     return (
       <div style={{ marginTop: 8, display: "grid", gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <button
+            type="button"
+            onClick={() => {
+              setMoveSrcCol(CULTURE_COLUMNS[0].id);
+              setMoveDestCol("");
+              setMoveKeepSource(false);
+              setMoveOverwriteDest(true);
+              setShowMoveCulturesDialog(true);
+            }}
+            style={{
+              padding: "7px 14px", borderRadius: 6, border: "1px solid #6366f1",
+              background: "#eef2ff", color: "#4338ca", cursor: "pointer", fontSize: 13, fontWeight: 600,
+            }}
+          >
+            Déplacer cultures
+          </button>
+        </div>
         <div style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 10, background: "#fff" }}>
           <div style={{ fontWeight: 600, marginBottom: 6 }}>Informations exploitation</div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 8 }}>
@@ -1151,6 +1318,7 @@ export default function ParcelleEditor({
   return (
     <div style={{ marginTop: 12 }}>
       {resolvedViewMode === "cards" ? renderCardView() : renderTableView()}
+      {renderMoveCulturesDialog()}
     </div>
   );
 }
