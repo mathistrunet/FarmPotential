@@ -3,8 +3,6 @@ import { parse } from "csv-parse/browser/esm/sync";
 import { featureAreaHa } from "../utils/geometry";
 import {
   codeFromLabel,
-  detectCultureCode,
-  displayLabelFromProps,
   labelFromCode,
   resolvePrecisionForCode,
   splitCultureKey,
@@ -325,8 +323,16 @@ export async function buildParcellesCsv(
       props.parcelle_bio_label;
     const typeSol =
       props.type_sol ?? props.typeSol ?? props.type_de_sol ?? props.sol ?? "";
-    const cultureNValue = displayLabelFromProps(props);
-    const cultureNCode = detectCultureCode(props) || getMetacodeFromValue(cultureNValue);
+    const CULTURE_N_KEYS = ["culture", "Culture", "CULTURE", "cultureN", "cultureN_0", "cultureN0", "code_culture", "codeCulture", "code"];
+    const cultureNRaw = (() => {
+      for (const k of CULTURE_N_KEYS) {
+        const v = props[k];
+        if (v != null && String(v).trim()) return String(v).trim();
+      }
+      return "";
+    })();
+    const cultureNValue = cultureNRaw ? (labelFromCode(cultureNRaw) || cultureNRaw) : "";
+    const cultureNCode = cultureNRaw ? getMetacodeFromValue(cultureNRaw) : "";
     const precN = getPrecisionByYearIndex(props, 0);
     const cultureNOutput = structureLookup
       ? resolveCulture(cultureNValue, cultureNCode, precN)
