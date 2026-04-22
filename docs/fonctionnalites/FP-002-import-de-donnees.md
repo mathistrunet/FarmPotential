@@ -12,6 +12,7 @@ Importer rapidement un parcellaire existant dans FarmPotential a partir de forma
 
 - import `XML Telepac`
 - import `ZIP shapefile`
+- import `CSV parcellaire`
 - detection d'annee
 - affectation de colonnes de culture
 - zoom automatique sur l'emprise importee
@@ -26,6 +27,7 @@ Importer rapidement un parcellaire existant dans FarmPotential a partir de forma
 
 - fichier XML Telepac
 - fichier ZIP shapefile
+- fichier CSV parcellaire (colonnes : Secteur, Exploitation, Numero pacage, Parcelles, Surface parcelle, Parcelle Bio, Type de sol, CultureN, CultureN1–CultureN4, Geometrie)
 
 ## Donnees produites
 
@@ -34,15 +36,14 @@ Importer rapidement un parcellaire existant dans FarmPotential a partir de forma
 ## Technique
 
 - composant : `src/Front/TelepacButton.jsx`
-- services : `src/services/telepacXml.js`, `src/services/shapefileZip.js`
+- services : `src/services/telepacXml.js`, `src/services/shapefileZip.js`, `src/services/parcellesCsv.js`
 
 ## Documentation utilisateur
 
 - utiliser `Importer fichier`
-- confirmer annee et colonne culture si demandees
+- formats acceptes : `.xml` (Telepac), `.zip` (shapefile), `.csv` (export FarmPotential)
+- confirmer annee et colonne culture si demandees (XML uniquement)
 
 ## Limites / dette
 
 ## Evolutions recommandees
-
-- ajouter un import CSV parcellaire
