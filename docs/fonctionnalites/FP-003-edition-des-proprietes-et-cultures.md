@@ -19,6 +19,7 @@ Permettre la saisie, la correction et l'enrichissement des informations metier a
 - options avancees de culture
 - autocompletion codes/libelles
 - remplissage via RPG
+- deplacement / copie / suppression en masse de cultures entre colonnes (vue tableau)
 
 ## Attendus fonctionnels
 
@@ -47,6 +48,11 @@ Permettre la saisie, la correction et l'enrichissement des informations metier a
 
 - edition en vue cartes ou tableau
 - boutons `Remplir` pour les cultures et nom de parcelle
+- bouton `Deplacer cultures` (vue tableau) : ouvre une fenetre permettant de deplacer ou copier les cultures d'une colonne a une autre sur l'ensemble des parcelles
+  - **Colonne source** : colonne dont les donnees seront deplacees ou copiees
+  - **Colonne destination** : colonne d'arrivee (optionnelle — si aucune, les donnees source sont simplement supprimees)
+  - **Conserver les donnees source** : si coche, la colonne source n'est pas effacee apres le deplacement
+  - **Ecraser / Completer** : si "ecraser", toutes les cellules destination sont mises a jour ; si "completer", seules les cellules destination vides sont remplies
 
 ## Limites / dette
 
