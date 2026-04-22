@@ -120,16 +120,18 @@ function getFeatureBounds(feature) {
   ];
 }
 
+function expandBounds(bounds, factor) {
+  const [[minX, minY], [maxX, maxY]] = bounds;
+  const dX = Math.max((maxX - minX) * factor, 0.001);
+  const dY = Math.max((maxY - minY) * factor, 0.001);
+  return [[minX - dX, minY - dY], [maxX + dX, maxY + dY]];
+}
+
 function easeToFeature(map, feature) {
   if (!map || !feature) return;
   const bounds = getFeatureBounds(feature);
   if (!bounds) return;
-  const mapBounds = typeof map.getBounds === "function" ? map.getBounds() : null;
-  if (mapBounds && typeof mapBounds.contains === "function") {
-    const [sw, ne] = bounds;
-    if (mapBounds.contains(sw) && mapBounds.contains(ne)) return;
-  }
-  map.fitBounds(bounds, { padding: 60, duration: 500 });
+  map.fitBounds(expandBounds(bounds, 0.5), { padding: 20, duration: 500 });
 }
 
 function attachViewerInteractions({
@@ -292,6 +294,7 @@ function ParcelleMatchViewContent({
     setSelectedBaseKey,
   } = useParcellesMatchStore();
   const selectedIncomingKeyRef = useRef(selectedIncomingKey);
+  const selectedBaseKeyRef = useRef(selectedBaseKey);
   const leftColorRef = useRef(leftColor);
   const rightColorRef = useRef(rightColor);
   const handleLeftFeatureClickRef = useRef((feature) => feature);
@@ -485,39 +488,40 @@ function ParcelleMatchViewContent({
     return { reprojected };
   }, [leftDisplayFeatures, rightDisplayFeatures]);
 
+  // right (disparaissant) = "base" de comparaison ; left (conservé) = "incoming" = une ligne par parcelle
   const suggestions = useMemo(
     () =>
       buildMatchSuggestions(
-        leftEntries.map((entry) => entry.feature),
-        rightEntries.map((entry) => entry.feature)
+        rightEntries.map((entry) => entry.feature),
+        leftEntries.map((entry) => entry.feature)
       ),
     [leftEntries, rightEntries]
   );
 
   useEffect(() => {
     const rows = suggestions.map((suggestion, index) => {
-      const incomingEntry = rightEntries[index];
-      const baseEntry =
-        suggestion.baseIndex != null ? leftEntries[suggestion.baseIndex] : null;
-      const incomingFeature = incomingEntry?.feature;
-      const baseFeature = baseEntry?.feature;
-      const incomingNo =
-        incomingFeature?.properties?.parcelleNo ??
-        incomingFeature?.properties?.numero ??
-        incomingFeature?.properties?.id ??
+      const keptEntry = leftEntries[index];
+      const disappearingEntry =
+        suggestion.baseIndex != null ? rightEntries[suggestion.baseIndex] : null;
+      const keptFeature = keptEntry?.feature;
+      const disappearingFeature = disappearingEntry?.feature;
+      const keptNo =
+        keptFeature?.properties?.parcelleNo ??
+        keptFeature?.properties?.numero ??
+        keptFeature?.properties?.id ??
         "";
-      const baseNo =
-        baseFeature?.properties?.parcelleNo ??
-        baseFeature?.properties?.numero ??
-        baseFeature?.properties?.id ??
+      const disappearingNo =
+        disappearingFeature?.properties?.parcelleNo ??
+        disappearingFeature?.properties?.numero ??
+        disappearingFeature?.properties?.id ??
         "";
       return {
-        incomingKey: incomingEntry?.key ?? `incoming-${index}`,
-        incomingLabel: incomingEntry?.label ?? `Parcelle ${index + 1}`,
-        incomingNo,
-        baseKey: baseEntry?.key ?? "",
-        baseLabel: baseEntry?.label ?? "",
-        baseNo,
+        keptKey: keptEntry?.key ?? `kept-${index}`,
+        keptLabel: keptEntry?.label ?? `Parcelle ${index + 1}`,
+        keptNo,
+        disappearingKey: disappearingEntry?.key ?? "",
+        disappearingLabel: disappearingEntry?.label ?? "",
+        disappearingNo,
         similarity: suggestion.similarity ?? 0,
         status: suggestion.isMatch ? "auto" : "unmatched",
       };
@@ -582,7 +586,7 @@ function ParcelleMatchViewContent({
     return map;
   }, [rightEntries]);
 
-  const baseOptions = leftEntries.map((entry) => ({
+  const disappearingOptions = rightEntries.map((entry) => ({
     value: entry.key,
     label: entry.label,
   }));
@@ -602,71 +606,71 @@ function ParcelleMatchViewContent({
     }
   }, []);
 
-  const handleMatchChange = useCallback((incomingKey, nextBaseKey) => {
-    setSelectedIncomingKey(incomingKey);
-    setSelectedBaseKey(nextBaseKey || null);
-    setHighlightIncomingKeys(incomingKey ? [incomingKey] : []);
-    setHighlightBaseKeys(nextBaseKey ? [nextBaseKey] : []);
-    zoomToSelectionTargets(incomingKey, nextBaseKey ? [nextBaseKey] : []);
+  const handleMatchChange = useCallback((keptKey, nextDisappearingKey) => {
+    setSelectedBaseKey(keptKey);
+    setSelectedIncomingKey(nextDisappearingKey || null);
+    setHighlightBaseKeys(keptKey ? [keptKey] : []);
+    setHighlightIncomingKeys(nextDisappearingKey ? [nextDisappearingKey] : []);
+    zoomToSelectionTargets(nextDisappearingKey, keptKey ? [keptKey] : []);
     setMatchRows((prev) =>
       prev.map((row) => {
-        if (row.incomingKey !== incomingKey) return row;
-        if (!nextBaseKey) {
+        if (row.keptKey !== keptKey) return row;
+        if (!nextDisappearingKey) {
           return {
             ...row,
-            baseKey: "",
-            baseLabel: "",
-            baseNo: "",
+            disappearingKey: "",
+            disappearingLabel: "",
+            disappearingNo: "",
             similarity: 0,
             status: "manual",
           };
         }
-        const baseFeature = baseByKey.get(nextBaseKey);
-        const incomingFeature = incomingByKey.get(incomingKey);
-        const similarity = computeFeatureSimilarity(baseFeature, incomingFeature);
-        const baseLabel =
-          leftEntries.find((entry) => entry.key === nextBaseKey)?.label ?? "";
-        const baseNo =
-          baseFeature?.properties?.parcelleNo ??
-          baseFeature?.properties?.numero ??
-          baseFeature?.properties?.id ??
+        const disappearingFeature = incomingByKey.get(nextDisappearingKey);
+        const keptFeature = baseByKey.get(keptKey);
+        const similarity = computeFeatureSimilarity(keptFeature, disappearingFeature);
+        const disappearingLabel =
+          rightEntries.find((entry) => entry.key === nextDisappearingKey)?.label ?? "";
+        const disappearingNo =
+          disappearingFeature?.properties?.parcelleNo ??
+          disappearingFeature?.properties?.numero ??
+          disappearingFeature?.properties?.id ??
           "";
         return {
           ...row,
-          baseKey: nextBaseKey,
-          baseLabel,
-          baseNo,
+          disappearingKey: nextDisappearingKey,
+          disappearingLabel,
+          disappearingNo,
           similarity,
           status: "manual",
         };
       })
     );
-  }, [baseByKey, incomingByKey, leftEntries, setSelectedBaseKey, setSelectedIncomingKey, zoomToSelectionTargets]);
+  }, [baseByKey, incomingByKey, rightEntries, setSelectedBaseKey, setSelectedIncomingKey, zoomToSelectionTargets]);
 
-  const handleRowSelect = useCallback((incomingKey) => {
-    setSelectedIncomingKey(incomingKey);
-    const row = matchRowsRef.current.find((entry) => entry.incomingKey === incomingKey);
-    setSelectedBaseKey(row?.baseKey || null);
-    setHighlightIncomingKeys(incomingKey ? [incomingKey] : []);
-    if (row?.baseKey) {
-      setHighlightBaseKeys([row.baseKey]);
-      zoomToSelectionTargets(incomingKey, [row.baseKey]);
+  const handleRowSelect = useCallback((keptKey) => {
+    setSelectedBaseKey(keptKey);
+    const row = matchRowsRef.current.find((entry) => entry.keptKey === keptKey);
+    setSelectedIncomingKey(row?.disappearingKey || null);
+    setHighlightBaseKeys(keptKey ? [keptKey] : []);
+    if (row?.disappearingKey) {
+      setHighlightIncomingKeys([row.disappearingKey]);
+      zoomToSelectionTargets(row.disappearingKey, [keptKey]);
       return;
     }
 
-    const rankedCandidates = leftEntries
+    const rankedCandidates = rightEntries
       .map((entry) => ({
         key: entry.key,
-        similarity: computeFeatureSimilarity(entry.feature, incomingByKey.get(incomingKey)),
+        similarity: computeFeatureSimilarity(baseByKey.get(keptKey), entry.feature),
       }))
       .filter((entry) => entry.similarity > 0)
       .sort((a, b) => b.similarity - a.similarity)
       .slice(0, 3)
       .map((entry) => entry.key);
 
-    setHighlightBaseKeys(rankedCandidates);
-    zoomToSelectionTargets(incomingKey, rankedCandidates);
-  }, [incomingByKey, leftEntries, setSelectedBaseKey, setSelectedIncomingKey, zoomToSelectionTargets]);
+    setHighlightIncomingKeys(rankedCandidates);
+    zoomToSelectionTargets(rankedCandidates[0] || null, [keptKey]);
+  }, [baseByKey, rightEntries, setSelectedBaseKey, setSelectedIncomingKey, zoomToSelectionTargets]);
 
   const handleValidate = async () => {
     if (typeof onValidate !== "function") {
@@ -689,22 +693,20 @@ function ParcelleMatchViewContent({
   };
 
   const handleLeftFeatureClick = useCallback((feature) => {
-    const baseKey = String(feature.id ?? feature.properties?.id ?? "");
-    if (!baseKey) return;
-    setSelectedBaseKey(baseKey);
-    setHighlightBaseKeys([baseKey]);
-    const incomingKey = selectedIncomingKeyRef.current;
-    if (!incomingKey) return;
-    if (handleMatchChangeRef.current) {
-      handleMatchChangeRef.current(incomingKey, baseKey);
-    }
-  }, [setSelectedBaseKey]);
+    const keptKey = String(feature.id ?? feature.properties?.id ?? "");
+    if (!keptKey) return;
+    handleRowSelect(keptKey);
+  }, [handleRowSelect]);
 
   const handleRightFeatureClick = useCallback((feature) => {
-    const incomingKey = String(feature.id ?? feature.properties?.id ?? "");
-    if (!incomingKey) return;
-    handleRowSelect(incomingKey);
-  }, [handleRowSelect]);
+    const disappearingKey = String(feature.id ?? feature.properties?.id ?? "");
+    if (!disappearingKey) return;
+    const keptKey = selectedBaseKeyRef.current;
+    if (!keptKey) return;
+    if (handleMatchChangeRef.current) {
+      handleMatchChangeRef.current(keptKey, disappearingKey);
+    }
+  }, []);
 
   useEffect(() => {
     leftColorRef.current = leftColor;
@@ -720,11 +722,11 @@ function ParcelleMatchViewContent({
   }, [handleLeftFeatureClick, handleRightFeatureClick]);
 
   useEffect(() => {
-    if (!selectedIncomingKey) return;
-    const row = matchRows.find((entry) => entry.incomingKey === selectedIncomingKey);
+    if (!selectedBaseKey) return;
+    const row = matchRows.find((entry) => entry.keptKey === selectedBaseKey);
     if (!row) return;
-    setSelectedBaseKey(row.baseKey || null);
-  }, [matchRows, selectedIncomingKey, setSelectedBaseKey]);
+    setSelectedIncomingKey(row.disappearingKey || null);
+  }, [matchRows, selectedBaseKey, setSelectedIncomingKey]);
 
   useEffect(() => {
     matchRowsRef.current = matchRows;
@@ -735,25 +737,29 @@ function ParcelleMatchViewContent({
   }, [selectedIncomingKey]);
 
   useEffect(() => {
+    selectedBaseKeyRef.current = selectedBaseKey;
+  }, [selectedBaseKey]);
+
+  useEffect(() => {
     handleMatchChangeRef.current = handleMatchChange;
   }, [handleMatchChange]);
 
   useEffect(() => {
     const next = {};
     matchRows.forEach((row) => {
-      if (row.baseKey) {
-        next[row.incomingKey] = row.baseKey;
+      if (row.disappearingKey) {
+        next[row.keptKey] = row.disappearingKey;
       }
     });
     setCorrespondances(next);
   }, [matchRows, setCorrespondances]);
   useEffect(() => {
-    if (!selectedIncomingKey) return;
-    const node = rowRefs.current.get(selectedIncomingKey);
+    if (!selectedBaseKey) return;
+    const node = rowRefs.current.get(selectedBaseKey);
     if (node && typeof node.scrollIntoView === "function") {
       node.scrollIntoView({ block: "nearest" });
     }
-  }, [selectedIncomingKey]);
+  }, [selectedBaseKey]);
 
   useEffect(() => {
     if (!open) return;
@@ -989,13 +995,13 @@ function ParcelleMatchViewContent({
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr style={{ textAlign: "left", fontSize: 12, color: "#64748b" }}>
-                  <th style={{ padding: "6px 8px" }}>N° {rightYear ?? "—"}</th>
-                  <th style={{ padding: "6px 8px" }}>
-                    Parcelle {rightYear ?? "—"}
-                  </th>
                   <th style={{ padding: "6px 8px" }}>N° {leftYear ?? "—"}</th>
                   <th style={{ padding: "6px 8px" }}>
-                    Correspondance {leftYear ?? "—"}
+                    Parcelle conservée {leftYear ?? "—"}
+                  </th>
+                  <th style={{ padding: "6px 8px" }}>N° {rightYear ?? "—"}</th>
+                  <th style={{ padding: "6px 8px" }}>
+                    Correspondance disparaissant {rightYear ?? "—"}
                   </th>
                   <th style={{ padding: "6px 8px" }}>Similarité</th>
                   <th style={{ padding: "6px 8px" }}>Statut</th>
@@ -1004,36 +1010,36 @@ function ParcelleMatchViewContent({
               <tbody>
                 {matchRows.map((row) => (
                   <tr
-                    key={row.incomingKey}
+                    key={row.keptKey}
                     ref={(node) => {
                       if (node) {
-                        rowRefs.current.set(row.incomingKey, node);
+                        rowRefs.current.set(row.keptKey, node);
                       }
                     }}
-                    onClick={() => handleRowSelect(row.incomingKey)}
+                    onClick={() => handleRowSelect(row.keptKey)}
                     style={{
                       borderTop: "1px solid #e2e8f0",
                       background:
-                        selectedIncomingKey === row.incomingKey
+                        selectedBaseKey === row.keptKey
                           ? "rgba(59, 130, 246, 0.08)"
                           : "transparent",
                       cursor: "pointer",
                     }}
                   >
                     <td style={{ padding: "6px 8px", fontSize: 13 }}>
-                      {row.incomingNo || "—"}
+                      {row.keptNo || "—"}
                     </td>
                     <td style={{ padding: "6px 8px", fontSize: 13 }}>
-                      {row.incomingLabel}
+                      {row.keptLabel}
                     </td>
                     <td style={{ padding: "6px 8px", fontSize: 13 }}>
-                      {row.baseKey ? row.baseNo || "—" : "—"}
+                      {row.disappearingKey ? row.disappearingNo || "—" : "—"}
                     </td>
                     <td style={{ padding: "6px 8px" }}>
                       <select
-                        value={row.baseKey}
+                        value={row.disappearingKey}
                         onChange={(event) =>
-                          handleMatchChange(row.incomingKey, event.target.value)
+                          handleMatchChange(row.keptKey, event.target.value)
                         }
                         style={{
                           width: "100%",
@@ -1043,7 +1049,7 @@ function ParcelleMatchViewContent({
                         }}
                       >
                         <option value="">Aucune correspondance</option>
-                        {baseOptions.map((option) => (
+                        {disappearingOptions.map((option) => (
                           <option key={option.value} value={option.value}>
                             {option.label}
                           </option>
