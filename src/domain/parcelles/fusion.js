@@ -23,7 +23,7 @@ export const PRECEDENT_N2_FIELDS = [
 ];
 
 export const DEFAULT_PRECEDENT_N2_FIELD = "precedent_N2";
-export const DEFAULT_PRECEDENT_N1_FIELD = "precedent";
+export const DEFAULT_PRECEDENT_N1_FIELD = "cultureN1";
 
 const CULTURE_FIELDS = [
   "culture",
