@@ -1213,38 +1213,26 @@ export default function ParcellesEditorMap() {
       });
     };
 
-    try {
-      const response = await validateParcellesMatching({
-        oldYear: disappearingYear,
-        newYear: keptYear,
-        matches: matchesPayload,
-      });
+    // Toujours appliquer le merge local en premier : il utilise les features
+    // en mémoire (plus récentes que le fichier backend qui peut avoir 500ms de retard).
+    applyLocalMerge();
+    setValidatedMatches(rows);
+    setValidatedMatchesAt(new Date());
+    setMatchViewOpen(false);
 
-      if (response?.collection?.features) {
-        setFeatures(response.collection.features);
-      } else {
-        applyLocalMerge();
-      }
-
-      setValidatedMatches(rows);
-      setValidatedMatchesAt(new Date());
-      setMatchViewOpen(false);
-      return true;
-    } catch (error) {
+    // Appel backend uniquement pour la persistance (fire and forget).
+    validateParcellesMatching({
+      oldYear: disappearingYear,
+      newYear: keptYear,
+      matches: matchesPayload,
+    }).catch((error) => {
       console.warn(
-        "Validation backend indisponible, application locale des correspondances.",
+        "Persistance backend indisponible, les correspondances sont appliquées localement.",
         error,
       );
-      applyLocalMerge();
-      setValidatedMatches(rows);
-      setValidatedMatchesAt(new Date());
-      setMatchViewOpen(false);
-      alert(
-        "Validation appliquée localement (backend indisponible). " +
-          "Démarrez `npm run backend` pour persister les correspondances."
-      );
-      return true;
-    }
+    });
+
+    return true;
   };
 
   const resolveParcelsWithSoilRows = useCallback(async () => {
