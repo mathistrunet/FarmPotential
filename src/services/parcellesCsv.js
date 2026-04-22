@@ -432,7 +432,7 @@ export async function parseParcellesCsvToFeatures(file, options = {}) {
       ...(secteur ? { secteur } : {}),
       ...(exploitation ? { exploitation } : {}),
       ...(codeExploitation ? { code_exploitation: codeExploitation } : {}),
-      ...(parcelles ? { nom: parcelles, nom_affiche: parcelles } : {}),
+      ...(parcelles ? { nom: parcelles, nom_affiche: parcelles, nom_parcelle: parcelles, NOM_PARCEL: parcelles } : {}),
       ...(surfaceParcelle != null ? { surface_parcelle: surfaceParcelle } : {}),
       ...(parcelleBio ? { parcelle_bio: parcelleBio } : {}),
       ...(typeSol ? { type_sol: typeSol } : {}),
