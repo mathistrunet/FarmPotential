@@ -25,7 +25,7 @@ Priorites recommandees :
 | ID | Fonctionnalite | Statut | Priorite | Commentaire | Fiche |
 | --- | --- | --- | --- | --- | --- |
 | FP-001 | Gestion du parcellaire | Implante | P1 | Coeur de l'application, edition et persistance presentes | [FP-001](C:/Users/Mathis%20Trunet/Documents/GitHub/FarmPotential/docs/fonctionnalites/FP-001-gestion-du-parcellaire.md) |
-| FP-002 | Import de donnees | Implante | P1 | Import XML Telepac et ZIP shapefile | [FP-002](C:/Users/Mathis%20Trunet/Documents/GitHub/FarmPotential/docs/fonctionnalites/FP-002-import-de-donnees.md) |
+| FP-002 | Import de donnees | Implante | P1 | Import XML Telepac, ZIP shapefile et CSV parcellaire | [FP-002](C:/Users/Mathis%20Trunet/Documents/GitHub/FarmPotential/docs/fonctionnalites/FP-002-import-de-donnees.md) |
 | FP-003 | Edition des proprietes et cultures | Implante | P1 | Edition riche, cultures jusqu'a N-6 et N+1 | [FP-003](C:/Users/Mathis%20Trunet/Documents/GitHub/FarmPotential/docs/fonctionnalites/FP-003-edition-des-proprietes-et-cultures.md) |
 | FP-004 | Visualisation Viewer | Implante | P1 | Consultation filtree par annee et culture | [FP-004](C:/Users/Mathis%20Trunet/Documents/GitHub/FarmPotential/docs/fonctionnalites/FP-004-visualisation-viewer.md) |
 | FP-005 | Export des donnees | Partiel | P1 | XML et CSV exposes, shapefile a clarifier | [FP-005](C:/Users/Mathis%20Trunet/Documents/GitHub/FarmPotential/docs/fonctionnalites/FP-005-export-des-donnees.md) |

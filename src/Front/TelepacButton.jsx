@@ -2,6 +2,7 @@
 import React, { useRef, useState } from "react";
 import { parseTelepacXmlToFeatures, buildTelepacXML } from "../services/telepacXml";
 import { parseShapefileZipToFeatures } from "../services/shapefileZip";
+import { parseParcellesCsvToFeatures } from "../services/parcellesCsv";
 import { buildParcelShapefileZip } from "../services/parcelleShapefile";
 import { resolveOverlappingParcelsAsync } from "../utils/overlapResolution";
 
@@ -240,7 +241,7 @@ export default function ImportTelepacButton({
   compact = false,
   buttonStyle,
   disabled = false,
-  fileAccept = ".xml,.zip",
+  fileAccept = ".xml,.zip,.csv",
   // mode = "append", Si on veut réactiver la fonction replace à l'import d'un parcellaire
   zoomOnImport = true,
   labelImport,
@@ -295,6 +296,8 @@ export default function ImportTelepacButton({
       const name = file.name?.toLowerCase() ?? "";
       if (name.endsWith(".zip")) {
         feats = await parseShapefileZipToFeatures(file);
+      } else if (name.endsWith(".csv")) {
+        feats = await parseParcellesCsvToFeatures(file);
       } else if (name.endsWith(".xml")) {
         const xmlContext = await _resolveTelepacCultureOffset(file, _baseCultureYearRef);
         const xmlYear = _resolveXmlYear(file, xmlContext?.meta?.year);
@@ -390,7 +393,7 @@ export default function ImportTelepacButton({
       console.error(err);
       onError?.(err);
       alert(
-        "Impossible de lire ce fichier. Utilise un export Télépac (.xml) ou un shapefile zippé (.zip)."
+        "Impossible de lire ce fichier. Utilise un export Télépac (.xml), un shapefile zippé (.zip) ou un fichier CSV (.csv)."
       );
     } finally {
       setLoading(false);
@@ -404,7 +407,7 @@ export default function ImportTelepacButton({
       <button
         onClick={() => !disabled && !loading && fileInputRef.current?.click()}
         style={btn}
-        title="Importer un XML Télépac ou un shapefile zippé"
+        title="Importer un XML Télépac, un shapefile zippé ou un CSV"
         disabled={disabled || loading}
       >
         <IconUpload />{" "}
