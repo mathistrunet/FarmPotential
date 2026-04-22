@@ -116,14 +116,18 @@ function applyXmlImportContext(features, { year, cultureOffset }) {
     const cultureValue = resolveCultureValue(props);
     if (cultureValue) {
       const targetColumn = cultureColumnFromOffset(cultureOffset);
-      // Supprimer les colonnes génériques ajoutées par le parser XML (culture, cultureN)
-      // pour n'écrire que dans la colonne sélectionnée
       delete props.culture;
       delete props.cultureN;
       delete props.cultureN_0;
       delete props.cultureN0;
+      // Pour offset != 0, supprimer aussi code/code_culture : ces champs sont
+      // reconnus comme alias de culture courante (PROPERTY_ALIASES.culture) et
+      // provoqueraient une duplication dans la colonne N.
+      if (cultureOffset !== 0) {
+        delete props.code;
+        delete props.code_culture;
+      }
       props[targetColumn] = cultureValue;
-      // Pour la colonne N : rétablir culture pour la compatibilité d'affichage
       if (cultureOffset === 0) {
         props.culture = cultureValue;
       }
