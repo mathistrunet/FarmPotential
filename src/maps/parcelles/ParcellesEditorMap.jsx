@@ -1152,13 +1152,13 @@ export default function ParcellesEditorMap() {
 
     const correspondancesValidated = {};
     const matchesPayload = rows.flatMap((row) => {
-      if (!row?.baseKey || !row?.incomingKey) return [];
-      // incomingKey = droite (disparaît) = oldKey ; baseKey = gauche (conservée) = newKey
-      correspondancesValidated[String(row.incomingKey)] = String(row.baseKey);
+      if (!row?.disappearingKey || !row?.keptKey) return [];
+      // disappearingKey = droite (disparaît) = oldKey ; keptKey = gauche (conservée) = newKey
+      correspondancesValidated[String(row.disappearingKey)] = String(row.keptKey);
       return [
         {
-          oldId: String(row.incomingKey),
-          newId: String(row.baseKey),
+          oldId: String(row.disappearingKey),
+          newId: String(row.keptKey),
           previousValue: row?.previousValue ?? null,
         },
       ];

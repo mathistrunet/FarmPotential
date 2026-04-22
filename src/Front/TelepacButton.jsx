@@ -116,12 +116,16 @@ function applyXmlImportContext(features, { year, cultureOffset }) {
     const cultureValue = resolveCultureValue(props);
     if (cultureValue) {
       const targetColumn = cultureColumnFromOffset(cultureOffset);
+      // Supprimer les colonnes génériques ajoutées par le parser XML (culture, cultureN)
+      // pour n'écrire que dans la colonne sélectionnée
+      delete props.culture;
+      delete props.cultureN;
+      delete props.cultureN_0;
+      delete props.cultureN0;
       props[targetColumn] = cultureValue;
-
+      // Pour la colonne N : rétablir culture pour la compatibilité d'affichage
       if (cultureOffset === 0) {
-        props.cultureN = cultureValue;
         props.culture = cultureValue;
-        if (!props.code_culture) props.code_culture = cultureValue;
       }
     }
 
@@ -164,15 +168,63 @@ async function _resolveTelepacCultureOffset(file, baseCultureYearRef) {
     if (offset >= -1 && offset <= 6) return { offset, meta: { pacage, year } };
   }
 
-  const input = window.prompt(
-    "Impossible de determiner automatiquement la colonne des cultures. " +
-      "Indique la colonne cible (cultureN, cultureN1, cultureN2...) ou un numero."
+  return { offset: null, meta: { pacage, year } };
+}
+
+const COLUMN_OPTIONS = [
+  { offset: -1, label: "N+1 — Culture de l'année suivante" },
+  { offset: 0,  label: "N — Culture courante" },
+  { offset: 1,  label: "N-1 — Culture précédente" },
+  { offset: 2,  label: "N-2" },
+  { offset: 3,  label: "N-3" },
+  { offset: 4,  label: "N-4" },
+  { offset: 5,  label: "N-5" },
+  { offset: 6,  label: "N-6" },
+];
+
+function ColumnSelectDialog({ suggestedOffset, onConfirm, onCancel }) {
+  const [selected, setSelected] = useState(suggestedOffset ?? 0);
+  return (
+    <div style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)",
+      zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center",
+    }}>
+      <div style={{
+        background: "#fff", borderRadius: 12, padding: 24, width: 360,
+        boxShadow: "0 8px 32px rgba(0,0,0,0.18)",
+      }}>
+        <h3 style={{ margin: "0 0 8px", fontSize: 16 }}>Colonne de destination</h3>
+        <p style={{ margin: "0 0 14px", fontSize: 13, color: "#475569" }}>
+          Choisissez dans quelle colonne les cultures de ce fichier XML seront importées.
+        </p>
+        <select
+          value={selected}
+          onChange={(e) => setSelected(Number(e.target.value))}
+          style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1px solid #d1d5db", fontSize: 14 }}
+        >
+          {COLUMN_OPTIONS.map((col) => (
+            <option key={col.offset} value={col.offset}>{col.label}</option>
+          ))}
+        </select>
+        <div style={{ display: "flex", gap: 8, marginTop: 16, justifyContent: "flex-end" }}>
+          <button
+            type="button"
+            onClick={onCancel}
+            style={{ padding: "7px 14px", borderRadius: 7, border: "1px solid #d1d5db", background: "#f9fafb", cursor: "pointer" }}
+          >
+            Annuler
+          </button>
+          <button
+            type="button"
+            onClick={() => onConfirm(selected)}
+            style={{ padding: "7px 14px", borderRadius: 7, border: "none", background: "#0f172a", color: "#fff", cursor: "pointer", fontWeight: 600 }}
+          >
+            Confirmer
+          </button>
+        </div>
+      </div>
+    </div>
   );
-  const parsed = parseCultureColumnInput(input);
-  return {
-    offset: Number.isFinite(parsed) ? parsed : null,
-    meta: { pacage, year },
-  };
 }
 
 
@@ -194,7 +246,27 @@ export default function ImportTelepacButton({
 }) {
   const fileInputRef = useRef(null);
   const [loading, setLoading] = useState(false);
+  const [columnDialog, setColumnDialog] = useState(null);
+  const columnDialogResolveRef = useRef(null);
   const _baseCultureYearRef = useRef(null);
+
+  const askForColumn = (suggestedOffset) =>
+    new Promise((resolve) => {
+      columnDialogResolveRef.current = resolve;
+      setColumnDialog({ suggestedOffset });
+    });
+
+  const handleColumnConfirm = (offset) => {
+    setColumnDialog(null);
+    columnDialogResolveRef.current?.(offset);
+    columnDialogResolveRef.current = null;
+  };
+
+  const handleColumnCancel = () => {
+    setColumnDialog(null);
+    columnDialogResolveRef.current?.(null);
+    columnDialogResolveRef.current = null;
+  };
 
   const btnDefault = {
     display: "inline-flex",
@@ -223,16 +295,12 @@ export default function ImportTelepacButton({
         const xmlContext = await _resolveTelepacCultureOffset(file, _baseCultureYearRef);
         const xmlYear = _resolveXmlYear(file, xmlContext?.meta?.year);
 
-        let cultureOffset = Number.isFinite(xmlContext?.offset) ? xmlContext.offset : 0;
-        const suggestedColumn = cultureColumnFromOffset(cultureOffset);
-        const columnInput = window.prompt(
-          "Colonne culture cible pour cet import XML.\nOptions : N+1, N, N-1, N-2, N-3, N-4, N-5, N-6\n(entrez : N+1, cultureN, cultureN1, cultureN2...)",
-          suggestedColumn
-        );
-        const parsedColumn = parseCultureColumnInput(columnInput);
-        if (Number.isFinite(parsedColumn)) {
-          cultureOffset = parsedColumn;
-        }
+        const suggestedOffset = Number.isFinite(xmlContext?.offset) ? xmlContext.offset : 0;
+        setLoading(false);
+        const chosenOffset = await askForColumn(suggestedOffset);
+        setLoading(true);
+        if (chosenOffset === null) return;
+        const cultureOffset = chosenOffset;
 
         feats = applyXmlImportContext(await parseTelepacXmlToFeatures(file), {
           year: xmlYear,
@@ -347,6 +415,13 @@ export default function ImportTelepacButton({
         onChange={onPickFile}
         style={{ display: "none" }}
       />
+      {columnDialog && (
+        <ColumnSelectDialog
+          suggestedOffset={columnDialog.suggestedOffset}
+          onConfirm={handleColumnConfirm}
+          onCancel={handleColumnCancel}
+        />
+      )}
     </>
   );
 }
