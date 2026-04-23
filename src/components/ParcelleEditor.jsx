@@ -709,25 +709,12 @@ export default function ParcelleEditor({
 
       if (!hasMissingValues && !hasRemovedIds) return prev;
 
-      const prune = (map) => {
-        const out = {};
-        ids.forEach((id) => {
-          if (map && map[id] != null) out[id] = map[id];
-        });
-        return out;
-      };
       const next = buildEmptyTypedState();
-      CULTURE_COLUMNS.forEach((col) => {
-        next[col.id] = prune(prev[col.id]);
-      });
-
       features.forEach((f, idx) => {
         const idKey = ids[idx];
         const props = f.properties || {};
         CULTURE_COLUMNS.forEach((col) => {
-          if (next[col.id][idKey] == null) {
-            next[col.id][idKey] = resolveCultureDisplay(props, col.targetKeys, PRECISION_KEYS[col.id]);
-          }
+          next[col.id][idKey] = resolveCultureDisplay(props, col.targetKeys, PRECISION_KEYS[col.id]);
         });
       });
       return next;
