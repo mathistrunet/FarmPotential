@@ -54,7 +54,7 @@ La fenetre contient :
 
 Apres confirmation par l'utilisateur :
 
-1. Les **donnees culturales** de l'annee disparaissant sont propagees dans les proprietes des parcelles de l'annee conservee (logique de fusion : l'ancienne culture devient `precedent`, l'ancien precedent devient `precedent_N2`, etc.).
+1. Les **donnees culturales** de l'annee disparaissant sont propagees dans les proprietes des parcelles de l'annee conservee (logique de fusion : l'ancienne culture devient `cultureN1`, l'ancien precedent devient `precedent_N2`, etc.). Les colonnes s'affichent **immediatement** dans l'editeur, sans besoin de recharger la page.
 2. L'annee disparaissant est **entierement supprimee** :
    - Toutes ses **geometries** disparaissent de la carte.
    - Toutes ses **lignes** disparaissent du tableau parcellaire.
@@ -85,7 +85,7 @@ Apres confirmation par l'utilisateur :
 |---|---|
 | Annee gauche = annee conservee | Ses geometries restent, ses donnees sont enrichies |
 | Annee droite = annee disparaissant | Ses geometries ET ses lignes disparaissent apres validation |
-| Propagation culture | `cultureN` ancienne → `precedent` nouvelle ; `precedent` ancienne → `precedent_N2` nouvelle |
+| Propagation culture | `culture`/`cultureN` ancienne → `cultureN1` nouvelle ; `cultureN1`/`precedent` ancienne → `precedent_N2` nouvelle |
 | Seuil auto-match | 95% de recouvrement geometrique reciproque |
 | Colonne a l'import | Determinee par l'utilisateur (N+1 a N-6) ; la culture est ecrite dans la cle correspondante |
 | Metadonnee `annee` | Extraite du fichier XML ou saisie manuellement ; obligatoire pour le rapprochement |
@@ -103,9 +103,30 @@ Apres confirmation par l'utilisateur :
 
 ---
 
+## Corrections recentes
+
+### Propagation correcte de la culture en colonne N-1 (avril 2025)
+
+**Probleme 1 — mauvais champ cible dans `fusion.js`**
+
+`applyCorrespondencesAndMerge` ecrivait la culture de l'annee disparue dans le champ `precedent`. Ce champ n'etait pas reconnu par `ParcelleEditor` comme colonne N-1 (qui lit `cultureN1`, `cultureN_1`, `culture_prec`, `CULT_PREC`). Resultat : la culture propagee n'apparaissait jamais dans le tableau.
+
+*Correction :* `DEFAULT_PRECEDENT_N1_FIELD` passe de `"precedent"` a `"cultureN1"` dans `src/domain/parcelles/fusion.js`.
+
+**Probleme 2 — cache `typed` obsolete dans `ParcelleEditor.jsx`**
+
+Meme avec le bon champ, l'UI ne se mettait pas a jour apres fusion. Le cache `typed` (valeurs affichees par colonne et par feature) preservait une valeur vide `""` calculee avant la fusion. La condition `== null` empeche la mise a jour car `"" != null`.
+
+*Correction :* suppression du mecanisme `prune()` + guard `== null` dans le `useEffect` de reconstruction du cache. Le cache est desormais toujours integralement recalcule depuis les props lors d'une modification de features. La condition `hasRemovedIds = true` (positionnee lors de toute fusion) garantit que la reconstruction est declenchee.
+
+### Impact
+
+Apres validation d'un rapprochement, les colonnes N-1 (et N-2 le cas echeant) s'affichent immediatement dans l'editeur, sans refresh de la page.
+
+---
+
 ## Limites actuelles / Points a corriger
 
-- Apres validation, la suppression des lignes du tableau et des geometries de l'annee disparue doit etre verifiee et completee si necessaire.
 - La fenetre de rapprochement doit clairement indiquer laquelle des deux annees va disparaitre (libelle explicite, pas seulement "gauche/droite").
 - La strategie de fusion (quelle propriete va ou) merite d'etre plus explicite dans l'UI.
 

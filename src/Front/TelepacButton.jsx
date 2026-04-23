@@ -5,6 +5,13 @@ import { parseShapefileZipToFeatures } from "../services/shapefileZip";
 import { parseParcellesCsvToFeatures } from "../services/parcellesCsv";
 import { buildParcelShapefileZip } from "../services/parcelleShapefile";
 import { resolveOverlappingParcelsAsync } from "../utils/overlapResolution";
+import {
+  applyXmlImportContext,
+  cultureColumnFromOffset,
+  resolveCultureValue,
+  GENERIC_CULTURE_KEYS,
+  GENERIC_CULTURE_KEYS_EXTENDED,
+} from "../utils/xmlImportContext";
 
 /** Icônes légères inline (gardées) */
 const iconStyle = { width: 18, height: 18, display: "inline-block", verticalAlign: "-3px" };
@@ -88,58 +95,8 @@ function parseCultureColumnInput(value) {
   return null;
 }
 
-function cultureColumnFromOffset(offset) {
-  if (!Number.isFinite(offset)) return "cultureN";
-  if (offset === -1) return "cultureN_plus1";
-  if (offset < 0) return "cultureN";
-  return offset === 0 ? "cultureN" : `cultureN${offset}`;
-}
-
-function resolveCultureValue(props = {}) {
-  const candidates = [
-    props.cultureN,
-    props.culture,
-    props.code_culture,
-    props.code,
-  ];
-  const value = candidates.find((item) => item != null && String(item).trim() !== "");
-  return value == null ? "" : String(value).trim();
-}
-
-function applyXmlImportContext(features, { year, cultureOffset }) {
-  return (features || []).map((feature) => {
-    const props = { ...(feature?.properties || {}) };
-
-    if (Number.isFinite(year)) {
-      props.annee = year;
-    }
-
-    const cultureValue = resolveCultureValue(props);
-    if (cultureValue) {
-      const targetColumn = cultureColumnFromOffset(cultureOffset);
-      delete props.culture;
-      delete props.cultureN;
-      delete props.cultureN_0;
-      delete props.cultureN0;
-      // Pour offset != 0, supprimer aussi code/code_culture : ces champs sont
-      // reconnus comme alias de culture courante (PROPERTY_ALIASES.culture) et
-      // provoqueraient une duplication dans la colonne N.
-      if (cultureOffset !== 0) {
-        delete props.code;
-        delete props.code_culture;
-      }
-      props[targetColumn] = cultureValue;
-      if (cultureOffset === 0) {
-        props.culture = cultureValue;
-      }
-    }
-
-    return {
-      ...feature,
-      properties: props,
-    };
-  });
-}
+// cultureColumnFromOffset, resolveCultureValue et applyXmlImportContext
+// sont importés depuis src/utils/xmlImportContext.js
 
 async function readFileText(file) {
   return new Promise((resolve, reject) => {
