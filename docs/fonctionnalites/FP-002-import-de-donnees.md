@@ -36,7 +36,22 @@ Importer rapidement un parcellaire existant dans FarmPotential a partir de forma
 ## Technique
 
 - composant : `src/Front/TelepacButton.jsx`
+- utilitaires purs (testables) : `src/utils/xmlImportContext.js`
+  - `cultureColumnFromOffset(offset)` — convertit un offset numerique en nom de colonne (`cultureN`, `cultureN1`, `cultureN_plus1`, etc.)
+  - `resolveCultureValue(props)` — lit la valeur de culture depuis un objet de proprietes (priorite : `cultureN` > `culture` > `code_culture` > `code`)
+  - `applyXmlImportContext(features, { year, cultureOffset })` — applique l'annee et route la culture vers la bonne colonne ; supprime les cles source pour eviter les doublons
 - services : `src/services/telepacXml.js`, `src/services/shapefileZip.js`, `src/services/parcellesCsv.js`
+
+## Regles de deduplication lors de l'import XML
+
+Lors de l'import d'un fichier XML Telepac, la culture est ecrite dans la colonne determinee par l'offset choisi par l'utilisateur. Pour eviter qu'elle apparaisse simultanement dans plusieurs colonnes de l'editeur, les cles sources sont supprimees apres l'ecriture :
+
+| Offset choisi | Cles supprimees | Remarque |
+|---|---|---|
+| N (offset = 0) | `culture`, `cultureN`, `cultureN_0`, `cultureN0` | `code` et `code_culture` conserves (alias reconnus pour la colonne N) |
+| Autre (offset ≠ 0) | `culture`, `cultureN`, `cultureN_0`, `cultureN0`, `code`, `code_culture` | `code` supprime pour eviter que la culture apparaisse aussi en colonne N via les alias de `ParcelleEditor` |
+
+Cette distinction est necessaire car `ParcelleEditor` reconnait `code` et `code_culture` comme alias de la colonne N (`PROPERTY_ALIASES.culture`). Sans suppression pour offset ≠ 0, la culture s'afficherait en double (colonne cible ET colonne N).
 
 ## Documentation utilisateur
 
