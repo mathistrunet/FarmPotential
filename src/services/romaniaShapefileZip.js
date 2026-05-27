@@ -84,6 +84,7 @@ function normalizeRomanianProperties(rawProps) {
   const entry = codeKey ? ROMANIA_EU_CULTURES[codeKey] : null;
   const metacode    = entry?.metacode ?? "";
   const nomRo       = entry?.nomRo ?? (cropName ? String(cropName).trim() : "");
+  const assoliaCrop = entry?.assolia ?? null;
   const codeCulture = metacode || codeKey || "";
 
   // Nom affiché : "Bloc 88 – Parc. 2a"
@@ -110,6 +111,7 @@ function normalizeRomanianProperties(rawProps) {
     commune:           commune  != null ? String(commune)   : null,
     crop_nr:           cropNr   != null ? String(cropNr)    : null,
     nom_culture_ro:    nomRo || null,
+    assolia_culture:   assoliaCrop || null,
     agro_env:          agroEnv  != null ? String(agroEnv)   : null,
     comment:           comment  != null ? String(comment)   : null,
     // Originaux pour traçabilité
