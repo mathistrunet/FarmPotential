@@ -2,6 +2,7 @@
 import React, { useRef, useState } from "react";
 import { parseTelepacXmlToFeatures, buildTelepacXML } from "../services/telepacXml";
 import { parseShapefileZipToFeatures } from "../services/shapefileZip";
+import { isRomanianShapefile, normalizeRomanianFeatures } from "../services/romaniaShapefileZip";
 import { parseParcellesCsvToFeatures } from "../services/parcellesCsv";
 import { buildParcelShapefileZip } from "../services/parcelleShapefile";
 import { resolveOverlappingParcelsAsync } from "../utils/overlapResolution";
@@ -252,7 +253,10 @@ export default function ImportTelepacButton({
       let feats;
       const name = file.name?.toLowerCase() ?? "";
       if (name.endsWith(".zip")) {
-        feats = await parseShapefileZipToFeatures(file);
+        const rawFeats = await parseShapefileZipToFeatures(file);
+        feats = isRomanianShapefile(rawFeats)
+          ? normalizeRomanianFeatures(rawFeats)
+          : rawFeats;
       } else if (name.endsWith(".csv")) {
         feats = await parseParcellesCsvToFeatures(file);
       } else if (name.endsWith(".xml")) {
