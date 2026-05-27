@@ -1,7 +1,53 @@
+import JSZip from "jszip";
 import { parseShapefileZipToFeatures } from "./shapefileZip";
 import { ROMANIA_EU_CULTURES } from "../data/romaniaRoCultures";
 
-// Checks presence of Romanian LPIS DBF fields (case-insensitive).
+// ─── Projection ──────────────────────────────────────────────────────────────
+// Stereo70 WKT (EPSG:31700) — projection officielle du LPIS roumain APIA.
+// Le fichier .prj du ZIP APIA est toujours vide ; shpjs tente proj4("")  qui
+// lève une exception. On réinjecte ce WKT avant de passer le buffer à shpjs.
+const STEREO70_PRJ = `PROJCS["Pulkovo_1942_Adj_58_Stereo70",GEOGCS["GCS_Pulkovo_1942_Adj_1958",DATUM["D_Pulkovo_1942_Adj_1958",SPHEROID["Krassowsky_1940",6378245.0,298.3]],PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]],PROJECTION["Double_Stereographic"],PARAMETER["False_Easting",500000.0],PARAMETER["False_Northing",500000.0],PARAMETER["Central_Meridian",25.0],PARAMETER["Scale_Factor",0.99975],PARAMETER["Latitude_Of_Origin",46.0],UNIT["Meter",1.0]]`;
+
+// ─── Détection AVANT parse ────────────────────────────────────────────────────
+
+/** Détecte un ZIP LPIS roumain par le pattern de nom de fichier (ex: RO006248036_2025_0.shp). */
+export async function isRomanianZipBuffer(buffer) {
+  try {
+    const zip = await JSZip.loadAsync(buffer);
+    return Object.keys(zip.files).some((n) => /RO\d{7,9}_\d{4}/i.test(n));
+  } catch {
+    return false;
+  }
+}
+
+// ─── Patch du ZIP ────────────────────────────────────────────────────────────
+
+/**
+ * Recrée le ZIP en injectant le WKT Stereo70 dans chaque .prj vide ou absent.
+ * Cela évite que shpjs lève une exception sur proj4("") lors du parse.
+ * shpjs utilisera ensuite Double_Stereographic → inverse() pour projeter en WGS84.
+ */
+async function patchPrjInZip(buffer) {
+  const zip = await JSZip.loadAsync(buffer);
+  const newZip = new JSZip();
+
+  for (const [name, file] of Object.entries(zip.files)) {
+    if (file.dir) continue;
+
+    if (name.toLowerCase().endsWith(".prj")) {
+      // Remplace toujours le .prj par le WKT Stereo70 (même s'il était non vide)
+      newZip.file(name, STEREO70_PRJ);
+    } else {
+      newZip.file(name, await file.async("arraybuffer"));
+    }
+  }
+
+  return newZip.generateAsync({ type: "arraybuffer" });
+}
+
+// ─── Normalisation APRÈS parse ───────────────────────────────────────────────
+
+/** Détecte si des features viennent d'un shapefile LPIS roumain (farm_id / judet). */
 export function isRomanianShapefile(features) {
   if (!features?.length) return false;
   const props = features[0]?.properties || {};
@@ -33,14 +79,14 @@ function normalizeRomanianProperties(rawProps) {
   const agroEnv  = get(rawProps, "agro_env");
   const comment  = get(rawProps, "comment");
 
-  // Resolve culture code → metacode + Romanian name
+  // Résolution culture : EU code numérique → metacode interne + nom roumain
   const codeKey = cropCode != null ? String(cropCode).trim() : null;
   const entry = codeKey ? ROMANIA_EU_CULTURES[codeKey] : null;
   const metacode    = entry?.metacode ?? "";
   const nomRo       = entry?.nomRo ?? (cropName ? String(cropName).trim() : "");
   const codeCulture = metacode || codeKey || "";
 
-  // Human-readable parcel name: "Bloc 88 – Parc. 2a"
+  // Nom affiché : "Bloc 88 – Parc. 2a"
   let nomAffiche = null;
   if (blocNr != null && parcelNr != null) {
     const suffix = cropNr ? String(cropNr).trim() : "";
@@ -48,30 +94,30 @@ function normalizeRomanianProperties(rawProps) {
   }
 
   const normalized = {
-    // Standard app fields
-    code_exploitation: farmId != null ? String(farmId) : null,
-    annee:             year   != null ? Number(year)   : null,
-    ilot:              blocNr != null ? String(blocNr) : null,
-    parcelleNo:        parcelNr != null ? String(parcelNr) : null,
+    // Champs standard de l'app
+    code_exploitation: farmId   != null ? String(farmId)   : null,
+    annee:             year     != null ? Number(year)      : null,
+    ilot:              blocNr   != null ? String(blocNr)    : null,
+    parcelleNo:        parcelNr != null ? String(parcelNr)  : null,
     nom_parcelle:      nomAffiche,
     nom_affiche:       nomAffiche,
     code_culture:      codeCulture,
-    surface:           areaDec != null ? Number(areaDec) : null,
-    categorie_utilisation: catUse != null ? String(catUse) : null,
-    // Romanian-specific preserved fields
-    judet:             judet   != null ? String(judet)   : null,
-    siruta:            siruta  != null ? String(siruta)  : null,
-    commune:           commune != null ? String(commune) : null,
-    crop_nr:           cropNr  != null ? String(cropNr)  : null,
-    nom_culture_ro:    nomRo,
-    agro_env:          agroEnv != null ? String(agroEnv) : null,
-    comment:           comment != null ? String(comment) : null,
-    // Raw originals for traceability
+    surface:           areaDec  != null ? Number(areaDec)   : null,
+    categorie_utilisation: catUse != null ? String(catUse)  : null,
+    // Champs spécifiques Roumanie conservés
+    judet:             judet    != null ? String(judet)     : null,
+    siruta:            siruta   != null ? String(siruta)    : null,
+    commune:           commune  != null ? String(commune)   : null,
+    crop_nr:           cropNr   != null ? String(cropNr)    : null,
+    nom_culture_ro:    nomRo || null,
+    agro_env:          agroEnv  != null ? String(agroEnv)   : null,
+    comment:           comment  != null ? String(comment)   : null,
+    // Originaux pour traçabilité
     _ro_crop_code:     codeKey,
-    _ro_farm_id:       farmId  != null ? String(farmId)  : null,
+    _ro_farm_id:       farmId   != null ? String(farmId)    : null,
   };
 
-  // Strip nulls
+  // Supprime les nulls
   return Object.fromEntries(Object.entries(normalized).filter(([, v]) => v != null));
 }
 
@@ -82,10 +128,16 @@ export function normalizeRomanianFeatures(features) {
   }));
 }
 
-export async function parseRomanianShapefileZipToFeatures(fileOrBuffer) {
-  const features = await parseShapefileZipToFeatures(fileOrBuffer);
-  if (!isRomanianShapefile(features)) {
-    throw new Error("RO_SHAPEFILE: Le fichier ne semble pas être un shapefile LPIS roumain");
-  }
-  return normalizeRomanianFeatures(features);
+// ─── Point d'entrée principal ─────────────────────────────────────────────────
+
+/**
+ * Parse un ZIP LPIS roumain :
+ * 1. Injecte le WKT Stereo70 dans le .prj (fix de l'exception shpjs sur .prj vide)
+ * 2. Passe le buffer corrigé à parseShapefileZipToFeatures (shpjs reprojette en WGS84)
+ * 3. Normalise les propriétés DBF roumaines vers le schéma interne
+ */
+export async function parseRomanianShapefileZipToFeatures(buffer) {
+  const patchedBuffer = await patchPrjInZip(buffer);
+  const rawFeats = await parseShapefileZipToFeatures(patchedBuffer);
+  return normalizeRomanianFeatures(rawFeats);
 }
