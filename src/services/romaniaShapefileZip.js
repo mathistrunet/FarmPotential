@@ -3,10 +3,20 @@ import { parseShapefileZipToFeatures } from "./shapefileZip";
 import { ROMANIA_EU_CULTURES } from "../data/romaniaRoCultures";
 
 // ─── Projection ──────────────────────────────────────────────────────────────
-// Stereo70 WKT (EPSG:31700) — projection officielle du LPIS roumain APIA.
-// Le fichier .prj du ZIP APIA est toujours vide ; shpjs tente proj4("")  qui
-// lève une exception. On réinjecte ce WKT avant de passer le buffer à shpjs.
-const STEREO70_PRJ = `PROJCS["Pulkovo_1942_Adj_58_Stereo70",GEOGCS["GCS_Pulkovo_1942_Adj_1958",DATUM["D_Pulkovo_1942_Adj_1958",SPHEROID["Krassowsky_1940",6378245.0,298.3]],PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]],PROJECTION["Double_Stereographic"],PARAMETER["False_Easting",500000.0],PARAMETER["False_Northing",500000.0],PARAMETER["Central_Meridian",25.0],PARAMETER["Scale_Factor",0.99975],PARAMETER["Latitude_Of_Origin",46.0],UNIT["Meter",1.0]]`;
+// Stereo70 EPSG:31700 — projection officielle du LPIS roumain APIA.
+// Le fichier .prj du ZIP APIA est toujours vide ; shpjs tente proj4("") qui
+// lève une exception. On réinjecte la définition proj4 complète avant le parse.
+//
+// ⚠️  DATUM SHIFT CRITIQUE : le paramètre +towgs84 est indispensable.
+//   Sans lui, proj4 suppose Pulkovo 1942(58) ≡ WGS84 → décalage ~100-200 m en Roumanie.
+//   Valeurs officielles EPSG (transformation EPSG:15776, valable pour la Roumanie) :
+//   tx=33.4  ty=-146.6  tz=-76.3  rx=-0.359  ry=-0.053  rz=0.844  ds=-0.84
+//
+// On injecte la chaîne proj4 directement (format +proj=…) plutôt qu'un WKT,
+// car proj4.js la parse de façon plus fiable, notamment le bloc towgs84.
+const STEREO70_PRJ =
+  "+proj=sterea +lat_0=46 +lon_0=25 +k=0.99975 +x_0=500000 +y_0=500000 " +
+  "+ellps=krass +towgs84=33.4,-146.6,-76.3,-0.359,-0.053,0.844,-0.84 +units=m +no_defs";
 
 // ─── Détection AVANT parse ────────────────────────────────────────────────────
 
