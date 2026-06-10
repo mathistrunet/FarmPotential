@@ -1,7 +1,77 @@
+import JSZip from "jszip";
 import { parseShapefileZipToFeatures } from "./shapefileZip";
 import { ROMANIA_EU_CULTURES } from "../data/romaniaRoCultures";
+import { applyXmlImportContext } from "../utils/xmlImportContext";
 
-// Checks presence of Romanian LPIS DBF fields (case-insensitive).
+// ─── Projection ──────────────────────────────────────────────────────────────
+// Stereo70 EPSG:31700 — projection officielle du LPIS roumain APIA.
+// Le fichier .prj du ZIP APIA est toujours vide ; shpjs tente proj4("") qui
+// lève une exception. On réinjecte la définition proj4 complète avant le parse.
+//
+// ⚠️  DATUM SHIFT CRITIQUE : le paramètre +towgs84 est indispensable.
+//   Sans lui, proj4 suppose Pulkovo 1942(58) ≡ WGS84 → décalage ~100-200 m en Roumanie.
+//   Valeurs officielles EPSG (transformation EPSG:15776, valable pour la Roumanie) :
+//   tx=33.4  ty=-146.6  tz=-76.3  rx=-0.359  ry=-0.053  rz=0.844  ds=-0.84
+//
+// On injecte la chaîne proj4 directement (format +proj=…) plutôt qu'un WKT,
+// car proj4.js la parse de façon plus fiable, notamment le bloc towgs84.
+const STEREO70_PRJ =
+  "+proj=sterea +lat_0=46 +lon_0=25 +k=0.99975 +x_0=500000 +y_0=500000 " +
+  "+ellps=krass +towgs84=33.4,-146.6,-76.3,-0.359,-0.053,0.844,-0.84 +units=m +no_defs";
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+/**
+ * Parse une valeur d'année provenant du DBF roumain.
+ * Le DBF APIA encode les nombres avec virgule décimale : "2025,000000000000000".
+ * Number("2025,000000000000000") → NaN en JS ; parseInt s'arrête à la virgule → 2025.
+ */
+function parseYear(val) {
+  if (val == null || val === "") return null;
+  const n = parseInt(String(val).replace(",", "."), 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+// ─── Détection AVANT parse ────────────────────────────────────────────────────
+
+/** Détecte un ZIP LPIS roumain par le pattern de nom de fichier (ex: RO006248036_2025_0.shp). */
+export async function isRomanianZipBuffer(buffer) {
+  try {
+    const zip = await JSZip.loadAsync(buffer);
+    return Object.keys(zip.files).some((n) => /RO\d{7,9}_\d{4}/i.test(n));
+  } catch {
+    return false;
+  }
+}
+
+// ─── Patch du ZIP ────────────────────────────────────────────────────────────
+
+/**
+ * Recrée le ZIP en injectant le WKT Stereo70 dans chaque .prj vide ou absent.
+ * Cela évite que shpjs lève une exception sur proj4("") lors du parse.
+ * shpjs utilisera ensuite Double_Stereographic → inverse() pour projeter en WGS84.
+ */
+async function patchPrjInZip(buffer) {
+  const zip = await JSZip.loadAsync(buffer);
+  const newZip = new JSZip();
+
+  for (const [name, file] of Object.entries(zip.files)) {
+    if (file.dir) continue;
+
+    if (name.toLowerCase().endsWith(".prj")) {
+      // Remplace toujours le .prj par le WKT Stereo70 (même s'il était non vide)
+      newZip.file(name, STEREO70_PRJ);
+    } else {
+      newZip.file(name, await file.async("arraybuffer"));
+    }
+  }
+
+  return newZip.generateAsync({ type: "arraybuffer" });
+}
+
+// ─── Normalisation APRÈS parse ───────────────────────────────────────────────
+
+/** Détecte si des features viennent d'un shapefile LPIS roumain (farm_id / judet). */
 export function isRomanianShapefile(features) {
   if (!features?.length) return false;
   const props = features[0]?.properties || {};
@@ -17,9 +87,12 @@ function get(props, ...names) {
   return null;
 }
 
-function normalizeRomanianProperties(rawProps) {
+function normalizeRomanianProperties(rawProps, fileYear = null) {
   const farmId   = get(rawProps, "farm_id");
-  const year     = get(rawProps, "year");
+  // L'année peut venir du nom de fichier (prioritaire) ou du champ DBF "year".
+  // Le DBF APIA encode les numériques avec virgule : "2025,000000000000000" → parseInt requis.
+  const yearRaw  = fileYear ?? get(rawProps, "year", "an", "AN", "YEAR", "campanie", "CAMPANIE");
+  const year     = parseYear(yearRaw);
   const judet    = get(rawProps, "judet");
   const siruta   = get(rawProps, "siruta");
   const commune  = get(rawProps, "commune");
@@ -33,14 +106,15 @@ function normalizeRomanianProperties(rawProps) {
   const agroEnv  = get(rawProps, "agro_env");
   const comment  = get(rawProps, "comment");
 
-  // Resolve culture code → metacode + Romanian name
+  // Résolution culture : EU code numérique → metacode interne + nom roumain
   const codeKey = cropCode != null ? String(cropCode).trim() : null;
   const entry = codeKey ? ROMANIA_EU_CULTURES[codeKey] : null;
   const metacode    = entry?.metacode ?? "";
   const nomRo       = entry?.nomRo ?? (cropName ? String(cropName).trim() : "");
+  const assoliaCrop = entry?.assolia ?? null;
   const codeCulture = metacode || codeKey || "";
 
-  // Human-readable parcel name: "Bloc 88 – Parc. 2a"
+  // Nom affiché : "Bloc 88 – Parc. 2a"
   let nomAffiche = null;
   if (blocNr != null && parcelNr != null) {
     const suffix = cropNr ? String(cropNr).trim() : "";
@@ -48,44 +122,75 @@ function normalizeRomanianProperties(rawProps) {
   }
 
   const normalized = {
-    // Standard app fields
-    code_exploitation: farmId != null ? String(farmId) : null,
-    annee:             year   != null ? Number(year)   : null,
-    ilot:              blocNr != null ? String(blocNr) : null,
-    parcelleNo:        parcelNr != null ? String(parcelNr) : null,
+    // Champs standard de l'app
+    code_exploitation: farmId   != null ? String(farmId)   : null,
+    annee:             year,
+    ilot:              blocNr   != null ? String(blocNr)    : null,
+    parcelleNo:        parcelNr != null ? String(parcelNr)  : null,
     nom_parcelle:      nomAffiche,
     nom_affiche:       nomAffiche,
     code_culture:      codeCulture,
-    surface:           areaDec != null ? Number(areaDec) : null,
-    categorie_utilisation: catUse != null ? String(catUse) : null,
-    // Romanian-specific preserved fields
-    judet:             judet   != null ? String(judet)   : null,
-    siruta:            siruta  != null ? String(siruta)  : null,
-    commune:           commune != null ? String(commune) : null,
-    crop_nr:           cropNr  != null ? String(cropNr)  : null,
-    nom_culture_ro:    nomRo,
-    agro_env:          agroEnv != null ? String(agroEnv) : null,
-    comment:           comment != null ? String(comment) : null,
-    // Raw originals for traceability
+    surface:           areaDec  != null ? Number(areaDec)   : null,
+    categorie_utilisation: catUse != null ? String(catUse)  : null,
+    // Champs spécifiques Roumanie conservés
+    judet:             judet    != null ? String(judet)     : null,
+    siruta:            siruta   != null ? String(siruta)    : null,
+    commune:           commune  != null ? String(commune)   : null,
+    crop_nr:           cropNr   != null ? String(cropNr)    : null,
+    nom_culture_ro:    nomRo || null,
+    assolia_culture:   assoliaCrop || null,
+    agro_env:          agroEnv  != null ? String(agroEnv)   : null,
+    comment:           comment  != null ? String(comment)   : null,
+    // Originaux pour traçabilité
     _ro_crop_code:     codeKey,
-    _ro_farm_id:       farmId  != null ? String(farmId)  : null,
+    _ro_farm_id:       farmId   != null ? String(farmId)    : null,
   };
 
-  // Strip nulls
+  // Supprime les nulls
   return Object.fromEntries(Object.entries(normalized).filter(([, v]) => v != null));
 }
 
-export function normalizeRomanianFeatures(features) {
+export function normalizeRomanianFeatures(features, fileYear = null) {
   return features.map((feat) => ({
     ...feat,
-    properties: normalizeRomanianProperties(feat.properties || {}),
+    properties: normalizeRomanianProperties(feat.properties || {}, fileYear),
   }));
 }
 
-export async function parseRomanianShapefileZipToFeatures(fileOrBuffer) {
-  const features = await parseShapefileZipToFeatures(fileOrBuffer);
-  if (!isRomanianShapefile(features)) {
-    throw new Error("RO_SHAPEFILE: Le fichier ne semble pas être un shapefile LPIS roumain");
+// ─── Point d'entrée principal ─────────────────────────────────────────────────
+
+/**
+ * Parse un ZIP LPIS roumain :
+ * 1. Injecte le WKT Stereo70 dans le .prj (fix de l'exception shpjs sur .prj vide)
+ * 2. Passe le buffer corrigé à parseShapefileZipToFeatures (shpjs reprojette en WGS84)
+ * 3. Normalise les propriétés DBF roumaines vers le schéma interne
+ */
+/** Extrait l'année depuis le nom d'un fichier ZIP LPIS (ex: RO006248036_2025_0.zip → 2025). */
+function extractYearFromZip(zip) {
+  for (const name of Object.keys(zip.files)) {
+    const m = name.match(/RO\d+_(\d{4})_/i);
+    if (m) return Number(m[1]);
   }
-  return normalizeRomanianFeatures(features);
+  return null;
+}
+
+export async function parseRomanianShapefileZipToFeatures(buffer) {
+  const zip = await JSZip.loadAsync(buffer);
+  const fileYear = extractYearFromZip(zip);
+
+  const patchedBuffer = await patchPrjInZip(buffer);
+  const rawFeats = await parseShapefileZipToFeatures(patchedBuffer);
+  const normalized = normalizeRomanianFeatures(rawFeats, fileYear);
+
+  // Route la culture vers la bonne colonne selon l'écart avec l'année en cours.
+  // Ex : 2026 → offset 0 → cultureN  |  2025 → offset 1 → cultureN1
+  // Réutilise applyXmlImportContext qui gère déjà ce routage (code_culture inclus).
+  const currentYear = new Date().getFullYear();
+  return normalized.map((feat) => {
+    const annee = feat.properties?.annee;
+    if (!Number.isFinite(annee)) return feat;
+    const offset = currentYear - annee;
+    const [routed] = applyXmlImportContext([feat], { year: annee, cultureOffset: offset });
+    return routed;
+  });
 }

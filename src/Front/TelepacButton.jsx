@@ -2,7 +2,7 @@
 import React, { useRef, useState } from "react";
 import { parseTelepacXmlToFeatures, buildTelepacXML } from "../services/telepacXml";
 import { parseShapefileZipToFeatures } from "../services/shapefileZip";
-import { isRomanianShapefile, normalizeRomanianFeatures } from "../services/romaniaShapefileZip";
+import { isRomanianZipBuffer, parseRomanianShapefileZipToFeatures } from "../services/romaniaShapefileZip";
 import { parseParcellesCsvToFeatures } from "../services/parcellesCsv";
 import { buildParcelShapefileZip } from "../services/parcelleShapefile";
 import { resolveOverlappingParcelsAsync } from "../utils/overlapResolution";
@@ -253,10 +253,14 @@ export default function ImportTelepacButton({
       let feats;
       const name = file.name?.toLowerCase() ?? "";
       if (name.endsWith(".zip")) {
-        const rawFeats = await parseShapefileZipToFeatures(file);
-        feats = isRomanianShapefile(rawFeats)
-          ? normalizeRomanianFeatures(rawFeats)
-          : rawFeats;
+        // Lire le buffer une seule fois, puis choisir le parser selon le format
+        const zipBuffer = await file.arrayBuffer();
+        if (await isRomanianZipBuffer(zipBuffer)) {
+          // ZIP LPIS roumain : patch du .prj Stereo70 + parse + normalisation RO
+          feats = await parseRomanianShapefileZipToFeatures(zipBuffer);
+        } else {
+          feats = await parseShapefileZipToFeatures(file);
+        }
       } else if (name.endsWith(".csv")) {
         feats = await parseParcellesCsvToFeatures(file);
       } else if (name.endsWith(".xml")) {
