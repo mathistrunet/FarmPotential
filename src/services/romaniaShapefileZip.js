@@ -1,6 +1,7 @@
 import JSZip from "jszip";
 import { parseShapefileZipToFeatures } from "./shapefileZip";
 import { ROMANIA_EU_CULTURES } from "../data/romaniaRoCultures";
+import { applyXmlImportContext } from "../utils/xmlImportContext";
 
 // ─── Projection ──────────────────────────────────────────────────────────────
 // Stereo70 EPSG:31700 — projection officielle du LPIS roumain APIA.
@@ -17,6 +18,19 @@ import { ROMANIA_EU_CULTURES } from "../data/romaniaRoCultures";
 const STEREO70_PRJ =
   "+proj=sterea +lat_0=46 +lon_0=25 +k=0.99975 +x_0=500000 +y_0=500000 " +
   "+ellps=krass +towgs84=33.4,-146.6,-76.3,-0.359,-0.053,0.844,-0.84 +units=m +no_defs";
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+/**
+ * Parse une valeur d'année provenant du DBF roumain.
+ * Le DBF APIA encode les nombres avec virgule décimale : "2025,000000000000000".
+ * Number("2025,000000000000000") → NaN en JS ; parseInt s'arrête à la virgule → 2025.
+ */
+function parseYear(val) {
+  if (val == null || val === "") return null;
+  const n = parseInt(String(val).replace(",", "."), 10);
+  return Number.isFinite(n) ? n : null;
+}
 
 // ─── Détection AVANT parse ────────────────────────────────────────────────────
 
@@ -73,9 +87,12 @@ function get(props, ...names) {
   return null;
 }
 
-function normalizeRomanianProperties(rawProps) {
+function normalizeRomanianProperties(rawProps, fileYear = null) {
   const farmId   = get(rawProps, "farm_id");
-  const year     = get(rawProps, "year");
+  // L'année peut venir du nom de fichier (prioritaire) ou du champ DBF "year".
+  // Le DBF APIA encode les numériques avec virgule : "2025,000000000000000" → parseInt requis.
+  const yearRaw  = fileYear ?? get(rawProps, "year", "an", "AN", "YEAR", "campanie", "CAMPANIE");
+  const year     = parseYear(yearRaw);
   const judet    = get(rawProps, "judet");
   const siruta   = get(rawProps, "siruta");
   const commune  = get(rawProps, "commune");
@@ -107,7 +124,7 @@ function normalizeRomanianProperties(rawProps) {
   const normalized = {
     // Champs standard de l'app
     code_exploitation: farmId   != null ? String(farmId)   : null,
-    annee:             year     != null ? Number(year)      : null,
+    annee:             year,
     ilot:              blocNr   != null ? String(blocNr)    : null,
     parcelleNo:        parcelNr != null ? String(parcelNr)  : null,
     nom_parcelle:      nomAffiche,
@@ -133,10 +150,10 @@ function normalizeRomanianProperties(rawProps) {
   return Object.fromEntries(Object.entries(normalized).filter(([, v]) => v != null));
 }
 
-export function normalizeRomanianFeatures(features) {
+export function normalizeRomanianFeatures(features, fileYear = null) {
   return features.map((feat) => ({
     ...feat,
-    properties: normalizeRomanianProperties(feat.properties || {}),
+    properties: normalizeRomanianProperties(feat.properties || {}, fileYear),
   }));
 }
 
@@ -148,8 +165,32 @@ export function normalizeRomanianFeatures(features) {
  * 2. Passe le buffer corrigé à parseShapefileZipToFeatures (shpjs reprojette en WGS84)
  * 3. Normalise les propriétés DBF roumaines vers le schéma interne
  */
+/** Extrait l'année depuis le nom d'un fichier ZIP LPIS (ex: RO006248036_2025_0.zip → 2025). */
+function extractYearFromZip(zip) {
+  for (const name of Object.keys(zip.files)) {
+    const m = name.match(/RO\d+_(\d{4})_/i);
+    if (m) return Number(m[1]);
+  }
+  return null;
+}
+
 export async function parseRomanianShapefileZipToFeatures(buffer) {
+  const zip = await JSZip.loadAsync(buffer);
+  const fileYear = extractYearFromZip(zip);
+
   const patchedBuffer = await patchPrjInZip(buffer);
   const rawFeats = await parseShapefileZipToFeatures(patchedBuffer);
-  return normalizeRomanianFeatures(rawFeats);
+  const normalized = normalizeRomanianFeatures(rawFeats, fileYear);
+
+  // Route la culture vers la bonne colonne selon l'écart avec l'année en cours.
+  // Ex : 2026 → offset 0 → cultureN  |  2025 → offset 1 → cultureN1
+  // Réutilise applyXmlImportContext qui gère déjà ce routage (code_culture inclus).
+  const currentYear = new Date().getFullYear();
+  return normalized.map((feat) => {
+    const annee = feat.properties?.annee;
+    if (!Number.isFinite(annee)) return feat;
+    const offset = currentYear - annee;
+    const [routed] = applyXmlImportContext([feat], { year: annee, cultureOffset: offset });
+    return routed;
+  });
 }
