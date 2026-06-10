@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "description": "Unités de Potentiel de Rendement (UPR) — granularité fine (9 classes). Métadonnées de classement uniquement ; la matrice potentiel × culture vit dans ASSOLIA.",
+  "units": [
+    {
+      "code": "A",
+      "label": "Sol profond fertile",
+      "discriminants": "RU >= 150 mm, pH 5.5–7.3, argile 18–35%, non hydromorphe",
+      "wrbGroups": ["Chernozems", "Phaeozems", "Luvisols", "Cambisols"],
+      "ruTypical": "élevée",
+      "limitingFactor": "aucun (référence)"
+    },
+    {
+      "code": "B",
+      "label": "Sol argileux sain",
+      "discriminants": "argile 35–50%, RU bonne, non vertique, non hydromorphe",
+      "wrbGroups": ["Luvisols", "Cambisols"],
+      "ruTypical": "bonne",
+      "limitingFactor": "travaillabilité"
+    },
+    {
+      "code": "C",
+      "label": "Sol vertique",
+      "discriminants": "Vertisol ou argile > 50%",
+      "wrbGroups": ["Vertisols"],
+      "ruTypical": "bonne mais peu disponible",
+      "limitingFactor": "fenêtre de travail étroite"
+    },
+    {
+      "code": "D",
+      "label": "Sol limoneux battant",
+      "discriminants": "limon > 50% et argile < 30% (dominante limoneuse, testé avant la RU)",
+      "wrbGroups": ["Luvisols", "Cambisols", "Retisols"],
+      "ruTypical": "moyenne",
+      "limitingFactor": "battance"
+    },
+    {
+      "code": "E",
+      "label": "Sol à RU faible",
+      "discriminants": "RU < 90 mm ou sable > 55% ou cailloux > 20% ou Leptosol",
+      "wrbGroups": ["Arenosols", "Regosols", "Leptosols"],
+      "ruTypical": "faible",
+      "limitingFactor": "déficit hydrique"
+    },
+    {
+      "code": "F",
+      "label": "Sol hydromorphe",
+      "discriminants": "WRB hydromorphe",
+      "wrbGroups": ["Gleysols", "Stagnosols", "Planosols"],
+      "ruTypical": "variable",
+      "limitingFactor": "excès d'eau"
+    },
+    {
+      "code": "G",
+      "label": "Sol acide",
+      "discriminants": "pH < 5.5",
+      "wrbGroups": ["Podzols", "Acrisols", "Alisols"],
+      "ruTypical": "variable",
+      "limitingFactor": "toxicité Al"
+    },
+    {
+      "code": "H",
+      "label": "Sol calcaire / superficiel",
+      "discriminants": "pH > 7.3 + Calcisol, ou Leptosol calcaire",
+      "wrbGroups": ["Calcisols", "Leptosols"],
+      "ruTypical": "faible–moyenne",
+      "limitingFactor": "chlorose ferrique"
+    },
+    {
+      "code": "I",
+      "label": "Sol salé / sodique",
+      "discriminants": "WRB salin/sodique",
+      "wrbGroups": ["Solonchaks", "Solonetz"],
+      "ruTypical": "variable",
+      "limitingFactor": "toxicité sel/Na"
+    }
+  ]
+}

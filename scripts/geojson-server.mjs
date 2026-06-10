@@ -10,6 +10,7 @@ import {
   computeSoilIndicators,
   parseSoilGridsProperties,
 } from "../src/services/soilgrids.js";
+import { classifyParcelUpr } from "../src/services/uprClassification.js";
 import { SoilGridsClient, SoilGridsError } from "./soilgrids/SoilGridsClient.mjs";
 import { SoilGridsCacheRepository } from "./soilgrids/SoilGridsCacheRepository.mjs";
 import { SoilGridsGridService } from "./soilgrids/SoilGridsGridService.mjs";
@@ -24,7 +25,7 @@ const PUBLIC_DATA_DIR = path.resolve(process.cwd(), "public", "data");
 const SOILMAP_DEP_DIR = path.join(PUBLIC_DATA_DIR, "soilmap_dep");
 const TOPONYMIE_DIR = path.join(PUBLIC_DATA_DIR, "TOPONYMIE");
 const POINT_STRATEGY = process.env.SOILGRIDS_POINT_STRATEGY || "centroid";
-const CALC_VERSION = "v1.0.0";
+const CALC_VERSION = "v1.6.0-upr";
 
 const soilClient = new SoilGridsClient({ timeoutMs: 15_000, retries: 2 });
 const soilCacheRepository = new SoilGridsCacheRepository({ dataDir: DATA_DIR, ttlDays: 30 });
@@ -188,24 +189,31 @@ async function loadSoilGridsForParcel({ parcelId, refresh, depthProfile }) {
   const cacheKey = `${round4(pointInfo.lat)}:${round4(pointInfo.lon)}:${(depthProfile || []).join("|")}`;
 
   if (!refresh) {
+    // On ignore les entrées d'une version de calcul antérieure (ex. sans UPR)
+    // pour forcer un recalcul plutôt que de resservir un résultat obsolète.
+    const isFresh = (entry) => entry && entry.calc_version === CALC_VERSION;
     const parcelCache = await soilCacheRepository.getByParcel(String(parcelId));
-    if (parcelCache) return { payload: parcelCache.normalized_json, cache: true };
+    if (isFresh(parcelCache)) return { payload: parcelCache.normalized_json, cache: true };
     const shared = await soilCacheRepository.getByCacheKey(cacheKey);
-    if (shared) return { payload: shared.normalized_json, cache: true };
+    if (isFresh(shared)) return { payload: shared.normalized_json, cache: true };
   }
 
   const inflightKey = `${parcelId}:${cacheKey}`;
   if (inflightSoilRequests.has(inflightKey)) return inflightSoilRequests.get(inflightKey);
 
   const promise = (async () => {
-    const { payload: raw, meta } = await soilClient.query({
-      lat: pointInfo.lat,
-      lon: pointInfo.lon,
-      depths: depthProfile,
-    });
+    const [{ payload: raw, meta }, classification] = await Promise.all([
+      soilClient.query({ lat: pointInfo.lat, lon: pointInfo.lon, depths: depthProfile }),
+      soilClient.classify({ lat: pointInfo.lat, lon: pointInfo.lon }),
+    ]);
+    const wrbClassName = classification?.wrbClassName ?? null;
+
     const profile = parseSoilGridsProperties(raw, { depths: depthProfile });
-    const summary = computeSoilIndicators(profile);
+    const summary = computeSoilIndicators(profile, { wrbClass: wrbClassName });
     if (pointInfo.warning) summary.warnings.push(pointInfo.warning);
+
+    const upr = classifyParcelUpr(profile, summary, wrbClassName);
+    const wrb = { className: wrbClassName, probability: classification?.probability ?? null };
 
     const normalized = buildSoilGridsResponse({
       parcelId: String(parcelId),
@@ -216,6 +224,8 @@ async function loadSoilGridsForParcel({ parcelId, refresh, depthProfile }) {
       calcVersion: CALC_VERSION,
       profile,
       summary,
+      wrb,
+      upr,
     });
 
     feature.properties = feature.properties || {};
@@ -232,6 +242,7 @@ async function loadSoilGridsForParcel({ parcelId, refresh, depthProfile }) {
       lat: pointInfo.lat,
       lon: pointInfo.lon,
       response_raw_json: raw,
+      classification_raw_json: classification?.raw ?? null,
       normalized_json: normalized,
       fetched_at: fetchedAt,
       source: "SoilGrids v2",

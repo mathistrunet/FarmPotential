@@ -20,7 +20,12 @@ exports[`soilgrids parsing > matches backend contract snapshot for 3 golden poin
           "unit": "g/kg",
           "value": 1.8,
         },
-        "warnings": [],
+        "warnings": [
+          "missing_property:wv0033",
+          "missing_property:wv1500",
+        ],
+        "wv0033_pct": null,
+        "wv1500_pct": null,
       },
       {
         "bulkDensity_gcm3": 1.5,
@@ -37,7 +42,12 @@ exports[`soilgrids parsing > matches backend contract snapshot for 3 golden poin
           "unit": "g/kg",
           "value": 1.4,
         },
-        "warnings": [],
+        "warnings": [
+          "missing_property:wv0033",
+          "missing_property:wv1500",
+        ],
+        "wv0033_pct": null,
+        "wv1500_pct": null,
       },
       {
         "bulkDensity_gcm3": 1.52,
@@ -54,12 +64,17 @@ exports[`soilgrids parsing > matches backend contract snapshot for 3 golden poin
           "unit": "g/kg",
           "value": 1,
         },
-        "warnings": [],
+        "warnings": [
+          "missing_property:wv0033",
+          "missing_property:wv1500",
+        ],
+        "wv0033_pct": null,
+        "wv1500_pct": null,
       },
     ],
     "source": {
       "calcVersion": "v1.0.0",
-      "endpoint": "properties/query",
+      "endpoint": "properties/query + classification/query",
       "fetchedAt": "2026-01-01T00:00:00.000Z",
       "lat": 43.61,
       "lon": 1.44,
@@ -69,6 +84,8 @@ exports[`soilgrids parsing > matches backend contract snapshot for 3 golden poin
     },
     "summary": {
       "availableWater_mm": 223,
+      "availableWater_wv_depth_cm": 180,
+      "availableWater_wv_mm": null,
       "bulkDensity_gcm3": 1.45,
       "cec_cmolkg": 16,
       "confidence": "high",
@@ -84,8 +101,12 @@ exports[`soilgrids parsing > matches backend contract snapshot for 3 golden poin
         "silt_pct": 40,
       },
       "textureClass": "limono-argileux",
-      "warnings": [],
+      "warnings": [
+        "ru_wv_unavailable_fallback_heuristic",
+      ],
     },
+    "upr": null,
+    "wrb": null,
   },
   {
     "parcelId": "B",
@@ -105,7 +126,12 @@ exports[`soilgrids parsing > matches backend contract snapshot for 3 golden poin
           "unit": "g/kg",
           "value": 1.8,
         },
-        "warnings": [],
+        "warnings": [
+          "missing_property:wv0033",
+          "missing_property:wv1500",
+        ],
+        "wv0033_pct": null,
+        "wv1500_pct": null,
       },
       {
         "bulkDensity_gcm3": 1.5,
@@ -122,7 +148,12 @@ exports[`soilgrids parsing > matches backend contract snapshot for 3 golden poin
           "unit": "g/kg",
           "value": 1.4,
         },
-        "warnings": [],
+        "warnings": [
+          "missing_property:wv0033",
+          "missing_property:wv1500",
+        ],
+        "wv0033_pct": null,
+        "wv1500_pct": null,
       },
       {
         "bulkDensity_gcm3": 1.52,
@@ -139,12 +170,17 @@ exports[`soilgrids parsing > matches backend contract snapshot for 3 golden poin
           "unit": "g/kg",
           "value": 1,
         },
-        "warnings": [],
+        "warnings": [
+          "missing_property:wv0033",
+          "missing_property:wv1500",
+        ],
+        "wv0033_pct": null,
+        "wv1500_pct": null,
       },
     ],
     "source": {
       "calcVersion": "v1.0.0",
-      "endpoint": "properties/query",
+      "endpoint": "properties/query + classification/query",
       "fetchedAt": "2026-01-01T00:00:00.000Z",
       "lat": 47.21,
       "lon": -1.55,
@@ -154,6 +190,8 @@ exports[`soilgrids parsing > matches backend contract snapshot for 3 golden poin
     },
     "summary": {
       "availableWater_mm": 223,
+      "availableWater_wv_depth_cm": 180,
+      "availableWater_wv_mm": null,
       "bulkDensity_gcm3": 1.45,
       "cec_cmolkg": 16,
       "confidence": "high",
@@ -169,8 +207,12 @@ exports[`soilgrids parsing > matches backend contract snapshot for 3 golden poin
         "silt_pct": 40,
       },
       "textureClass": "limono-argileux",
-      "warnings": [],
+      "warnings": [
+        "ru_wv_unavailable_fallback_heuristic",
+      ],
     },
+    "upr": null,
+    "wrb": null,
   },
   {
     "parcelId": "C",
@@ -190,7 +232,12 @@ exports[`soilgrids parsing > matches backend contract snapshot for 3 golden poin
           "unit": "g/kg",
           "value": 1.8,
         },
-        "warnings": [],
+        "warnings": [
+          "missing_property:wv0033",
+          "missing_property:wv1500",
+        ],
+        "wv0033_pct": null,
+        "wv1500_pct": null,
       },
       {
         "bulkDensity_gcm3": 1.5,
@@ -207,7 +254,12 @@ exports[`soilgrids parsing > matches backend contract snapshot for 3 golden poin
           "unit": "g/kg",
           "value": 1.4,
         },
-        "warnings": [],
+        "warnings": [
+          "missing_property:wv0033",
+          "missing_property:wv1500",
+        ],
+        "wv0033_pct": null,
+        "wv1500_pct": null,
       },
       {
         "bulkDensity_gcm3": 1.52,
@@ -224,12 +276,17 @@ exports[`soilgrids parsing > matches backend contract snapshot for 3 golden poin
           "unit": "g/kg",
           "value": 1,
         },
-        "warnings": [],
+        "warnings": [
+          "missing_property:wv0033",
+          "missing_property:wv1500",
+        ],
+        "wv0033_pct": null,
+        "wv1500_pct": null,
       },
     ],
     "source": {
       "calcVersion": "v1.0.0",
-      "endpoint": "properties/query",
+      "endpoint": "properties/query + classification/query",
       "fetchedAt": "2026-01-01T00:00:00.000Z",
       "lat": 45.76,
       "lon": 4.84,
@@ -239,6 +296,8 @@ exports[`soilgrids parsing > matches backend contract snapshot for 3 golden poin
     },
     "summary": {
       "availableWater_mm": 223,
+      "availableWater_wv_depth_cm": 180,
+      "availableWater_wv_mm": null,
       "bulkDensity_gcm3": 1.45,
       "cec_cmolkg": 16,
       "confidence": "high",
@@ -254,8 +313,12 @@ exports[`soilgrids parsing > matches backend contract snapshot for 3 golden poin
         "silt_pct": 40,
       },
       "textureClass": "limono-argileux",
-      "warnings": [],
+      "warnings": [
+        "ru_wv_unavailable_fallback_heuristic",
+      ],
     },
+    "upr": null,
+    "wrb": null,
   },
 ]
 `;
