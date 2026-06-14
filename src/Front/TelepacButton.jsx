@@ -1,8 +1,10 @@
 // src/Front/TelepacButton.jsx
 import React, { useRef, useState } from "react";
 import { parseTelepacXmlToFeatures, buildTelepacXML } from "../services/telepacXml";
-import { parseShapefileZipToFeatures } from "../services/shapefileZip";
-import { isRomanianZipBuffer, parseRomanianShapefileZipToFeatures } from "../services/romaniaShapefileZip";
+import {
+  routeShapefileBufferToFeatures,
+  parseShapefileFilesToFeatures,
+} from "../services/romaniaShapefileZip";
 import { parseParcellesCsvToFeatures } from "../services/parcellesCsv";
 import { buildParcelShapefileZip } from "../services/parcelleShapefile";
 import { resolveOverlappingParcelsAsync } from "../utils/overlapResolution";
@@ -24,6 +26,11 @@ const IconUpload = () => (
 const IconDownload = () => (
   <svg viewBox="0 0 24 24" style={iconStyle}>
     <path d="M11 5h2v8h3l-4 4-4-4h3V5zM5 19h14v2H5v-2z" fill="currentColor" />
+  </svg>
+);
+const IconFolder = () => (
+  <svg viewBox="0 0 24 24" style={iconStyle}>
+    <path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z" fill="currentColor" />
   </svg>
 );
 
@@ -208,6 +215,7 @@ export default function ImportTelepacButton({
   onError,
 }) {
   const fileInputRef = useRef(null);
+  const folderInputRef = useRef(null);
   const [loading, setLoading] = useState(false);
   const [columnDialog, setColumnDialog] = useState(null);
   const columnDialogResolveRef = useRef(null);
@@ -253,14 +261,10 @@ export default function ImportTelepacButton({
       let feats;
       const name = file.name?.toLowerCase() ?? "";
       if (name.endsWith(".zip")) {
-        // Lire le buffer une seule fois, puis choisir le parser selon le format
+        // ZIP shapefile : routage automatique LPIS roumain (patch .prj Stereo70 +
+        // normalisation RO) ou shapefile générique.
         const zipBuffer = await file.arrayBuffer();
-        if (await isRomanianZipBuffer(zipBuffer)) {
-          // ZIP LPIS roumain : patch du .prj Stereo70 + parse + normalisation RO
-          feats = await parseRomanianShapefileZipToFeatures(zipBuffer);
-        } else {
-          feats = await parseShapefileZipToFeatures(file);
-        }
+        feats = await routeShapefileBufferToFeatures(zipBuffer);
       } else if (name.endsWith(".csv")) {
         feats = await parseParcellesCsvToFeatures(file);
       } else if (name.endsWith(".xml")) {
@@ -281,79 +285,7 @@ export default function ImportTelepacButton({
       } else {
         throw new Error("FORMAT_INVALIDE");
       }
-      if (!feats || feats.length === 0) {
-        throw new Error("IMPORT_VIDE");
-      }
-      const draw = drawRef?.current,
-        map = mapRef?.current;
-      if (!draw || !map) return;
-
-      // // Nettoyage si mode replace
-      // if (mode === "replace") {
-      //   const ids = (draw.getAll()?.features ?? []).map((f) => f.id).filter(Boolean);
-      //   if (ids.length) draw.delete(ids);
-      // }
-
-      // Ajout des features
-      // (on peut ajouter un FeatureCollection d’un coup mais on garde l’itératif robuste)
-      for (const ft of feats) draw.add(ft);
-
-      void resolveOverlappingParcelsAsync(draw, { mode: "warn" });
-
-      // Zoom sur l’emprise (MultiPolygon pris en charge)
-      const importedFeatures = draw.getAll()?.features ?? [];
-      if (zoomOnImport && importedFeatures.length) {
-        let minLon = Infinity,
-          minLat = Infinity,
-          maxLon = -Infinity,
-          maxLat = -Infinity;
-        for (const f of importedFeatures) {
-          const t = f.geometry?.type;
-          const coords =
-            t === "Polygon"
-              ? f.geometry.coordinates.flat(1)
-              : t === "MultiPolygon"
-              ? f.geometry.coordinates.flat(2)
-              : [];
-          for (const [lon, lat] of coords) {
-            if (lon < minLon) minLon = lon;
-            if (lat < minLat) minLat = lat;
-            if (lon > maxLon) maxLon = lon;
-            if (lat > maxLat) maxLat = lat;
-          }
-        }
-        if (minLon < Infinity) {
-          try {
-            map.fitBounds(
-              [
-                [minLon, minLat],
-                [maxLon, maxLat],
-              ],
-              { padding: 40 }
-            );
-          } catch {
-            /* ignore fitBounds errors */
-          }
-        }
-      }
-
-      // Synchronise la liste et sélectionne la 1ʳᵉ
-      const arr = draw.getAll()?.features ?? [];
-      const polys = arr.filter(
-        (f) => f.geometry?.type === "Polygon" || f.geometry?.type === "MultiPolygon"
-      );
-      setFeatures?.(polys);
-      if (arr[0]?.id && typeof selectFeatureOnMap === "function") {
-        selectFeatureOnMap(arr[0].id, false);
-      }
-
-      onImportMeta?.({
-        pacage: feats?.[0]?.properties?.code_exploitation || feats?.[0]?.properties?.pacage || null,
-        year: Number.isFinite(Number(feats?.[0]?.properties?.annee))
-          ? Number(feats?.[0]?.properties?.annee)
-          : null,
-      });
-      onImported?.(feats);
+      await finalizeImport(feats);
     } catch (err) {
       console.error(err);
       onError?.(err);
@@ -365,6 +297,106 @@ export default function ImportTelepacButton({
       // Permet de ré-importer le même fichier juste après
       e.target.value = "";
     }
+  }
+
+  // Import d'un dossier (shapefile non zippé) : sélection via webkitdirectory.
+  // Gère un dossier contenant directement les .shp/.dbf/.shx/.prj, un dossier
+  // contenant un sous-dossier avec ces fichiers, ou un dossier contenant un .zip.
+  async function onPickFolder(e) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    setLoading(true);
+    try {
+      const feats = await parseShapefileFilesToFeatures(files);
+      await finalizeImport(feats);
+    } catch (err) {
+      console.error(err);
+      onError?.(err);
+      alert(
+        "Impossible de lire ce dossier. Sélectionne un dossier contenant les fichiers shapefile (.shp, .dbf, .shx, .prj), zippés ou non."
+      );
+    } finally {
+      setLoading(false);
+      e.target.value = "";
+    }
+  }
+
+  // Post-traitement commun : ajout au draw, résolution des recouvrements,
+  // zoom sur l'emprise, synchronisation de la liste et remontée des métadonnées.
+  async function finalizeImport(feats) {
+    if (!feats || feats.length === 0) {
+      throw new Error("IMPORT_VIDE");
+    }
+    const draw = drawRef?.current,
+      map = mapRef?.current;
+    if (!draw || !map) return;
+
+    // // Nettoyage si mode replace
+    // if (mode === "replace") {
+    //   const ids = (draw.getAll()?.features ?? []).map((f) => f.id).filter(Boolean);
+    //   if (ids.length) draw.delete(ids);
+    // }
+
+    // Ajout des features
+    // (on peut ajouter un FeatureCollection d’un coup mais on garde l’itératif robuste)
+    for (const ft of feats) draw.add(ft);
+
+    void resolveOverlappingParcelsAsync(draw, { mode: "warn" });
+
+    // Zoom sur l’emprise (MultiPolygon pris en charge)
+    const importedFeatures = draw.getAll()?.features ?? [];
+    if (zoomOnImport && importedFeatures.length) {
+      let minLon = Infinity,
+        minLat = Infinity,
+        maxLon = -Infinity,
+        maxLat = -Infinity;
+      for (const f of importedFeatures) {
+        const t = f.geometry?.type;
+        const coords =
+          t === "Polygon"
+            ? f.geometry.coordinates.flat(1)
+            : t === "MultiPolygon"
+            ? f.geometry.coordinates.flat(2)
+            : [];
+        for (const [lon, lat] of coords) {
+          if (lon < minLon) minLon = lon;
+          if (lat < minLat) minLat = lat;
+          if (lon > maxLon) maxLon = lon;
+          if (lat > maxLat) maxLat = lat;
+        }
+      }
+      if (minLon < Infinity) {
+        try {
+          map.fitBounds(
+            [
+              [minLon, minLat],
+              [maxLon, maxLat],
+            ],
+            { padding: 40 }
+          );
+        } catch {
+          /* ignore fitBounds errors */
+        }
+      }
+    }
+
+    // Synchronise la liste et sélectionne la 1ʳᵉ
+    const arr = draw.getAll()?.features ?? [];
+    const polys = arr.filter(
+      (f) => f.geometry?.type === "Polygon" || f.geometry?.type === "MultiPolygon"
+    );
+    setFeatures?.(polys);
+    if (arr[0]?.id && typeof selectFeatureOnMap === "function") {
+      selectFeatureOnMap(arr[0].id, false);
+    }
+
+    onImportMeta?.({
+      pacage: feats?.[0]?.properties?.code_exploitation || feats?.[0]?.properties?.pacage || null,
+      year: Number.isFinite(Number(feats?.[0]?.properties?.annee))
+        ? Number(feats?.[0]?.properties?.annee)
+        : null,
+    });
+    onImported?.(feats);
   }
 
   return (
@@ -385,6 +417,32 @@ export default function ImportTelepacButton({
         type="file"
         accept={fileAccept}
         onChange={onPickFile}
+        style={{ display: "none" }}
+      />
+      <button
+        onClick={() => !disabled && !loading && folderInputRef.current?.click()}
+        style={btn}
+        title="Importer un dossier de shapefile non zippé (.shp, .dbf, .shx, .prj)"
+        disabled={disabled || loading}
+      >
+        <IconFolder />{" "}
+        {compact ? null : (
+          <span>{loading ? "Import..." : "Importer dossier"}</span>
+        )}
+      </button>
+      <input
+        ref={(el) => {
+          folderInputRef.current = el;
+          // Attributs non standard : posés en propriétés DOM pour activer la
+          // sélection de dossier (récursive) dans les navigateurs Chromium.
+          if (el) {
+            el.webkitdirectory = true;
+            el.directory = true;
+          }
+        }}
+        type="file"
+        multiple
+        onChange={onPickFolder}
         style={{ display: "none" }}
       />
       {columnDialog && (

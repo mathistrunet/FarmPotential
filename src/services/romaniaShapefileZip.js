@@ -194,3 +194,75 @@ export async function parseRomanianShapefileZipToFeatures(buffer) {
     return routed;
   });
 }
+
+// ─── Routeur ZIP shapefile (roumain ou générique) ─────────────────────────────
+
+/**
+ * Route un buffer ZIP de shapefile vers le bon parser :
+ * LPIS roumain (détecté par le pattern de nom de fichier) sinon shapefile générique.
+ * Point d'entrée commun aux imports ZIP et aux imports « dossier » reconstruits en ZIP.
+ */
+export async function routeShapefileBufferToFeatures(buffer) {
+  if (await isRomanianZipBuffer(buffer)) {
+    return parseRomanianShapefileZipToFeatures(buffer);
+  }
+  return parseShapefileZipToFeatures(buffer);
+}
+
+// ─── Import « dossier » / fichiers non zippés ─────────────────────────────────
+
+// Extensions composant un shapefile. .shp/.dbf/.shx sont indispensables au parse ;
+// les autres (.prj/.cpg/.qpj/.sbn…) sont repris si présents.
+const SHAPEFILE_PART_RE = /\.(shp|dbf|shx|prj|cpg|qpj|sbn|sbx|qix|fix|aih|ain|atx)$/i;
+
+/** Vrai si le nom de fichier est une composante de shapefile. */
+export function isShapefilePart(name) {
+  return SHAPEFILE_PART_RE.test(String(name || ""));
+}
+
+/**
+ * Reconstruit un buffer ZIP en mémoire à partir d'une liste de fichiers
+ * (sélection de dossier via `webkitdirectory`, ou multi-fichiers).
+ *
+ * Gère indifféremment :
+ *  - un dossier contenant directement les .shp/.dbf/.shx/.prj ;
+ *  - un dossier contenant un sous-dossier avec ces fichiers (via webkitRelativePath) ;
+ *  - un dossier contenant déjà un .zip (le ZIP est alors renvoyé tel quel).
+ *
+ * La structure relative est préservée dans le ZIP : shpjs regroupe les composantes
+ * par chemin sans extension, ce qui évite toute collision entre jeux shapefile.
+ *
+ * Renvoie null si aucune composante shapefile ni ZIP n'est trouvée.
+ */
+export async function buildShapefileZipBufferFromFiles(files) {
+  const list = Array.from(files || []);
+
+  // Cas « dossier contenant un .zip » : on renvoie le ZIP directement.
+  const zipFile = list.find((f) => /\.zip$/i.test(f?.name || ""));
+  if (zipFile) return zipFile.arrayBuffer();
+
+  const zip = new JSZip();
+  let count = 0;
+  for (const file of list) {
+    const relPath = file?.webkitRelativePath || file?.name || "";
+    if (!isShapefilePart(relPath)) continue;
+    const entryName = relPath.replace(/\\/g, "/").replace(/^\/+/, "");
+    zip.file(entryName, await file.arrayBuffer());
+    count += 1;
+  }
+
+  if (count === 0) return null;
+  return zip.generateAsync({ type: "arraybuffer" });
+}
+
+/**
+ * Parse une sélection de fichiers shapefile non zippés (dossier ou multi-fichiers)
+ * en reconstruisant un ZIP en mémoire, puis en le routant comme un import ZIP.
+ */
+export async function parseShapefileFilesToFeatures(files) {
+  const buffer = await buildShapefileZipBufferFromFiles(files);
+  if (!buffer) {
+    throw new Error("SHAPE_FOLDER: aucun fichier shapefile (.shp/.dbf/.shx) trouvé dans le dossier");
+  }
+  return routeShapefileBufferToFeatures(buffer);
+}
