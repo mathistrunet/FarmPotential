@@ -949,18 +949,26 @@ export default function ParcelleEditor({
 
   const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-  // Récupère l'UPR d'une parcelle avec une relance simple en cas de rate-limit serveur.
+  // Récupère l'UPR d'une parcelle avec relance sur rate-limit serveur. Le 429 est désormais
+  // attendu (requêtes parallèles) : on relance avec un backoff court et jitté pour étaler les
+  // reprises plutôt que de les faire converger en troupeau.
   const fetchUprWithRetry = async (parcelId, attempt = 0) => {
     try {
       return await fetchParcelSoilGrids(parcelId);
     } catch (error) {
-      if (attempt < 3 && /rate limit/i.test(error?.message || "")) {
-        await delay(5000);
+      if (attempt < 8 && /rate limit/i.test(error?.message || "")) {
+        await delay(1500 + Math.random() * 1500);
         return fetchUprWithRetry(parcelId, attempt + 1);
       }
       throw error;
     }
   };
+
+  // Nombre de remontées SoilGrids menées en parallèle. Le serveur mutualise les requêtes d'un
+  // même pixel 250 m et ne compte que les vrais appels ISRIC dans son rate-limit (60/min), donc
+  // une concurrence modérée sature le débit utile sans déclencher de 429 sur les exploitations
+  // groupées (cas courant), tout en restant correcte pour les parcelles dispersées.
+  const SOIL_FILL_CONCURRENCY = 6;
 
   const fillSoilTypeColumn = async () => {
     if (!Array.isArray(features) || features.length === 0) {
@@ -974,9 +982,13 @@ export default function ParcelleEditor({
       await saveParcellesGeojson(features);
 
       let filled = 0;
+      let done = 0;
       const errors = [];
 
-      for (let i = 0; i < features.length; i += 1) {
+      // Traitement par un pool de workers concurrents : chacun pioche la parcelle suivante dans
+      // la file tant qu'il en reste. La déduplication par pixel est gérée côté serveur.
+      let nextIndex = 0;
+      const processOne = async (i) => {
         const feature = features[i];
         const idKey = String(feature.id ?? i);
         const parcelId = resolveParcelId(feature);
@@ -1007,10 +1019,20 @@ export default function ParcelleEditor({
             errors.push(parcelId);
           }
         }
-        // Espacement léger pour rester sous le rate-limit (60 req/min côté serveur).
-        if (i < features.length - 1) await delay(1100);
-        setSoilFillProgress({ done: i + 1, total: features.length });
-      }
+        done += 1;
+        setSoilFillProgress({ done, total: features.length });
+      };
+
+      const worker = async () => {
+        while (nextIndex < features.length) {
+          const i = nextIndex;
+          nextIndex += 1;
+          await processOne(i);
+        }
+      };
+      await Promise.all(
+        Array.from({ length: Math.min(SOIL_FILL_CONCURRENCY, features.length) }, () => worker())
+      );
 
       if (errors.length) {
         alert(`${filled} parcelle(s) remplie(s). ${errors.length} sans donnée SoilGrids exploitable (point hors couverture ou identifiant manquant).`);
