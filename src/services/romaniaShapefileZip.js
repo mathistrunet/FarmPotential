@@ -112,7 +112,10 @@ function normalizeRomanianProperties(rawProps, fileYear = null) {
   const metacode    = entry?.metacode ?? "";
   const nomRo       = entry?.nomRo ?? (cropName ? String(cropName).trim() : "");
   const assoliaCrop = entry?.assolia ?? null;
-  const codeCulture = metacode || codeKey || "";
+  // À défaut de metacode (cultures hors structure, ex. « Arable other crop »), on
+  // conserve le nom ASSOLIA pour qu'il se retrouve tel quel dans le CSV exporté
+  // plutôt que le code LPIS numérique. Repli final sur le code brut.
+  const codeCulture = metacode || assoliaCrop || codeKey || "";
 
   // Nom affiché : "Bloc 88 – Parc. 2a"
   let nomAffiche = null;
