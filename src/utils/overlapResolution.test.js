@@ -19,15 +19,24 @@ function rectangleFromLambert(x, y, width, height) {
 }
 
 function createDraw(features) {
-  const updated = [];
+  // resolveOverlappingParcels applique les warnings via un draw.set() atomique :
+  // le mock garde donc la dernière collection écrite et expose les warnings résolus.
+  const state = { features };
   return {
-    getAll: () => ({ features }),
-    setFeatureProperty: (id, key, value) => {
-      updated.push({ id, key, value });
-    },
+    getAll: () => ({ features: state.features }),
+    setFeatureProperty: () => {},
     delete: () => {},
     add: () => {},
-    updated,
+    set: (collection) => {
+      state.features = collection?.features ?? [];
+    },
+    getWarningById: () =>
+      Object.fromEntries(
+        state.features.map((feature) => [
+          feature.id,
+          Boolean(feature.properties?.overlap_warning),
+        ])
+      ),
   };
 }
 
@@ -49,11 +58,7 @@ describe("resolveOverlappingParcels", () => {
     const draw = createDraw([featureA, featureB]);
     resolveOverlappingParcels(draw, { mode: "warn" });
 
-    const warningById = Object.fromEntries(
-      draw.updated
-        .filter((entry) => entry.key === "overlap_warning")
-        .map((entry) => [entry.id, entry.value])
-    );
+    const warningById = draw.getWarningById();
 
     expect(warningById.a).toBe(false);
     expect(warningById.b).toBe(false);
@@ -76,11 +81,7 @@ describe("resolveOverlappingParcels", () => {
     const draw = createDraw([featureA, featureB]);
     resolveOverlappingParcels(draw, { mode: "warn" });
 
-    const warningById = Object.fromEntries(
-      draw.updated
-        .filter((entry) => entry.key === "overlap_warning")
-        .map((entry) => [entry.id, entry.value])
-    );
+    const warningById = draw.getWarningById();
 
     expect(warningById.a).toBe(true);
     expect(warningById.b).toBe(true);
