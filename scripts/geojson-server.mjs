@@ -16,6 +16,7 @@ import { SoilGridsCacheRepository } from "./soilgrids/SoilGridsCacheRepository.m
 import { SoilGridsGridService } from "./soilgrids/SoilGridsGridService.mjs";
 import { resolveParcelPoint } from "./soilgrids/geometry.mjs";
 import { closeGeoPackageCache, queryGeoPackageByBbox } from "./geopackage-query.mjs";
+import { closeRpgRomaniaCache, queryRpgRomaniaByBbox } from "./rpg-romania-query.mjs";
 
 const PORT = Number(process.env.PORT || 4174);
 const DATA_DIR = path.resolve(process.cwd(), "data");
@@ -24,6 +25,7 @@ const SOIL_MAPPING_FILE = path.join(DATA_DIR, "soil-type-mappings.json");
 const PUBLIC_DATA_DIR = path.resolve(process.cwd(), "public", "data");
 const SOILMAP_DEP_DIR = path.join(PUBLIC_DATA_DIR, "soilmap_dep");
 const TOPONYMIE_DIR = path.join(PUBLIC_DATA_DIR, "TOPONYMIE");
+const RPG_ROMANIA_DIR = path.join(PUBLIC_DATA_DIR, "RPG Rom");
 const POINT_STRATEGY = process.env.SOILGRIDS_POINT_STRATEGY || "centroid";
 const CALC_VERSION = "v1.6.0-upr";
 
@@ -419,6 +421,45 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (requestUrl.pathname === "/api/rpg-romania") {
+    res.setHeader("Content-Type", "application/json");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET,OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    if (req.method === "OPTIONS") return void res.writeHead(204).end();
+    if (req.method !== "GET") return void res.writeHead(405).end(JSON.stringify({ error: "Method not allowed." }));
+
+    const bbox = parseBboxParam(requestUrl.searchParams.get("bbox"));
+    const limit = parseIntegerParam(requestUrl.searchParams.get("limit"), 1000, 1, 1000);
+    if (!bbox) {
+      res.writeHead(400);
+      res.end(JSON.stringify({ error: "Missing or invalid bbox query parameter." }));
+      return;
+    }
+
+    try {
+      const collection = queryRpgRomaniaByBbox({
+        dirPath: RPG_ROMANIA_DIR,
+        bbox,
+        maxFeatures: limit,
+      });
+      res.writeHead(200);
+      res.end(
+        JSON.stringify({
+          bounds: bbox,
+          featureCount: collection.features.length,
+          collection,
+        })
+      );
+    } catch (error) {
+      const message = error?.message || "RPG Romania query failed.";
+      log("RPG_ROMANIA_ERROR", { message, bbox, limit });
+      res.writeHead(500);
+      res.end(JSON.stringify({ error: message }));
+    }
+    return;
+  }
+
   if (requestUrl.pathname.startsWith("/api/parcelles")) {
     res.setHeader("Content-Type", "application/json");
     res.setHeader("Access-Control-Allow-Origin", "*");
@@ -563,5 +604,6 @@ server.listen(PORT, () => {
 
 process.on("exit", () => {
   closeGeoPackageCache();
+  closeRpgRomaniaCache();
 });
 

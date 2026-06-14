@@ -205,7 +205,7 @@ function parseWkbGeometry(view, startOffset) {
   }
 }
 
-function parseGeoPackageGeometry(bytes) {
+export function parseGeoPackageGeometry(bytes) {
   if (!bytes || bytes.length < 8) return null;
   if (bytes[0] !== 0x47 || bytes[1] !== 0x50) {
     throw new Error("Invalid GeoPackage geometry header");
@@ -226,7 +226,7 @@ function transformPosition(position, project) {
   return [lng, lat, ...rest];
 }
 
-function transformGeometryCoordinates(geometry, project) {
+export function transformGeometryCoordinates(geometry, project) {
   switch (geometry.type) {
     case "Point":
       return {
@@ -276,7 +276,7 @@ function transformGeometryCoordinates(geometry, project) {
   }
 }
 
-function createGeometryTransformer(srs) {
+export function createGeometryTransformer(srs) {
   if (srs == null || srs === 4326) {
     return (geometry) => geometry;
   }
@@ -286,7 +286,7 @@ function createGeometryTransformer(srs) {
   return (geometry) => geometry;
 }
 
-function projectBboxToDatasetSrs(bbox, srs) {
+export function projectBboxToDatasetSrs(bbox, srs) {
   if (srs == null || srs === 4326) {
     return bbox;
   }
@@ -377,7 +377,7 @@ async function openDatabase(filePath) {
   return descriptor;
 }
 
-function envelopeIntersectsDatasetBbox(bytes, bbox) {
+export function envelopeIntersectsDatasetBbox(bytes, bbox) {
   if (!(bytes instanceof Uint8Array) || bytes.length < 40) return true;
   if (bytes[0] !== 0x47 || bytes[1] !== 0x50) return true;
   const flags = bytes[3];
@@ -396,7 +396,7 @@ function envelopeIntersectsDatasetBbox(bytes, bbox) {
   return maxX >= bboxMinX && minX <= bboxMaxX && maxY >= bboxMinY && minY <= bboxMaxY;
 }
 
-function geometryIntersectsWgs84Bbox(geometry, bbox) {
+export function geometryIntersectsWgs84Bbox(geometry, bbox) {
   if (!geometry) return false;
   const [minX, minY, maxX, maxY] = bbox;
   let hit = false;
