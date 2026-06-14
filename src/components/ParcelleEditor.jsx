@@ -11,6 +11,9 @@ import {
 import { featureAreaM2 } from "../utils/geometry";
 import { fetchRpgGeoJSON, getCultureLabel, getMapBoundsCRS84 } from "../services/rpg";
 import { RPG_MIN_ZOOM } from "../Front/useRpgLayer";
+import { fetchParcelSoilGrids } from "../services/soilgridsBackend";
+import { saveParcellesGeojson } from "../services/parcellesBackend";
+import ParcelSoilPanel from "./ParcelSoilPanel";
 
 function computeCultureWarning(raw, fallbackPrecision = "") {
   const value = (raw ?? "").trim();
@@ -267,6 +270,8 @@ const TableRow = React.memo(function TableRow({
   onUpdateField,
   onUpdateCulture,
   onRegisterRef,
+  soilUpr,
+  onOpenSoilDetail,
 }) {
   const ref = useCallback((el) => onRegisterRef(idKey, el), [onRegisterRef, idKey]);
 
@@ -389,15 +394,39 @@ const TableRow = React.memo(function TableRow({
         </td>
       ))}
       <td style={cellStyle}>
-        <input
-          value={props.type_sol ?? props.TYPE_SOL ?? ""}
-          onChange={(e) => {
-            const val = e.target.value;
-            onUpdateField(idKey, (p) => ({ ...p, type_sol: val, TYPE_SOL: val }));
-          }}
-          onClick={(e) => e.stopPropagation()}
-          style={inputStyle}
-        />
+        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          <input
+            value={props.type_sol ?? props.TYPE_SOL ?? ""}
+            onChange={(e) => {
+              const val = e.target.value;
+              onUpdateField(idKey, (p) => ({ ...p, type_sol: val, TYPE_SOL: val }));
+            }}
+            onClick={(e) => e.stopPropagation()}
+            style={inputStyle}
+          />
+          {soilUpr ? (
+            <button
+              type="button"
+              title="Voir les données SoilGrids ayant servi à déduire l'UPR"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenSoilDetail?.(idKey);
+              }}
+              style={{
+                flex: "0 0 auto",
+                border: "1px solid #c7d2fe",
+                background: "#eef2ff",
+                borderRadius: 6,
+                cursor: "pointer",
+                fontSize: 12,
+                lineHeight: 1,
+                padding: "2px 5px",
+              }}
+            >
+              ℹ️
+            </button>
+          ) : null}
+        </div>
       </td>
     </tr>
   );
@@ -608,6 +637,13 @@ export default function ParcelleEditor({
   const [moveDestCol, setMoveDestCol] = useState("");
   const [moveKeepSource, setMoveKeepSource] = useState(false);
   const [moveOverwriteDest, setMoveOverwriteDest] = useState(true);
+  // Remplissage UPR depuis SoilGrids
+  const [isFillingSoil, setIsFillingSoil] = useState(false);
+  const [soilFillProgress, setSoilFillProgress] = useState(null); // { done, total }
+  // Données SoilGrids/UPR conservées le temps de la session (idKey -> payload normalisé)
+  const [soilUprByIdKey, setSoilUprByIdKey] = useState({});
+  // Panneau latéral de consultation (idKey ouvert)
+  const [soilDetailIdKey, setSoilDetailIdKey] = useState(null);
 
   const resolvedViewMode = externalViewMode ?? "cards";
 
@@ -905,6 +941,86 @@ export default function ParcelleEditor({
       alert("Erreur lors du chargement RPG. Consulte la console pour le detail.");
     } finally {
       setIsFillingRpg(false);
+    }
+  };
+
+  const resolveParcelId = (feature) =>
+    String(feature?.id ?? feature?.properties?.id ?? feature?.properties?.parcelleNo ?? "");
+
+  const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  // Récupère l'UPR d'une parcelle avec une relance simple en cas de rate-limit serveur.
+  const fetchUprWithRetry = async (parcelId, attempt = 0) => {
+    try {
+      return await fetchParcelSoilGrids(parcelId);
+    } catch (error) {
+      if (attempt < 3 && /rate limit/i.test(error?.message || "")) {
+        await delay(5000);
+        return fetchUprWithRetry(parcelId, attempt + 1);
+      }
+      throw error;
+    }
+  };
+
+  const fillSoilTypeColumn = async () => {
+    if (!Array.isArray(features) || features.length === 0) {
+      alert("Aucune parcelle à analyser.");
+      return;
+    }
+    setIsFillingSoil(true);
+    setSoilFillProgress({ done: 0, total: features.length });
+    try {
+      // 1) Persister les parcelles côté serveur : l'endpoint SoilGrids les retrouve par id.
+      await saveParcellesGeojson(features);
+
+      let filled = 0;
+      const errors = [];
+
+      for (let i = 0; i < features.length; i += 1) {
+        const feature = features[i];
+        const idKey = String(feature.id ?? i);
+        const parcelId = resolveParcelId(feature);
+        if (parcelId) {
+          try {
+            const payload = await fetchUprWithRetry(parcelId);
+            const code = payload?.upr?.code;
+            const label = payload?.upr?.label;
+            if (code) {
+              const display = label ? `${code} — ${label}` : code;
+              // Remplissage progressif : la cellule et son ℹ️ apparaissent dès le calcul.
+              setSoilUprByIdKey((prev) => ({ ...prev, [idKey]: payload }));
+              setFeatures((prev) =>
+                (prev || []).map((feat, fi) => {
+                  if (String(feat.id ?? fi) !== idKey) return feat;
+                  return {
+                    ...feat,
+                    properties: { ...(feat.properties || {}), type_sol: display, TYPE_SOL: display },
+                  };
+                })
+              );
+              filled += 1;
+            } else {
+              errors.push(parcelId);
+            }
+          } catch (error) {
+            console.warn(`[SOIL_FILL] Parcelle ${parcelId} échouée:`, error?.message || error);
+            errors.push(parcelId);
+          }
+        }
+        // Espacement léger pour rester sous le rate-limit (60 req/min côté serveur).
+        if (i < features.length - 1) await delay(1100);
+        setSoilFillProgress({ done: i + 1, total: features.length });
+      }
+
+      if (errors.length) {
+        alert(`${filled} parcelle(s) remplie(s). ${errors.length} sans donnée SoilGrids exploitable (point hors couverture ou identifiant manquant).`);
+      }
+    } catch (error) {
+      console.error("[SOIL_FILL] Échec global:", error);
+      alert("Erreur lors du remplissage des types de sol. Voir la console pour le détail.");
+    } finally {
+      setIsFillingSoil(false);
+      setSoilFillProgress(null);
     }
   };
 
@@ -1266,7 +1382,29 @@ export default function ParcelleEditor({
                     </button>
                   </th>
                 ))}
-                <th style={headerStyle}>Type de sol</th>
+                <th style={headerStyle}>
+                  <div style={{ fontWeight: 600 }}>Type de sol</div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      fillSoilTypeColumn();
+                    }}
+                    disabled={isFillingSoil}
+                    title="Déduire l'UPR de chaque parcelle depuis SoilGrids (texture, RU, WRB)"
+                    style={{
+                      ...headerButtonStyle,
+                      opacity: isFillingSoil ? 0.6 : 1,
+                      cursor: isFillingSoil ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    {isFillingSoil
+                      ? soilFillProgress
+                        ? `Remplissage ${soilFillProgress.done}/${soilFillProgress.total}`
+                        : "Remplissage..."
+                      : "Remplir la colonne"}
+                  </button>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -1292,6 +1430,8 @@ export default function ParcelleEditor({
                     onUpdateField={updateFeatureByIdKey}
                     onUpdateCulture={updateCultureField}
                     onRegisterRef={onRegisterRef}
+                    soilUpr={soilUprByIdKey[idKey]}
+                    onOpenSoilDetail={setSoilDetailIdKey}
                   />
                 );
               })}
@@ -1302,10 +1442,37 @@ export default function ParcelleEditor({
     );
   };
 
+  const soilDetailFeature = useMemo(() => {
+    if (soilDetailIdKey == null) return null;
+    const list = features || [];
+    for (let i = 0; i < list.length; i += 1) {
+      if (String(list[i].id ?? i) === String(soilDetailIdKey)) return list[i];
+    }
+    return null;
+  }, [soilDetailIdKey, features]);
+  const soilDetailPayload = soilDetailIdKey != null ? soilUprByIdKey[soilDetailIdKey] : null;
+
   return (
     <div style={{ marginTop: 12 }}>
       {resolvedViewMode === "cards" ? renderCardView() : renderTableView()}
       {renderMoveCulturesDialog()}
+      {soilDetailFeature && soilDetailPayload ? (
+        <ParcelSoilPanel
+          parcel={soilDetailFeature}
+          soilState={{ data: soilDetailPayload, loading: false, error: null, cacheHit: false }}
+          onClose={() => setSoilDetailIdKey(null)}
+          onRefresh={async () => {
+            const parcelId = resolveParcelId(soilDetailFeature);
+            if (!parcelId) return;
+            try {
+              const payload = await fetchParcelSoilGrids(parcelId, { refresh: true });
+              setSoilUprByIdKey((prev) => ({ ...prev, [soilDetailIdKey]: payload }));
+            } catch (error) {
+              console.warn("[SOIL_DETAIL] Rafraîchissement échoué:", error?.message || error);
+            }
+          }}
+        />
+      ) : null}
     </div>
   );
 }

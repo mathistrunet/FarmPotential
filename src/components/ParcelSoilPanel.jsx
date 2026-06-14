@@ -16,10 +16,26 @@ const panelStyle = {
   fontSize: 12,
 };
 
+const uprBadgeStyle = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  minWidth: 28,
+  height: 28,
+  padding: "0 8px",
+  borderRadius: 8,
+  background: "#1d4ed8",
+  color: "#fff",
+  fontWeight: 700,
+  fontSize: 14,
+};
+
 export default function ParcelSoilPanel({ parcel, soilState, onClose, onImport, onRefresh }) {
   const summary = soilState?.data?.summary;
   const profile = soilState?.data?.profile || [];
   const source = soilState?.data?.source;
+  const upr = soilState?.data?.upr;
+  const wrb = soilState?.data?.wrb;
   const badgeDate = useMemo(() => {
     if (!source?.fetchedAt) return "—";
     return new Date(source.fetchedAt).toLocaleString("fr-FR");
@@ -48,6 +64,28 @@ export default function ParcelSoilPanel({ parcel, soilState, onClose, onImport, 
       {soilState?.loading ? <p>Chargement SoilGrids…</p> : null}
       {soilState?.error ? <p style={{ color: "#b91c1c" }}>Données indisponibles : {soilState.error}</p> : null}
 
+      {upr ? (
+        <div style={{ marginTop: 12, padding: 10, border: "1px solid #c7d2fe", borderRadius: 10, background: "#eef2ff" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={uprBadgeStyle}>{upr.code ?? "?"}</span>
+            <strong>UPR — {upr.label ?? "Unité de potentiel"}</strong>
+          </div>
+          <ul style={{ margin: "8px 0 0", paddingLeft: 18 }}>
+            <li>Facteur limitant : {upr.limitingFactor ?? "—"}</li>
+            <li>Classe WRB : {wrb?.className ?? "—"}</li>
+            <li>
+              RU calculée (wv) : {summary?.availableWater_wv_mm ?? "—"} mm
+              {summary?.availableWater_wv_depth_cm ? ` (intégrée à ${summary.availableWater_wv_depth_cm} cm)` : ""}
+              {upr.inputs?.ruSource === "heuristic" ? " (repli heuristique)" : ""}
+            </li>
+            <li>
+              Entrées : argile {upr.inputs?.clay ?? "—"}% / limon {upr.inputs?.silt ?? "—"}% / sable {upr.inputs?.sand ?? "—"}% (0-30 cm),
+              pH {upr.inputs?.ph ?? "—"} (0-30 cm), cailloux {upr.inputs?.cfvo ?? "—"}% (0-60 cm)
+            </li>
+          </ul>
+        </div>
+      ) : null}
+
       {summary ? (
         <>
           <h4>Résumé</h4>
@@ -58,7 +96,8 @@ export default function ParcelSoilPanel({ parcel, soilState, onClose, onImport, 
             <li>Azote total: {summary.nitrogen_pct ?? "—"}%</li>
             <li>CEC: {summary.cec_cmolkg ?? "—"} cmol/kg</li>
             <li>Porosité: {summary.porosity_pct ?? "—"}%</li>
-            <li>RU estimée: {summary.availableWater_mm ?? "—"} mm</li>
+            <li>RU estimée (heuristique texture): {summary.availableWater_mm ?? "—"} mm</li>
+            <li>RU calculée (wv0033−wv1500): {summary.availableWater_wv_mm ?? "—"} mm</li>
             <li>Drainage: {summary.drainage}</li>
             <li>Profondeur cible estimée: {summary.depth_cm} cm ({summary.confidence})</li>
           </ul>
