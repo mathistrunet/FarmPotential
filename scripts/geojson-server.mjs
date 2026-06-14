@@ -15,6 +15,7 @@ import { SoilGridsClient, SoilGridsError } from "./soilgrids/SoilGridsClient.mjs
 import { SoilGridsCacheRepository } from "./soilgrids/SoilGridsCacheRepository.mjs";
 import { SoilGridsGridService } from "./soilgrids/SoilGridsGridService.mjs";
 import { resolveParcelPoint } from "./soilgrids/geometry.mjs";
+import { soilGridsPixelKey } from "./soilgrids/homolosine.mjs";
 import { closeGeoPackageCache, queryGeoPackageByBbox } from "./geopackage-query.mjs";
 import { closeRpgRomaniaCache, queryRpgRomaniaByBbox } from "./rpg-romania-query.mjs";
 
@@ -179,6 +180,44 @@ function parseIntegerParam(raw, fallback, min = 1, max = 20_000) {
   return Math.min(max, Math.max(min, Math.round(value)));
 }
 
+// Construit la réponse normalisée propre à une parcelle à partir des payloads bruts ISRIC.
+// Pur (aucun appel réseau) : permet de réutiliser un même pixel SoilGrids pour plusieurs
+// parcelles tout en gardant une réponse spécifique à chaque parcelle.
+function buildNormalizedForParcel({ parcelId, pointInfo, fetchedAt, depthProfile, raw, wrbClassName, probability }) {
+  const profile = parseSoilGridsProperties(raw, { depths: depthProfile });
+  const summary = computeSoilIndicators(profile, { wrbClass: wrbClassName });
+  if (pointInfo.warning) summary.warnings.push(pointInfo.warning);
+  const upr = classifyParcelUpr(profile, summary, wrbClassName);
+  const wrb = { className: wrbClassName, probability: probability ?? null };
+  return buildSoilGridsResponse({
+    parcelId: String(parcelId),
+    lat: pointInfo.lat,
+    lon: pointInfo.lon,
+    pointStrategy: pointInfo.pointStrategy,
+    fetchedAt,
+    calcVersion: CALC_VERSION,
+    profile,
+    summary,
+    wrb,
+    upr,
+  });
+}
+
+async function persistParcelEntry({ parcelId, pointInfo, fetchedAt, cacheKey, raw, classificationRaw, normalized }) {
+  await soilCacheRepository.upsert({
+    parcel_id: String(parcelId),
+    lat: pointInfo.lat,
+    lon: pointInfo.lon,
+    response_raw_json: raw,
+    classification_raw_json: classificationRaw ?? null,
+    normalized_json: normalized,
+    fetched_at: fetchedAt,
+    source: "SoilGrids v2",
+    cache_key: cacheKey,
+    calc_version: CALC_VERSION,
+  });
+}
+
 async function loadSoilGridsForParcel({ parcelId, refresh, depthProfile }) {
   const collection = await readCollection();
   const feature = (collection.features || []).find(
@@ -188,80 +227,84 @@ async function loadSoilGridsForParcel({ parcelId, refresh, depthProfile }) {
 
   const pointInfo = resolveParcelPoint(feature, POINT_STRATEGY);
   const fetchedAt = new Date().toISOString();
-  const cacheKey = `${round4(pointInfo.lat)}:${round4(pointInfo.lon)}:${(depthProfile || []).join("|")}`;
+  // Clé de cache = pixel natif SoilGrids (250 m) quand le point est dans le domaine validé,
+  // afin que toutes les parcelles d'un même pixel partagent un seul appel ISRIC. Repli sur le
+  // point arrondi (~11 m) sinon.
+  const depthKey = (depthProfile || []).join("|");
+  const pixelKey = soilGridsPixelKey(pointInfo.lon, pointInfo.lat);
+  const cacheKey = `${pixelKey || `${round4(pointInfo.lat)}:${round4(pointInfo.lon)}`}:${depthKey}`;
+
+  const isFresh = (entry) => entry && entry.calc_version === CALC_VERSION;
 
   if (!refresh) {
-    // On ignore les entrées d'une version de calcul antérieure (ex. sans UPR)
-    // pour forcer un recalcul plutôt que de resservir un résultat obsolète.
-    const isFresh = (entry) => entry && entry.calc_version === CALC_VERSION;
+    // On ignore les entrées d'une version de calcul antérieure (ex. sans UPR) ou d'une autre
+    // localisation (parcelle déplacée) pour forcer un recalcul plutôt que de resservir un obsolète.
     const parcelCache = await soilCacheRepository.getByParcel(String(parcelId));
-    if (isFresh(parcelCache)) return { payload: parcelCache.normalized_json, cache: true };
+    if (isFresh(parcelCache) && parcelCache.cache_key === cacheKey) {
+      return { payload: parcelCache.normalized_json, cache: true };
+    }
     const shared = await soilCacheRepository.getByCacheKey(cacheKey);
-    if (isFresh(shared)) return { payload: shared.normalized_json, cache: true };
+    if (isFresh(shared)) {
+      // Même pixel déjà résolu par une autre parcelle : on réutilise les payloads bruts et on
+      // reconstruit la réponse pour CETTE parcelle (n'engage aucun appel ISRIC).
+      if (shared.response_raw_json) {
+        const normalized = buildNormalizedForParcel({
+          parcelId, pointInfo, fetchedAt, depthProfile,
+          raw: shared.response_raw_json,
+          wrbClassName: shared.classification_raw_json?.wrb_class_name ?? null,
+          probability: shared.classification_raw_json?.wrb_class_probability ?? null,
+        });
+        await persistParcelEntry({
+          parcelId, pointInfo, fetchedAt, cacheKey,
+          raw: shared.response_raw_json, classificationRaw: shared.classification_raw_json, normalized,
+        });
+        return { payload: normalized, cache: true };
+      }
+      return { payload: shared.normalized_json, cache: true };
+    }
   }
 
-  const inflightKey = `${parcelId}:${cacheKey}`;
-  if (inflightSoilRequests.has(inflightKey)) return inflightSoilRequests.get(inflightKey);
-
-  const promise = (async () => {
-    const [{ payload: raw, meta }, classification] = await Promise.all([
-      soilClient.query({ lat: pointInfo.lat, lon: pointInfo.lon, depths: depthProfile }),
-      soilClient.classify({ lat: pointInfo.lat, lon: pointInfo.lon }),
-    ]);
-    const wrbClassName = classification?.wrbClassName ?? null;
-
-    const profile = parseSoilGridsProperties(raw, { depths: depthProfile });
-    const summary = computeSoilIndicators(profile, { wrbClass: wrbClassName });
-    if (pointInfo.warning) summary.warnings.push(pointInfo.warning);
-
-    const upr = classifyParcelUpr(profile, summary, wrbClassName);
-    const wrb = { className: wrbClassName, probability: classification?.probability ?? null };
-
-    const normalized = buildSoilGridsResponse({
-      parcelId: String(parcelId),
-      lat: pointInfo.lat,
-      lon: pointInfo.lon,
-      pointStrategy: pointInfo.pointStrategy,
-      fetchedAt,
-      calcVersion: CALC_VERSION,
-      profile,
-      summary,
-      wrb,
-      upr,
-    });
-
-    feature.properties = feature.properties || {};
-    feature.properties.soilgridsPoint = {
-      lat: pointInfo.lat,
-      lon: pointInfo.lon,
-      strategy: pointInfo.pointStrategy,
-      timestamp: fetchedAt,
-    };
-    await writeCollection(collection);
-
-    await soilCacheRepository.upsert({
-      parcel_id: String(parcelId),
-      lat: pointInfo.lat,
-      lon: pointInfo.lon,
-      response_raw_json: raw,
-      classification_raw_json: classification?.raw ?? null,
-      normalized_json: normalized,
-      fetched_at: fetchedAt,
-      source: "SoilGrids v2",
-      cache_key: cacheKey,
-      calc_version: CALC_VERSION,
-    });
-
-    log("SOILGRIDS_FETCH", { parcelId, ...meta, cacheKey });
-    return { payload: normalized, cache: false };
-  })();
-
-  inflightSoilRequests.set(inflightKey, promise);
-  try {
-    return await promise;
-  } finally {
-    inflightSoilRequests.delete(inflightKey);
+  // Cache miss : un seul appel ISRIC par pixel, mutualisé entre les parcelles concurrentes.
+  // Le rate-limit (60 req/min) ne s'applique qu'ici, sur les vrais appels amont.
+  let upstream;
+  if (inflightSoilRequests.has(cacheKey)) {
+    upstream = await inflightSoilRequests.get(cacheKey);
+  } else {
+    if (rateLimited()) {
+      throw new SoilGridsError("Rate limit exceeded.", { statusCode: 429, code: "SOILGRIDS_RATE_LIMIT" });
+    }
+    const promise = (async () => {
+      const [{ payload: raw, meta }, classification] = await Promise.all([
+        soilClient.query({ lat: pointInfo.lat, lon: pointInfo.lon, depths: depthProfile }),
+        soilClient.classify({ lat: pointInfo.lat, lon: pointInfo.lon }),
+      ]);
+      return { raw, meta, classification };
+    })();
+    inflightSoilRequests.set(cacheKey, promise);
+    try {
+      upstream = await promise;
+    } finally {
+      inflightSoilRequests.delete(cacheKey);
+    }
+    log("SOILGRIDS_FETCH", { parcelId, ...upstream.meta, cacheKey });
   }
+
+  const normalized = buildNormalizedForParcel({
+    parcelId, pointInfo, fetchedAt, depthProfile,
+    raw: upstream.raw,
+    wrbClassName: upstream.classification?.wrbClassName ?? null,
+    probability: upstream.classification?.probability ?? null,
+  });
+
+  // Le point d'échantillonnage (lat/lon/stratégie/timestamp) est conservé dans le cache et dans
+  // la réponse normalisée ; on ne réécrit donc plus parcelles.geojson à chaque fetch (évite de
+  // muter le fichier de l'utilisateur et tout risque de concurrence lors d'un remplissage parallèle).
+  await persistParcelEntry({
+    parcelId, pointInfo, fetchedAt, cacheKey,
+    raw: upstream.raw, classificationRaw: upstream.classification?.raw ?? null, normalized,
+  });
+
+  return { payload: normalized, cache: false };
 }
 
 const server = http.createServer(async (req, res) => {
@@ -275,7 +318,8 @@ const server = http.createServer(async (req, res) => {
     res.setHeader("Access-Control-Allow-Headers", "Content-Type");
     if (req.method === "OPTIONS") return void res.writeHead(204).end();
     if (req.method !== "GET") return void res.writeHead(405).end(JSON.stringify({ error: "Method not allowed." }));
-    if (rateLimited()) return void res.writeHead(429).end(JSON.stringify({ error: "Rate limit exceeded." }));
+    // Le rate-limit est appliqué plus bas, uniquement sur les vrais appels ISRIC : un cache-hit
+    // ou une requête mutualisée par pixel ne consomme pas le budget (cf. loadSoilGridsForParcel).
 
     const match = requestUrl.pathname.match(/^\/api\/parcels\/([^/]+)\/soilgrids$/);
     const parcelId = match?.[1];

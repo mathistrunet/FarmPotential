@@ -147,6 +147,6 @@ npm run lint
 - Endpoint interne: `GET /api/parcels/{parcelId}/soilgrids?refresh=true|false&depth_profile=0-5cm,5-15cm,...`
 - Source: SoilGrids v2 `properties/query` (résolution ~250m).
 - Cache backend: `data/parcel-soilgrids-cache.json` avec TTL par défaut de 30 jours (modifiable dans `SoilGridsCacheRepository`).
-- Stratégie du point: `SOILGRIDS_POINT_STRATEGY=centroid|inside_point` (fallback automatique bbox center si géométrie invalide).
-- Le backend stocke aussi `feature.properties.soilgridsPoint` (lat/lon/strategy/timestamp) pour traçabilité.
+- Déduplication par pixel: la clé de cache est le pixel natif SoilGrids 250 m (projection Homolosine, `scripts/soilgrids/homolosine.mjs`). Toutes les parcelles d'un même pixel partagent un seul appel ISRIC ; le rate-limit (60/min) ne compte que les vrais appels amont (les cache-hits sont gratuits).
+- Stratégie du point: `SOILGRIDS_POINT_STRATEGY=centroid|inside_point` (fallback automatique bbox center si géométrie invalide). Le point d'échantillonnage (lat/lon/stratégie) est conservé dans le cache et la réponse normalisée.
 - Les indicateurs dérivés (texture, MO, porosité, RU, drainage, profondeur cible) sont heuristiques et affichés comme estimations.
