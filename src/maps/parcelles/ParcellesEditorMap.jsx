@@ -14,6 +14,8 @@ import MapInfoPanel from "../../components/MapInfoPanel";
 
 // ✅ composant RPG autonome (chemin conservé)
 import RpgFeature from "../../Front/useRpgLayer";
+// ✅ composant RPG Roumanie (GeoPackage local)
+import RpgRomaniaFeature from "../../Front/useRpgRomaniaLayer";
 // ✅ composant Dessin autonome (chemin conservé)
 import DrawToolbar from "../../Front/DrawToolbar";
 // ✅ Import/Export Télépac (chemin conservé)
@@ -1814,6 +1816,8 @@ export default function ParcellesEditorMap() {
               >
                 {/* RPG (autonome) */}
                 <RpgFeature mapRef={mapRef} drawRef={drawRef} />
+                {/* RPG Roumanie (GeoPackage local, sous le RPG France) */}
+                <RpgRomaniaFeature mapRef={mapRef} drawRef={drawRef} />
                 <div
                   style={{
                     border: "1px solid #eee",
