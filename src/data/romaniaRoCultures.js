@@ -5,7 +5,11 @@
 //   - assolia    : data/culturi_coduri.csv (colonne ASSOLIA) — utilisé à l'export CSV Assolia
 //   - metacode   : déduit de la colonne ASSOLIA pour l'usage interne de l'app
 
-// Correspondance ASSOLIA anglais → metacode interne
+// Correspondance ASSOLIA anglais → metacode interne.
+// Les codes reprennent EXACTEMENT ceux de la structure « Roumanie » (id 65) dans
+// data/assolia_cultures_export.csv, afin que :
+//   - le nom affiché provienne du code (libellé codebook) et non de la traduction ;
+//   - l'export CSV vers une structure cible résolve automatiquement metacode → culture.
 const ASSOLIA_METACODE = {
   "Soft wheat (winter)":   "BTH",
   "Durum wheat (winter)":  "BDH",
@@ -13,25 +17,30 @@ const ASSOLIA_METACODE = {
   "Barley (winter)":       "ORH",
   "Barley (spring)":       "ORP",
   "Oat (winter)":          "AVH",
-  "Oat spring":            "AVH",
+  "Oat spring":            "AVP",
   "Grain maize":           "MIS",
-  "Sweet maize":           "MIS",
+  "Sweet maize":           "MID",
   "Sorghum":               "SOG",
-  "Peas (spring)":         "PHI",
-  "Beans (dry)":           "",
-  "Lentil":                "",
-  "Lupine":                "",
-  "Chickpea":              "",
+  "Peas (spring)":         "PPR",
+  "Beans (dry)":           "PHS",
+  "Lentil":                "LEC",
+  "Lupine":                "LDH",
+  "Chickpea":              "PCH",
   "Sunflower":             "TRN",
   "Rapeseed":              "CZH",
   "Soybean":               "SOJ",
-  "Hemp (fiber)":          "",
-  "Potato":                "",
+  "Hemp (fiber)":          "CHV",
+  "Potato":                "PTC",
   "Sugar beet":            "BTN",
   "Alfalfa":               "LUZ",
-  "Clover":                "",
-  "Watermelon and melon":  "",
-  "Tomato (field)":        "",
+  "Clover":                "TRE",
+  "Watermelon and melon":  "MLO",
+  "Tomato (field)":        "TOM",
+  "Cabbage":               "CHU",
+  "Eggplant":              "PVP",
+  "Bell pepper":           "PVP",
+  "Onion":                 "OIG",
+  "Pumpkin":               "POT",
   "Arable other crop":     "",
 };
 
