@@ -337,9 +337,37 @@ export default function ImportTelepacButton({
     //   if (ids.length) draw.delete(ids);
     // }
 
-    // Ajout des features
-    // (on peut ajouter un FeatureCollection d’un coup mais on garde l’itératif robuste)
-    for (const ft of feats) draw.add(ft);
+    // Ajout des features avec un id unique garanti.
+    // Les shapefiles numérotent les features par index (0..N) ; deux imports
+    // successifs (ex. années différentes) réutilisent donc les mêmes ids, et
+    // draw.add() écrase silencieusement la feature existante au lieu d'en ajouter
+    // une nouvelle — c'est ce qui empêchait l'import d'une parcelle recouvrant à
+    // 100 % une parcelle déjà présente. On force un id neuf en cas d'absence ou de
+    // collision, pour pouvoir tout importer puis fusionner ensuite.
+    const existingIds = new Set(
+      (draw.getAll()?.features ?? [])
+        .map((f) => f.id)
+        .filter((id) => id != null)
+        .map((id) => String(id))
+    );
+    const genUniqueId = () => {
+      let id =
+        typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `imp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      while (existingIds.has(id)) {
+        id = `${id}-${Math.random().toString(36).slice(2)}`;
+      }
+      return id;
+    };
+    for (const ft of feats) {
+      let id = ft.id != null ? String(ft.id) : null;
+      if (id == null || existingIds.has(id)) {
+        id = genUniqueId();
+      }
+      existingIds.add(id);
+      draw.add({ ...ft, id });
+    }
 
     void resolveOverlappingParcelsAsync(draw, { mode: "warn" });
 
