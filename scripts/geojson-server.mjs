@@ -30,7 +30,10 @@ const RPG_ROMANIA_DIR = path.join(PUBLIC_DATA_DIR, "RPG Rom");
 const POINT_STRATEGY = process.env.SOILGRIDS_POINT_STRATEGY || "centroid";
 const CALC_VERSION = "v1.6.0-upr";
 
-const soilClient = new SoilGridsClient({ timeoutMs: 15_000, retries: 2 });
+// timeoutMs reste à 15 s par tentative. On limite les ré-essais pour ne pas empiler les attentes
+// quand ISRIC est lent (la classification, best-effort, ne ré-essaie pas du tout) : une requête
+// échoue ainsi en ~15-30 s au lieu de ~45 s, ce qui évite de bloquer puis de saturer l'API.
+const soilClient = new SoilGridsClient({ timeoutMs: 15_000, retries: 1, classifyRetries: 0 });
 const soilCacheRepository = new SoilGridsCacheRepository({ dataDir: DATA_DIR, ttlDays: 30 });
 const soilGridService = new SoilGridsGridService({ dataDir: DATA_DIR });
 const inflightSoilRequests = new Map();

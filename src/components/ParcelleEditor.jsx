@@ -965,10 +965,9 @@ export default function ParcelleEditor({
   };
 
   // Nombre de remontées SoilGrids menées en parallèle. Le serveur mutualise les requêtes d'un
-  // même pixel 250 m et ne compte que les vrais appels ISRIC dans son rate-limit (60/min), donc
-  // une concurrence modérée sature le débit utile sans déclencher de 429 sur les exploitations
-  // groupées (cas courant), tout en restant correcte pour les parcelles dispersées.
-  const SOIL_FILL_CONCURRENCY = 6;
+  // même pixel 250 m. On reste volontairement modéré : l'endpoint de classification d'ISRIC est
+  // lent (~8 s), donc trop de requêtes simultanées le saturent et font timeouter (504).
+  const SOIL_FILL_CONCURRENCY = 3;
 
   const fillSoilTypeColumn = async () => {
     if (!Array.isArray(features) || features.length === 0) {
@@ -983,10 +982,18 @@ export default function ParcelleEditor({
 
       let filled = 0;
       let done = 0;
-      const errors = [];
+      const noData = []; // réponse valide mais sans UPR (hors couverture / id manquant)
+      const failed = []; // échec réel d'appel (timeout 504, circuit ouvert 500, ...)
+      let consecutiveFailures = 0;
+      let aborted = false;
+      // Garde-fou : si ISRIC enchaîne les échecs (timeouts puis circuit-breaker serveur qui
+      // renvoie des 500 quasi instantanés), on STOPPE le remplissage au lieu de bombarder l'API
+      // avec toutes les parcelles restantes. Évite le « spam » de requêtes en échec et les blocages.
+      const FAILURE_ABORT_THRESHOLD = 10;
 
       // Traitement par un pool de workers concurrents : chacun pioche la parcelle suivante dans
-      // la file tant qu'il en reste. La déduplication par pixel est gérée côté serveur.
+      // la file tant qu'il en reste (et que le garde-fou n'a pas déclenché). Déduplication par
+      // pixel gérée côté serveur.
       let nextIndex = 0;
       const processOne = async (i) => {
         const feature = features[i];
@@ -995,6 +1002,7 @@ export default function ParcelleEditor({
         if (parcelId) {
           try {
             const payload = await fetchUprWithRetry(parcelId);
+            consecutiveFailures = 0; // le backend a répondu : la chaîne d'échecs est rompue
             const code = payload?.upr?.code;
             const label = payload?.upr?.label;
             if (code) {
@@ -1012,11 +1020,13 @@ export default function ParcelleEditor({
               );
               filled += 1;
             } else {
-              errors.push(parcelId);
+              noData.push(parcelId);
             }
           } catch (error) {
             console.warn(`[SOIL_FILL] Parcelle ${parcelId} échouée:`, error?.message || error);
-            errors.push(parcelId);
+            failed.push(parcelId);
+            consecutiveFailures += 1;
+            if (consecutiveFailures >= FAILURE_ABORT_THRESHOLD) aborted = true;
           }
         }
         done += 1;
@@ -1024,7 +1034,7 @@ export default function ParcelleEditor({
       };
 
       const worker = async () => {
-        while (nextIndex < features.length) {
+        while (nextIndex < features.length && !aborted) {
           const i = nextIndex;
           nextIndex += 1;
           await processOne(i);
@@ -1034,8 +1044,17 @@ export default function ParcelleEditor({
         Array.from({ length: Math.min(SOIL_FILL_CONCURRENCY, features.length) }, () => worker())
       );
 
-      if (errors.length) {
-        alert(`${filled} parcelle(s) remplie(s). ${errors.length} sans donnée SoilGrids exploitable (point hors couverture ou identifiant manquant).`);
+      if (aborted) {
+        const remaining = features.length - done;
+        alert(
+          `Remontée interrompue : SoilGrids (ISRIC) ne répond pas (${failed.length} échecs consécutifs). ` +
+            `${filled} parcelle(s) remplie(s), ${remaining} non traitée(s). Réessaie plus tard — les résultats déjà obtenus sont conservés.`
+        );
+      } else if (noData.length || failed.length) {
+        const parts = [];
+        if (noData.length) parts.push(`${noData.length} sans donnée exploitable (hors couverture)`);
+        if (failed.length) parts.push(`${failed.length} en échec (SoilGrids indisponible)`);
+        alert(`${filled} parcelle(s) remplie(s). ${parts.join(", ")}.`);
       }
     } catch (error) {
       console.error("[SOIL_FILL] Échec global:", error);

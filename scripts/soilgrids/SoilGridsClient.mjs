@@ -145,9 +145,13 @@ export async function fetchSoilGridsClassification(lat, lon, { numberClasses = 1
 }
 
 export class SoilGridsClient {
-  constructor({ timeoutMs = 15_000, retries = 2 } = {}) {
+  constructor({ timeoutMs = 15_000, retries = 2, classifyRetries } = {}) {
     this.timeoutMs = timeoutMs;
     this.retries = retries;
+    // La classification WRB est best-effort (renvoie null si elle échoue). On la laisse donc
+    // échouer vite : sans ré-essais, un appel lent ne bloque pas toute la requête (le timeout
+    // par tentative reste inchangé). Par défaut, on garde le comportement de `retries`.
+    this.classifyRetries = Number.isInteger(classifyRetries) ? classifyRetries : retries;
     this.failures = 0;
     this.openUntil = 0;
   }
@@ -187,7 +191,7 @@ export class SoilGridsClient {
     }
 
     let lastError = null;
-    for (let attempt = 0; attempt <= this.retries; attempt += 1) {
+    for (let attempt = 0; attempt <= this.classifyRetries; attempt += 1) {
       try {
         const result = await fetchSoilGridsClassification(lat, lon, {
           numberClasses,
