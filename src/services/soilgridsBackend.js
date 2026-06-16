@@ -16,3 +16,21 @@ export async function fetchParcelSoilGrids(parcelId, { refresh = false, depthPro
   }
   return response.json();
 }
+
+// Remontée allégée : uniquement le nom de classe WRB de la parcelle (dédup par pixel côté serveur,
+// un seul appel ISRIC `classification/query`). Renvoie { parcelId, wrbClassName, probability, ... }.
+export async function fetchParcelWrb(parcelId, { refresh = false, signal } = {}) {
+  const params = new URLSearchParams();
+  if (refresh) params.set("refresh", "true");
+  const url = `/api/parcels/${encodeURIComponent(parcelId)}/wrb${params.toString() ? `?${params.toString()}` : ""}`;
+  const response = await fetch(url, { signal });
+  if (!response.ok) {
+    let message = "WRB indisponible";
+    try {
+      const payload = await response.json();
+      if (payload?.error) message = payload.error;
+    } catch (_) { /* réponse non-JSON */ }
+    throw new Error(message);
+  }
+  return response.json();
+}

@@ -19,10 +19,46 @@ function downloadBlob(blob, filename) {
   URL.revokeObjectURL(url);
 }
 
+// Type de sol d'une parcelle, dans le même ordre de résolution que l'export CSV.
+function getFeatureSoilType(props = {}) {
+  const raw = props.type_sol ?? props.TYPE_SOL ?? props.typeSol ?? props.type_de_sol ?? props.sol ?? "";
+  return raw == null ? "" : String(raw).trim();
+}
+
+// Nettoie un nom pour en faire un nom de fichier valide sous Windows. Les navigateurs ajoutent
+// automatiquement « (1) », « (2) »… si le fichier existe déjà dans les téléchargements.
+function sanitizeFilename(name, fallback = "export") {
+  const cleaned = String(name || "")
+    .trim()
+    .replace(/[<>:"/\\|?*]/g, "_")
+    .replace(/\s+/g, " ")
+    .replace(/[. ]+$/g, "");
+  return cleaned || fallback;
+}
+
+// Coquille de modale partagée : la croix (×) et un clic « à côté » ferment, mais une sélection de
+// texte qui démarre dans la modale et se relâche sur l'overlay NE ferme pas (on n'écoute que le
+// mousedown dont la cible est l'overlay lui-même).
+function ModalShell({ onClose, children }) {
+  const handleOverlayMouseDown = (e) => {
+    if (e.target === e.currentTarget) onClose();
+  };
+  return (
+    <div style={overlayStyle} onMouseDown={handleOverlayMouseDown}>
+      <div style={modalStyle}>
+        <button type="button" aria-label="Fermer" onClick={onClose} style={closeXStyle}>
+          ×
+        </button>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 function ChoiceModal({ onClose, onTelepac, onCsv }) {
   return (
-    <div style={overlayStyle} onClick={onClose}>
-      <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
+    <ModalShell onClose={onClose}>
+      <div>
         <h2 style={{ marginTop: 0 }}>Choisir un format d&apos;export</h2>
         <p style={{ color: "#555", marginBottom: 16 }}>
           Sélectionne le format souhaité pour générer ton fichier.
@@ -39,14 +75,26 @@ function ChoiceModal({ onClose, onTelepac, onCsv }) {
           Annuler
         </button>
       </div>
-    </div>
+    </ModalShell>
   );
 }
 
-function CsvModal({ values, onChange, onCancel, onConfirm, disabled }) {
+function CsvModal({
+  values,
+  onChange,
+  onCancel,
+  onConfirm,
+  disabled,
+  soilTypes = [],
+  soilReplacements = {},
+  onSoilReplacementChange,
+  missingSoilCount = 0,
+  missingSoilFill = "",
+  onMissingSoilFillChange,
+}) {
   return (
-    <div style={overlayStyle} onClick={onCancel}>
-      <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
+    <ModalShell onClose={onCancel}>
+      <div>
         <h2 style={{ marginTop: 0 }}>Paramètres de l&apos;export CSV</h2>
         <p style={{ color: "#555", marginBottom: 16 }}>
           Ces informations seront appliquées à chaque parcelle exportée.
@@ -101,6 +149,56 @@ function CsvModal({ values, onChange, onCancel, onConfirm, disabled }) {
               placeholder="Ex: Assolia"
             />
           </label>
+
+          {missingSoilCount > 0 && (
+            <label style={labelStyle}>
+              Type de sol pour les {missingSoilCount} parcelle(s) sans valeur
+              <span style={{ color: "#777", fontWeight: 400 }}> (vide = laissé vide)</span>
+              <input
+                type="text"
+                value={missingSoilFill}
+                placeholder="Saisir un type de sol à appliquer"
+                onChange={(e) => onMissingSoilFillChange(e.target.value)}
+                style={inputStyle}
+              />
+            </label>
+          )}
+
+          {soilTypes.length > 0 && (
+            <div>
+              <div style={{ fontSize: 14, color: "#333", marginBottom: 6 }}>
+                Remplacement des types de sol
+                <span style={{ color: "#777" }}> (vide = valeur conservée)</span>
+              </div>
+              <div style={soilTableWrapStyle}>
+                <table style={soilTableStyle}>
+                  <thead>
+                    <tr>
+                      <th style={soilThStyle}>Type de sol</th>
+                      <th style={soilThStyle}>Remplacer par</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {soilTypes.map((soil) => (
+                      <tr key={soil}>
+                        <td style={soilTdStyle}>{soil}</td>
+                        <td style={soilTdStyle}>
+                          <input
+                            type="text"
+                            value={soilReplacements[soil] ?? ""}
+                            placeholder={soil}
+                            onChange={(e) => onSoilReplacementChange(soil, e.target.value)}
+                            style={{ ...inputStyle, marginTop: 0, width: "100%", boxSizing: "border-box" }}
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
           <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
             <button type="button" style={modalSecondaryButtonStyle} onClick={onCancel}>
               Annuler
@@ -111,14 +209,14 @@ function CsvModal({ values, onChange, onCancel, onConfirm, disabled }) {
           </div>
         </form>
       </div>
-    </div>
+    </ModalShell>
   );
 }
 
 function XmlModal({ cultureColumns, selectedColumn, onSelectColumn, onCancel, onConfirm, disabled }) {
   return (
-    <div style={overlayStyle} onClick={onCancel}>
-      <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
+    <ModalShell onClose={onCancel}>
+      <div>
         <h2 style={{ marginTop: 0 }}>Paramètres de l&apos;export Télépac</h2>
         <p style={{ color: "#555", marginBottom: 16 }}>
           Choisis la colonne culture à utiliser pour remplir le code culture XML.
@@ -154,7 +252,7 @@ function XmlModal({ cultureColumns, selectedColumn, onSelectColumn, onCancel, on
           </div>
         </form>
       </div>
-    </div>
+    </ModalShell>
   );
 }
 
@@ -170,12 +268,61 @@ const overlayStyle = {
 };
 
 const modalStyle = {
+  position: "relative",
   background: "#fff",
   borderRadius: 12,
   padding: 24,
   maxWidth: 420,
   width: "100%",
+  maxHeight: "85vh",
+  overflowY: "auto",
   boxShadow: "0 15px 40px rgba(0,0,0,0.18)",
+};
+
+const closeXStyle = {
+  position: "absolute",
+  top: 8,
+  right: 10,
+  width: 30,
+  height: 30,
+  border: "none",
+  background: "transparent",
+  fontSize: 24,
+  lineHeight: "28px",
+  color: "#6b7280",
+  cursor: "pointer",
+  padding: 0,
+};
+
+const soilTableWrapStyle = {
+  maxHeight: 180,
+  overflowY: "auto",
+  border: "1px solid #e5e7eb",
+  borderRadius: 6,
+};
+
+const soilTableStyle = {
+  width: "100%",
+  borderCollapse: "collapse",
+  fontSize: 13,
+  tableLayout: "fixed",
+};
+
+const soilThStyle = {
+  textAlign: "left",
+  padding: "6px 8px",
+  borderBottom: "1px solid #e5e7eb",
+  position: "sticky",
+  top: 0,
+  background: "#f9fafb",
+  fontWeight: 600,
+};
+
+const soilTdStyle = {
+  padding: "4px 8px",
+  borderBottom: "1px solid #f1f5f9",
+  verticalAlign: "middle",
+  wordBreak: "break-word",
 };
 
 const modalButtonStyle = {
@@ -249,6 +396,28 @@ export default function ExportMenuButton({
     }
   }, [cultureColumns, selectedCultureColumn]);
 
+  // Types de sol distincts présents dans la sélection à exporter (pour la table de remplacement).
+  const soilTypes = useMemo(() => {
+    const set = new Set();
+    features.forEach((feature) => {
+      const value = getFeatureSoilType(feature?.properties);
+      if (value) set.add(value);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "fr"));
+  }, [features]);
+
+  // Map { typeDeSolOriginal -> valeur de remplacement }. Une valeur vide conserve l'original.
+  const [soilReplacements, setSoilReplacements] = useState({});
+  const handleSoilReplacementChange = (soil, value) =>
+    setSoilReplacements((prev) => ({ ...prev, [soil]: value }));
+
+  // Nombre de parcelles sans type de sol renseigné, et valeur à leur appliquer à l'export.
+  const missingSoilCount = useMemo(
+    () => features.filter((feature) => !getFeatureSoilType(feature?.properties)).length,
+    [features]
+  );
+  const [missingSoilFill, setMissingSoilFill] = useState("");
+
   const defaultCode = useMemo(
     () => String(Math.floor(Math.random() * 99999) + 1).padStart(5, "0"),
     []
@@ -318,8 +487,20 @@ export default function ExportMenuButton({
     if (!ensureFeatures()) return;
     setLoading(true);
     try {
+      // Applique les types de sol : remplacement pour les parcelles qui en ont un (vide = conservé),
+      // et valeur manuelle pour celles qui n'en ont pas (vide = laissé vide).
+      const fillMissing = (missingSoilFill || "").trim();
+      const featuresForExport = features.map((feature) => {
+        const original = getFeatureSoilType(feature?.properties);
+        const value = original ? (soilReplacements[original] || "").trim() : fillMissing;
+        if (!value) return feature;
+        return {
+          ...feature,
+          properties: { ...(feature.properties || {}), type_sol: value, TYPE_SOL: value },
+        };
+      });
       const csv = await buildParcellesCsv(
-        features,
+        featuresForExport,
         csvValues.secteur,
         csvValues.exploitation,
         csvValues.codeExploitation,
@@ -328,7 +509,9 @@ export default function ExportMenuButton({
       const blob = new Blob([csv], {
         type: "text/csv;charset=utf-8",
       });
-      downloadBlob(blob, `${filenamePrefixCsv}${Date.now()}.csv`);
+      // Nom de fichier = nom de l'exploitation. Le navigateur ajoute « (1) », « (2) »… si un
+      // fichier du même nom existe déjà dans les téléchargements.
+      downloadBlob(blob, `${sanitizeFilename(csvValues.exploitation, filenamePrefixCsv || "export")}.csv`);
       closeAllModals();
     } catch (err) {
       console.error(err);
@@ -372,6 +555,12 @@ export default function ExportMenuButton({
           onCancel={closeAllModals}
           onConfirm={exportCsv}
           disabled={loading}
+          soilTypes={soilTypes}
+          soilReplacements={soilReplacements}
+          onSoilReplacementChange={handleSoilReplacementChange}
+          missingSoilCount={missingSoilCount}
+          missingSoilFill={missingSoilFill}
+          onMissingSoilFillChange={setMissingSoilFill}
         />
       )}
 

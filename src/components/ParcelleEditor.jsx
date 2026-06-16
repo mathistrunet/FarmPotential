@@ -11,7 +11,7 @@ import {
 import { featureAreaM2 } from "../utils/geometry";
 import { fetchRpgGeoJSON, getCultureLabel, getMapBoundsCRS84 } from "../services/rpg";
 import { RPG_MIN_ZOOM } from "../Front/useRpgLayer";
-import { fetchParcelSoilGrids } from "../services/soilgridsBackend";
+import { fetchParcelSoilGrids, fetchParcelWrb } from "../services/soilgridsBackend";
 import { saveParcellesGeojson } from "../services/parcellesBackend";
 import ParcelSoilPanel from "./ParcelSoilPanel";
 
@@ -640,6 +640,9 @@ export default function ParcelleEditor({
   // Remplissage UPR depuis SoilGrids
   const [isFillingSoil, setIsFillingSoil] = useState(false);
   const [soilFillProgress, setSoilFillProgress] = useState(null); // { done, total }
+  // Remplissage WRB-seul (nom de classe par parcelle) — plus léger, pour la Roumanie
+  const [isFillingWrb, setIsFillingWrb] = useState(false);
+  const [wrbFillProgress, setWrbFillProgress] = useState(null); // { done, total }
   // Données SoilGrids/UPR conservées le temps de la session (idKey -> payload normalisé)
   const [soilUprByIdKey, setSoilUprByIdKey] = useState({});
   // Panneau latéral de consultation (idKey ouvert)
@@ -1046,6 +1049,115 @@ export default function ParcelleEditor({
     }
   };
 
+  const fetchWrbWithRetry = async (parcelId, attempt = 0) => {
+    try {
+      return await fetchParcelWrb(parcelId);
+    } catch (error) {
+      if (attempt < 8 && /rate limit/i.test(error?.message || "")) {
+        await delay(1500 + Math.random() * 1500);
+        return fetchWrbWithRetry(parcelId, attempt + 1);
+      }
+      throw error;
+    }
+  };
+
+  // Remontée WRB-seule : remplit la colonne « Type de sol » avec le nom de classe WRB de chaque
+  // parcelle. Beaucoup plus léger que l'UPR (un seul appel ISRIC par pixel, pas de profil ni de
+  // calcul) ; suffisant pour les rendez-vous en Roumanie. La classification est best-effort côté
+  // serveur (ne renvoie jamais d'erreur d'indisponibilité), donc pas de 504/500 en rafale ici.
+  const fillWrbClassColumn = async () => {
+    if (!Array.isArray(features) || features.length === 0) {
+      alert("Aucune parcelle à analyser.");
+      return;
+    }
+    setIsFillingWrb(true);
+    setWrbFillProgress({ done: 0, total: features.length });
+    try {
+      await saveParcellesGeojson(features);
+
+      let filled = 0;
+      let done = 0;
+      const noData = []; // réponse OK mais aucune classe WRB (hors couverture / domaine)
+      const failed = []; // échec réseau réel
+      let consecutiveFailures = 0;
+      let aborted = false;
+      const FAILURE_ABORT_THRESHOLD = 10;
+
+      let nextIndex = 0;
+      const processOne = async (i) => {
+        const feature = features[i];
+        const idKey = String(feature.id ?? i);
+        const parcelId = resolveParcelId(feature);
+        if (parcelId) {
+          try {
+            const payload = await fetchWrbWithRetry(parcelId);
+            consecutiveFailures = 0;
+            const wrb = payload?.wrbClassName;
+            if (wrb) {
+              setFeatures((prev) =>
+                (prev || []).map((feat, fi) => {
+                  if (String(feat.id ?? fi) !== idKey) return feat;
+                  return {
+                    ...feat,
+                    properties: {
+                      ...(feat.properties || {}),
+                      type_sol: wrb,
+                      TYPE_SOL: wrb,
+                      wrb_class: wrb,
+                      WRB_CLASS: wrb,
+                    },
+                  };
+                })
+              );
+              filled += 1;
+            } else {
+              noData.push(parcelId);
+            }
+          } catch (error) {
+            console.warn(`[WRB_FILL] Parcelle ${parcelId} échouée:`, error?.message || error);
+            failed.push(parcelId);
+            consecutiveFailures += 1;
+            if (consecutiveFailures >= FAILURE_ABORT_THRESHOLD) aborted = true;
+          }
+        }
+        done += 1;
+        setWrbFillProgress({ done, total: features.length });
+      };
+
+      const worker = async () => {
+        while (nextIndex < features.length && !aborted) {
+          const i = nextIndex;
+          nextIndex += 1;
+          await processOne(i);
+        }
+      };
+      // Concurrence modérée : la classification ISRIC est lente (~8 s) ; on évite de la saturer.
+      const WRB_FILL_CONCURRENCY = 4;
+      await Promise.all(
+        Array.from({ length: Math.min(WRB_FILL_CONCURRENCY, features.length) }, () => worker())
+      );
+
+      if (aborted) {
+        const remaining = features.length - done;
+        alert(
+          `Remontée WRB interrompue : SoilGrids ne répond pas (${failed.length} échecs consécutifs). ` +
+            `${filled} parcelle(s) remplie(s), ${remaining} non traitée(s). Réessaie plus tard.`
+        );
+      } else if (noData.length || failed.length) {
+        const parts = [];
+        if (noData.length) parts.push(`${noData.length} sans classe WRB (hors couverture)`);
+        if (failed.length) parts.push(`${failed.length} en échec`);
+        alert(`${filled} parcelle(s) remplie(s). ${parts.join(", ")}.`);
+      }
+    } catch (error) {
+      console.error("[WRB_FILL] Échec global:", error);
+      alert("Erreur lors de la remontée WRB. Voir la console pour le détail.");
+    } finally {
+      setIsFillingWrb(false);
+      setWrbFillProgress(null);
+    }
+  };
+
   const updateGeneralInfo = useCallback((field, value) => {
     const next = { ...generalInfo, [field]: value };
     setGeneralInfo(next);
@@ -1425,6 +1537,27 @@ export default function ParcelleEditor({
                         ? `Remplissage ${soilFillProgress.done}/${soilFillProgress.total}`
                         : "Remplissage..."
                       : "Remplir la colonne"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      fillWrbClassColumn();
+                    }}
+                    disabled={isFillingWrb || isFillingSoil}
+                    title="Remonter uniquement le nom de classe WRB par parcelle (plus léger, dédup par pixel)"
+                    style={{
+                      ...headerButtonStyle,
+                      marginTop: 4,
+                      opacity: isFillingWrb || isFillingSoil ? 0.6 : 1,
+                      cursor: isFillingWrb || isFillingSoil ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    {isFillingWrb
+                      ? wrbFillProgress
+                        ? `WRB ${wrbFillProgress.done}/${wrbFillProgress.total}`
+                        : "Remplissage..."
+                      : "Remplir WRB"}
                   </button>
                 </th>
               </tr>
