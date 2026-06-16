@@ -88,6 +88,9 @@ function CsvModal({
   soilTypes = [],
   soilReplacements = {},
   onSoilReplacementChange,
+  missingSoilCount = 0,
+  missingSoilFill = "",
+  onMissingSoilFillChange,
 }) {
   return (
     <ModalShell onClose={onCancel}>
@@ -146,6 +149,20 @@ function CsvModal({
               placeholder="Ex: Assolia"
             />
           </label>
+
+          {missingSoilCount > 0 && (
+            <label style={labelStyle}>
+              Type de sol pour les {missingSoilCount} parcelle(s) sans valeur
+              <span style={{ color: "#777", fontWeight: 400 }}> (vide = laissé vide)</span>
+              <input
+                type="text"
+                value={missingSoilFill}
+                placeholder="Saisir un type de sol à appliquer"
+                onChange={(e) => onMissingSoilFillChange(e.target.value)}
+                style={inputStyle}
+              />
+            </label>
+          )}
 
           {soilTypes.length > 0 && (
             <div>
@@ -394,6 +411,13 @@ export default function ExportMenuButton({
   const handleSoilReplacementChange = (soil, value) =>
     setSoilReplacements((prev) => ({ ...prev, [soil]: value }));
 
+  // Nombre de parcelles sans type de sol renseigné, et valeur à leur appliquer à l'export.
+  const missingSoilCount = useMemo(
+    () => features.filter((feature) => !getFeatureSoilType(feature?.properties)).length,
+    [features]
+  );
+  const [missingSoilFill, setMissingSoilFill] = useState("");
+
   const defaultCode = useMemo(
     () => String(Math.floor(Math.random() * 99999) + 1).padStart(5, "0"),
     []
@@ -463,14 +487,16 @@ export default function ExportMenuButton({
     if (!ensureFeatures()) return;
     setLoading(true);
     try {
-      // Applique les remplacements de type de sol (valeur vide = on conserve l'original).
+      // Applique les types de sol : remplacement pour les parcelles qui en ont un (vide = conservé),
+      // et valeur manuelle pour celles qui n'en ont pas (vide = laissé vide).
+      const fillMissing = (missingSoilFill || "").trim();
       const featuresForExport = features.map((feature) => {
         const original = getFeatureSoilType(feature?.properties);
-        const replacement = original ? (soilReplacements[original] || "").trim() : "";
-        if (!replacement) return feature;
+        const value = original ? (soilReplacements[original] || "").trim() : fillMissing;
+        if (!value) return feature;
         return {
           ...feature,
-          properties: { ...(feature.properties || {}), type_sol: replacement, TYPE_SOL: replacement },
+          properties: { ...(feature.properties || {}), type_sol: value, TYPE_SOL: value },
         };
       });
       const csv = await buildParcellesCsv(
@@ -532,6 +558,9 @@ export default function ExportMenuButton({
           soilTypes={soilTypes}
           soilReplacements={soilReplacements}
           onSoilReplacementChange={handleSoilReplacementChange}
+          missingSoilCount={missingSoilCount}
+          missingSoilFill={missingSoilFill}
+          onMissingSoilFillChange={setMissingSoilFill}
         />
       )}
 
