@@ -75,6 +75,30 @@ function splitIlotParcelle(rawValue) {
   return { ilot, numero };
 }
 
+// Indice de confiance (probabilité de la classe WRB, en %) renvoyé par SoilGrids.
+// Format ISRIC : [["Cambisols", 30]] -> 30. Renvoie null si indisponible.
+function extractSoilConfidence(probability) {
+  if (Array.isArray(probability) && probability.length && Array.isArray(probability[0])) {
+    const pct = Number(probability[0][1]);
+    return Number.isFinite(pct) ? pct : null;
+  }
+  if (typeof probability === "number" && Number.isFinite(probability)) return probability;
+  return null;
+}
+
+// Petit badge en lecture seule affiché à côté du type de sol issu de SoilGrids.
+const confidenceBadgeStyle = {
+  flex: "0 0 auto",
+  border: "1px solid #d1d5db",
+  background: "#f3f4f6",
+  color: "#374151",
+  borderRadius: 6,
+  fontSize: 11,
+  lineHeight: 1,
+  padding: "2px 5px",
+  whiteSpace: "nowrap",
+};
+
 const CULTURE_COLUMNS = [
   {
     id: "next1",
@@ -399,11 +423,24 @@ const TableRow = React.memo(function TableRow({
             value={props.type_sol ?? props.TYPE_SOL ?? ""}
             onChange={(e) => {
               const val = e.target.value;
-              onUpdateField(idKey, (p) => ({ ...p, type_sol: val, TYPE_SOL: val }));
+              // Une saisie manuelle invalide l'indice de confiance SoilGrids.
+              onUpdateField(idKey, (p) => {
+                const next = { ...p, type_sol: val, TYPE_SOL: val };
+                delete next.type_sol_confidence;
+                return next;
+              });
             }}
             onClick={(e) => e.stopPropagation()}
             style={inputStyle}
           />
+          {props.type_sol_confidence != null ? (
+            <span
+              title="Indice de confiance SoilGrids (probabilité de la classe WRB). Disparaît si le type de sol est modifié."
+              style={confidenceBadgeStyle}
+            >
+              {props.type_sol_confidence}%
+            </span>
+          ) : null}
           {soilUpr ? (
             <button
               type="button"
@@ -567,11 +604,24 @@ const CardItem = React.memo(function CardItem({
 
         <label style={{ fontSize: 12, flex: "1 1 180px" }}>
           Type de sol
+          {props.type_sol_confidence != null ? (
+            <span
+              title="Indice de confiance SoilGrids (probabilité de la classe WRB). Disparaît si le type de sol est modifié."
+              style={{ ...confidenceBadgeStyle, marginLeft: 6 }}
+            >
+              confiance {props.type_sol_confidence}%
+            </span>
+          ) : null}
           <input
             value={typeSol}
             onChange={(e) => {
               const val = e.target.value;
-              onUpdateField(idKey, (p) => ({ ...p, type_sol: val, TYPE_SOL: val }));
+              // Une saisie manuelle invalide l'indice de confiance SoilGrids.
+              onUpdateField(idKey, (p) => {
+                const next = { ...p, type_sol: val, TYPE_SOL: val };
+                delete next.type_sol_confidence;
+                return next;
+              });
             }}
             onClick={(e) => e.stopPropagation()}
             placeholder="Ex. Argile"
@@ -1002,15 +1052,16 @@ export default function ParcelleEditor({
             const label = payload?.upr?.label;
             if (code) {
               const display = label ? `${code} — ${label}` : code;
+              const confidence = extractSoilConfidence(payload?.wrb?.probability);
               // Remplissage progressif : la cellule et son ℹ️ apparaissent dès le calcul.
               setSoilUprByIdKey((prev) => ({ ...prev, [idKey]: payload }));
               setFeatures((prev) =>
                 (prev || []).map((feat, fi) => {
                   if (String(feat.id ?? fi) !== idKey) return feat;
-                  return {
-                    ...feat,
-                    properties: { ...(feat.properties || {}), type_sol: display, TYPE_SOL: display },
-                  };
+                  const nextProps = { ...(feat.properties || {}), type_sol: display, TYPE_SOL: display };
+                  if (confidence != null) nextProps.type_sol_confidence = confidence;
+                  else delete nextProps.type_sol_confidence;
+                  return { ...feat, properties: nextProps };
                 })
               );
               filled += 1;
@@ -1094,19 +1145,20 @@ export default function ParcelleEditor({
             consecutiveFailures = 0;
             const wrb = payload?.wrbClassName;
             if (wrb) {
+              const confidence = extractSoilConfidence(payload?.probability);
               setFeatures((prev) =>
                 (prev || []).map((feat, fi) => {
                   if (String(feat.id ?? fi) !== idKey) return feat;
-                  return {
-                    ...feat,
-                    properties: {
-                      ...(feat.properties || {}),
-                      type_sol: wrb,
-                      TYPE_SOL: wrb,
-                      wrb_class: wrb,
-                      WRB_CLASS: wrb,
-                    },
+                  const nextProps = {
+                    ...(feat.properties || {}),
+                    type_sol: wrb,
+                    TYPE_SOL: wrb,
+                    wrb_class: wrb,
+                    WRB_CLASS: wrb,
                   };
+                  if (confidence != null) nextProps.type_sol_confidence = confidence;
+                  else delete nextProps.type_sol_confidence;
+                  return { ...feat, properties: nextProps };
                 })
               );
               filled += 1;
