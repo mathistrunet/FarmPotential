@@ -2,8 +2,8 @@ import { mkdir, readFile, writeFile, rename } from "node:fs/promises";
 import path from "node:path";
 
 export class SoilGridsCacheRepository {
-  constructor({ dataDir, ttlDays = 30 }) {
-    this.file = path.join(dataDir, "parcel-soilgrids-cache.json");
+  constructor({ dataDir, ttlDays = 30, fileName = "parcel-soilgrids-cache.json" }) {
+    this.file = path.join(dataDir, fileName);
     this.ttlMs = ttlDays * 24 * 60 * 60 * 1000;
     // Chaîne de sérialisation des écritures : sous remplissage parallèle, plusieurs upsert
     // peuvent se déclencher en même temps ; on les exécute l'un après l'autre pour éviter les

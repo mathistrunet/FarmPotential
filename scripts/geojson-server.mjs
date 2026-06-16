@@ -29,9 +29,13 @@ const TOPONYMIE_DIR = path.join(PUBLIC_DATA_DIR, "TOPONYMIE");
 const RPG_ROMANIA_DIR = path.join(PUBLIC_DATA_DIR, "RPG Rom");
 const POINT_STRATEGY = process.env.SOILGRIDS_POINT_STRATEGY || "centroid";
 const CALC_VERSION = "v1.6.0-upr";
+const WRB_CALC_VERSION = "wrb-v1";
 
 const soilClient = new SoilGridsClient({ timeoutMs: 15_000, retries: 2 });
 const soilCacheRepository = new SoilGridsCacheRepository({ dataDir: DATA_DIR, ttlDays: 30 });
+// Cache léger dédié à la remontée WRB-seule (nom de classe par pixel), séparé du cache SoilGrids
+// complet pour éviter toute collision par parcel_id entre les deux modes.
+const wrbCacheRepository = new SoilGridsCacheRepository({ dataDir: DATA_DIR, ttlDays: 30, fileName: "parcel-wrb-cache.json" });
 const soilGridService = new SoilGridsGridService({ dataDir: DATA_DIR });
 const inflightSoilRequests = new Map();
 const rateLimitWindow = [];
@@ -307,6 +311,97 @@ async function loadSoilGridsForParcel({ parcelId, refresh, depthProfile }) {
   return { payload: normalized, cache: false };
 }
 
+async function persistWrbEntry({ parcelId, pointInfo, fetchedAt, cacheKey, wrbClassName, probability }) {
+  await wrbCacheRepository.upsert({
+    parcel_id: String(parcelId),
+    lat: pointInfo.lat,
+    lon: pointInfo.lon,
+    wrb_class_name: wrbClassName ?? null,
+    probability: probability ?? null,
+    fetched_at: fetchedAt,
+    cache_key: cacheKey,
+    calc_version: WRB_CALC_VERSION,
+  });
+}
+
+/**
+ * Remontée allégée : uniquement le nom de classe WRB par parcelle, en gardant la déduplication
+ * par pixel SoilGrids. N'appelle QUE `classification/query` (pas de `properties/query` ni de
+ * calcul UPR) -> moitié moins de requêtes ISRIC. `soilClient.classify` est best-effort et ne lève
+ * jamais : un échec amont renvoie `wrbClassName: null` (donc ni 504 ni 500 propagés).
+ */
+async function loadWrbForParcel({ parcelId, refresh }) {
+  const collection = await readCollection();
+  const feature = (collection.features || []).find(
+    (item) => String(item?.id ?? item?.properties?.id ?? item?.properties?.parcelleNo) === String(parcelId)
+  );
+  if (!feature) throw new Error("[PARCEL_NOT_FOUND] Parcelle introuvable.");
+
+  const pointInfo = resolveParcelPoint(feature, POINT_STRATEGY);
+  const fetchedAt = new Date().toISOString();
+  const pixelKey = soilGridsPixelKey(pointInfo.lon, pointInfo.lat);
+  // Préfixe `wrb:` pour ne pas entrer en collision avec les clés du cache SoilGrids complet.
+  const cacheKey = `wrb:${pixelKey || `${round4(pointInfo.lat)}:${round4(pointInfo.lon)}`}`;
+
+  const buildPayload = (wrbClassName, probability, cache) => ({
+    parcelId: String(parcelId),
+    wrbClassName: wrbClassName ?? null,
+    probability: probability ?? null,
+    source: {
+      name: "SoilGrids",
+      endpoint: "classification/query",
+      resolution: "250m",
+      lat: pointInfo.lat,
+      lon: pointInfo.lon,
+      pointStrategy: pointInfo.pointStrategy,
+      pixelKey: pixelKey || null,
+      fetchedAt,
+    },
+    cacheHit: cache,
+  });
+
+  const isFresh = (entry) => entry && entry.calc_version === WRB_CALC_VERSION;
+
+  if (!refresh) {
+    const parcelCache = await wrbCacheRepository.getByParcel(String(parcelId));
+    if (isFresh(parcelCache) && parcelCache.cache_key === cacheKey) {
+      return buildPayload(parcelCache.wrb_class_name, parcelCache.probability, true);
+    }
+    const shared = await wrbCacheRepository.getByCacheKey(cacheKey);
+    if (isFresh(shared)) {
+      // Même pixel déjà résolu par une autre parcelle : on réutilise sans appel ISRIC.
+      await persistWrbEntry({
+        parcelId, pointInfo, fetchedAt, cacheKey,
+        wrbClassName: shared.wrb_class_name, probability: shared.probability,
+      });
+      return buildPayload(shared.wrb_class_name, shared.probability, true);
+    }
+  }
+
+  // Cache miss : un seul appel `classify` par pixel, mutualisé entre parcelles concurrentes.
+  let classification;
+  if (inflightSoilRequests.has(cacheKey)) {
+    classification = await inflightSoilRequests.get(cacheKey);
+  } else {
+    if (rateLimited()) {
+      throw new SoilGridsError("Rate limit exceeded.", { statusCode: 429, code: "SOILGRIDS_RATE_LIMIT" });
+    }
+    const promise = soilClient.classify({ lat: pointInfo.lat, lon: pointInfo.lon });
+    inflightSoilRequests.set(cacheKey, promise);
+    try {
+      classification = await promise;
+    } finally {
+      inflightSoilRequests.delete(cacheKey);
+    }
+    log("WRB_FETCH", { parcelId, cacheKey, wrb: classification?.wrbClassName ?? null });
+  }
+
+  const wrbClassName = classification?.wrbClassName ?? null;
+  const probability = classification?.probability ?? null;
+  await persistWrbEntry({ parcelId, pointInfo, fetchedAt, cacheKey, wrbClassName, probability });
+  return buildPayload(wrbClassName, probability, false);
+}
+
 const server = http.createServer(async (req, res) => {
   if (!req.url) return void res.end();
   const requestUrl = parseUrl(req.url);
@@ -340,6 +435,32 @@ const server = http.createServer(async (req, res) => {
       });
       res.writeHead(statusCode);
       res.end(JSON.stringify({ error: error?.message || "SoilGrids unavailable." }));
+    }
+    return;
+  }
+
+  // Remontée WRB-seule (nom de classe par parcelle), dédup par pixel, un seul appel ISRIC.
+  if (requestUrl.pathname.startsWith("/api/parcels/") && requestUrl.pathname.endsWith("/wrb")) {
+    res.setHeader("Content-Type", "application/json");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET,OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    if (req.method === "OPTIONS") return void res.writeHead(204).end();
+    if (req.method !== "GET") return void res.writeHead(405).end(JSON.stringify({ error: "Method not allowed." }));
+
+    const match = requestUrl.pathname.match(/^\/api\/parcels\/([^/]+)\/wrb$/);
+    const parcelId = match?.[1];
+    const refresh = requestUrl.searchParams.get("refresh") === "true";
+
+    try {
+      const payload = await loadWrbForParcel({ parcelId, refresh });
+      res.writeHead(200);
+      res.end(JSON.stringify(payload));
+    } catch (error) {
+      const statusCode = error instanceof SoilGridsError ? error.statusCode : 500;
+      log("WRB_ERROR", { parcelId, statusCode, code: error?.code, message: error?.message || String(error) });
+      res.writeHead(statusCode);
+      res.end(JSON.stringify({ error: error?.message || "WRB unavailable." }));
     }
     return;
   }
