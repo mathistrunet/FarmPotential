@@ -1363,7 +1363,7 @@ export default function ParcellesEditorMap({ mapMode, onMapModeChange, onOpenGui
                   {features.length === 0 ? (
                     <p className="fp-hint">
                       Aucune parcelle pour le moment. Utilisez <strong>Importer</strong> dans la
-                      barre du haut, ou l'outil <strong>Polygone</strong> en bas de la carte.
+                      barre du haut, ou l'outil <strong>Dessin</strong> en bas de la carte.
                     </p>
                   ) : null}
 

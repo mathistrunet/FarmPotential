@@ -208,10 +208,27 @@ export default function DrawToolbar({
     );
   }
 
+  /**
+   * Change le mode de dessin ET met à jour l'état local.
+   *
+   * Mapbox Draw n'émet `draw.modechange` que pour les changements déclenchés par
+   * l'utilisateur sur la carte, pas pour les appels programmatiques à
+   * `changeMode()`. Sans cette mise à jour explicite, l'état `mode` resterait
+   * bloqué sur « simple_select » : les boutons ne se coloreraient jamais et les
+   * bascules (multi-sélection notamment) ne se désactiveraient plus.
+   */
+  const applyMode = useCallback(
+    (nextMode) => {
+      const draw = drawRef?.current;
+      if (!draw) return;
+      draw.changeMode(nextMode);
+      setMode(nextMode);
+    },
+    [drawRef]
+  );
+
   function toggleDrawPolygon() {
-    const draw = drawRef?.current;
-    if (!draw) return;
-    draw.changeMode(mode === "draw_polygon" ? "simple_select" : "draw_polygon");
+    applyMode(mode === "draw_polygon" ? "simple_select" : "draw_polygon");
   }
 
   function deleteSelection() {
@@ -224,10 +241,7 @@ export default function DrawToolbar({
   }
 
   function toggleMultipleSelection() {
-    const draw = drawRef?.current;
-    if (!draw) return;
-    const next = mode === "multiple_selection" ? "simple_select" : "multiple_selection";
-    draw.changeMode(next);
+    applyMode(mode === "multiple_selection" ? "simple_select" : "multiple_selection");
   }
 
   function toggleSplitParcel() {
@@ -252,7 +266,7 @@ export default function DrawToolbar({
     splitLineCoordsRef.current = [];
     setSplitLineCoords([]);
     setSplitTargetId(targetId);
-    draw.changeMode("simple_select");
+    applyMode("simple_select");
   }
 
   function applySplitFromLine(lineFeature) {
@@ -284,7 +298,7 @@ export default function DrawToolbar({
     splitLineCoordsRef.current = [];
     setSplitLineCoords([]);
     setSplitTargetId(null);
-    draw.changeMode("simple_select");
+    applyMode("simple_select");
   }
 
   function confirmSplitParcel() {
@@ -307,7 +321,7 @@ export default function DrawToolbar({
     setSplitLineCoords([]);
     if (splitDone) {
       setSplitTargetId(null);
-      draw.changeMode("simple_select");
+      applyMode("simple_select");
       refreshFromDraw();
     }
   }
@@ -384,7 +398,9 @@ export default function DrawToolbar({
       }
     };
 
+    // Draw revient de lui-même en simple_select une fois le polygone terminé.
     const onCreate = () => {
+      setMode("simple_select");
       refreshFromDraw();
     };
 

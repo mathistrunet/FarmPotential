@@ -270,6 +270,40 @@ function buildRpgIndex(features) {
     .filter((item) => Array.isArray(item.bbox));
 }
 
+/**
+ * Cellule de tableau portant une case à cocher (Bio, Irrigable…).
+ *
+ * Le clic est arrêté au niveau de la cellule entière, pas seulement de la case :
+ * la ligne du tableau déclenche la sélection de la parcelle sur la carte
+ * (recadrage + changement de mode Draw). Sans cette barrière, un clic qui tombe
+ * à côté de la case de 13 px — sur le libellé ou la marge — cochait la case tout
+ * en relançant la sélection, ce qui faisait clignoter la case.
+ */
+function FlagCell({ cellStyle, checked, onToggle, label, title }) {
+  return (
+    <td style={cellStyle} onClick={(event) => event.stopPropagation()}>
+      <label
+        title={title}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          fontSize: 13,
+          cursor: "pointer",
+          padding: "2px 0",
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={(event) => onToggle(event.target.checked)}
+        />
+        <span>{label}</span>
+      </label>
+    </td>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Memoized table row — re-renders only when its own feature or typed values change
 // ---------------------------------------------------------------------------
@@ -351,46 +385,34 @@ const TableRow = React.memo(function TableRow({
       <td style={{ ...cellStyle, fontSize: 13 }}>
         {surfaceHa != null && !Number.isNaN(surfaceHa) ? surfaceHa.toFixed(2) : "-"}
       </td>
-      <td style={cellStyle}>
-        <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13 }}>
-          <input
-            type="checkbox"
-            checked={isBio}
-            onChange={(e) => {
-              const next = e.target.checked;
-              onUpdateField(idKey, (p) => {
-                const updated = { ...p };
-                if (next) {
-                  updated.conduite_bio = true;
-                  updated.isOrganic = true;
-                  if (!updated.organicType) updated.organicType = "AB";
-                } else {
-                  delete updated.conduite_bio;
-                  delete updated.isOrganic;
-                  delete updated.organicType;
-                }
-                return updated;
-              });
-            }}
-            onClick={(e) => e.stopPropagation()}
-          />
-          <span>AB</span>
-        </label>
-      </td>
-      <td style={cellStyle}>
-        <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13 }}>
-          <input
-            type="checkbox"
-            checked={isIrrigable}
-            onChange={(e) => {
-              const next = e.target.checked;
-              onUpdateField(idKey, (p) => setIrrigableProps(p, next));
-            }}
-            onClick={(e) => e.stopPropagation()}
-          />
-          <span>Irr.</span>
-        </label>
-      </td>
+      <FlagCell
+        cellStyle={cellStyle}
+        checked={isBio}
+        label="AB"
+        title="Parcelle conduite en agriculture biologique"
+        onToggle={(next) =>
+          onUpdateField(idKey, (p) => {
+            const updated = { ...p };
+            if (next) {
+              updated.conduite_bio = true;
+              updated.isOrganic = true;
+              if (!updated.organicType) updated.organicType = "AB";
+            } else {
+              delete updated.conduite_bio;
+              delete updated.isOrganic;
+              delete updated.organicType;
+            }
+            return updated;
+          })
+        }
+      />
+      <FlagCell
+        cellStyle={cellStyle}
+        checked={isIrrigable}
+        label="Irr."
+        title="Parcelle irrigable — colonne « Irrigabilité » du CSV Assolia"
+        onToggle={(next) => onUpdateField(idKey, (p) => setIrrigableProps(p, next))}
+      />
       {showAdvancedColumns
         ? ADVANCED_COLUMNS.map((col) => (
             <td key={col.id} style={cellStyle}>
@@ -589,29 +611,24 @@ const CardItem = React.memo(function CardItem({
           />
         </label>
 
-        <label
-          style={{
-            fontSize: 12,
-            flex: "1 1 180px",
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            alignSelf: "flex-end",
-            paddingBottom: 5,
-          }}
-          title="Exporté dans la colonne « Irrigabilité » du CSV Assolia"
+        {/* Le clic est arrêté sur tout le bloc : sinon il atteint la fiche, qui
+            resélectionne la parcelle et recadre la carte pendant la saisie. */}
+        <div
+          style={{ flex: "1 1 180px", alignSelf: "flex-end", paddingBottom: 5 }}
+          onClick={(e) => e.stopPropagation()}
         >
-          <input
-            type="checkbox"
-            checked={readIrrigableFlag(props)}
-            onChange={(e) => {
-              const next = e.target.checked;
-              onUpdateField(idKey, (p) => setIrrigableProps(p, next));
-            }}
-            onClick={(e) => e.stopPropagation()}
-          />
-          <span>Parcelle irrigable</span>
-        </label>
+          <label
+            style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}
+            title="Exporté dans la colonne « Irrigabilité » du CSV Assolia"
+          >
+            <input
+              type="checkbox"
+              checked={readIrrigableFlag(props)}
+              onChange={(e) => onUpdateField(idKey, (p) => setIrrigableProps(p, e.target.checked))}
+            />
+            <span>Parcelle irrigable</span>
+          </label>
+        </div>
       </div>
 
       <label style={{ fontSize: 12, display: "block", marginBottom: 6 }}>
