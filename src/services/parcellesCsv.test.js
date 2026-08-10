@@ -120,8 +120,10 @@ describe("buildParcellesCsv — round-trip", () => {
     const headers = lines[0].split(";");
     expect(headers[0]).toBe("Secteur");
     expect(headers[3]).toBe("Parcelles");
-    expect(headers[7]).toBe("CultureN");
-    expect(headers[12]).toBe("Geometrie");
+    expect(headers[6]).toBe("Type de sol");
+    expect(headers[7]).toBe("Irrigabilité");
+    expect(headers[8]).toBe("CultureN");
+    expect(headers[13]).toBe("Geometrie");
   });
 
   it("encode correctement les valeurs avec point-virgule", async () => {
@@ -140,6 +142,33 @@ describe("buildParcellesCsv — round-trip", () => {
     expect(dataLine).toContain('"Parcelle; test"');
   });
 
+  it("exporte l'irrigabilité en Oui / Non", async () => {
+    const geometry = {
+      type: "Polygon",
+      coordinates: [[[1.35, 44.01], [1.36, 44.01], [1.36, 44.02], [1.35, 44.01]]],
+    };
+    const features = [
+      { type: "Feature", properties: { nom: "Irriguée", irrigable: true }, geometry },
+      { type: "Feature", properties: { nom: "Majuscules", IRRIGABLE: "oui" }, geometry },
+      { type: "Feature", properties: { nom: "Non irriguée", irrigable: false }, geometry },
+      { type: "Feature", properties: { nom: "Non renseignée" }, geometry },
+    ];
+    const csv = await buildParcellesCsv(features, "", "", "");
+    const irrigabilite = csv
+      .split(/\r?\n/)
+      .slice(1)
+      .map((line) => line.split(";")[7]);
+    expect(irrigabilite).toEqual(["Oui", "Oui", "Non", "Non"]);
+  });
+
+  it("relit l'irrigabilité d'un CSV importé", async () => {
+    const csv = `Secteur;Exploitation;Numero pacage;Parcelles;Surface parcelle;Parcelle Bio;Type de sol;Irrigabilité;CultureN;CultureN1;CultureN2;CultureN3;CultureN4;Geometrie
+TEST;Expl;000111;P1;1.5;non;Limon;oui;Blé tendre;;;;;1.35,44.01 1.36,44.01 1.36,44.02 1.35,44.01`;
+    const [feature] = await parseParcellesCsvToFeatures(makeFile(csv));
+    expect(feature.properties.irrigable).toBe("oui");
+    expect(feature.properties.IRRIGABLE).toBe("oui");
+  });
+
   it("round-trip: parseParcellesCsvToFeatures ∘ buildParcellesCsv conserve les données", async () => {
     const originalFeatures = await parseParcellesCsvToFeatures(makeFile(SEBASTIEN_CSV_TEXT));
     const csv = await buildParcellesCsv(originalFeatures, "", "", "");
@@ -148,6 +177,107 @@ describe("buildParcellesCsv — round-trip", () => {
     reparsed.forEach((f, i) => {
       expect(f.properties.nom).toBe(originalFeatures[i].properties.nom ?? originalFeatures[i].properties.nom_affiche);
     });
+  });
+});
+
+describe("buildParcellesCsv — structure et « Autre assolé »", () => {
+  const ASSOLIA_CSV = `"culture_id";"culture_name";"structure_id";"structure_name";"metacode"
+"1";"Blé Assolia";"4";"TestStruct";"BTH"
+`;
+
+  function makeFeature(cultures) {
+    return {
+      type: "Feature",
+      properties: { nom: "P1", surface_parcelle: 1, ...cultures },
+      geometry: {
+        type: "Polygon",
+        coordinates: [[[1.35, 44.01], [1.36, 44.01], [1.36, 44.02], [1.35, 44.01]]],
+      },
+    };
+  }
+
+  // Colonnes CultureN..CultureN4 = indices 8 à 12 de la ligne de données.
+  function cultureCells(csv) {
+    return csv.split(/\r?\n/)[1].split(";").slice(8, 13);
+  }
+
+  beforeEach(() => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, text: async () => ASSOLIA_CSV }))
+    );
+  });
+
+  it("sans structure : exporte les cultures telles quelles, sans correspondance", async () => {
+    const csv = await buildParcellesCsv(
+      [makeFeature({ cultureN: "BTH", cultureN1: "MIS" })],
+      "", "", "",
+      {}
+    );
+    const [n] = cultureCells(csv);
+    expect(n).not.toBe("Autre assolé");
+    expect(n).toBeTruthy();
+  });
+
+  it("structure définie : applique la correspondance quand elle existe", async () => {
+    const csv = await buildParcellesCsv(
+      [makeFeature({ cultureN: "BTH" })],
+      "", "", "",
+      { structureName: "TestStruct" }
+    );
+    expect(cultureCells(csv)[0]).toBe("Blé Assolia");
+  });
+
+  it("structure définie : « Autre assolé » quand aucune correspondance", async () => {
+    const csv = await buildParcellesCsv(
+      [makeFeature({ cultureN: "MIS" })],
+      "", "", "",
+      { structureName: "TestStruct" }
+    );
+    expect(cultureCells(csv)[0]).toBe("Autre assolé");
+  });
+
+  it("structure définie : une année vide reste vide (pas « Autre assolé »)", async () => {
+    const csv = await buildParcellesCsv(
+      [makeFeature({ cultureN: "BTH" })],
+      "", "", "",
+      { structureName: "TestStruct" }
+    );
+    const [, n1, n2, n3, n4] = cultureCells(csv);
+    expect([n1, n2, n3, n4]).toEqual(["", "", "", ""]);
+  });
+});
+
+describe("buildParcellesCsv — culture précédente stockée dans culture_prec", () => {
+  // Colonnes CultureN..CultureN4 = indices 8 à 12 de la ligne de données.
+  function cultureCells(csv) {
+    return csv.split(/\r?\n/)[1].split(";").slice(8, 13);
+  }
+
+  // Reproduit « 01 le parc » : le précédent N-1 n'est que dans culture_prec/CULT_PREC
+  // (import Télépac), et non dans cultureN1/cultureN_1.
+  it("exporte la culture N-1 présente uniquement dans culture_prec", async () => {
+    const feature = {
+      type: "Feature",
+      properties: {
+        nom: "01 le parc",
+        surface_parcelle: 2.9,
+        cultureN: "BTH",
+        culture_prec: "MAÏS FOURRAGE",
+        CULT_PREC: "MAÏS FOURRAGE",
+        cultureN_2: "BTH",
+        cultureN2: "BTH",
+      },
+      geometry: {
+        type: "Polygon",
+        coordinates: [[[1.35, 44.01], [1.36, 44.01], [1.36, 44.02], [1.35, 44.01]]],
+      },
+    };
+    const csv = await buildParcellesCsv([feature], "", "", "", {});
+    const [n, n1, n2] = cultureCells(csv);
+    expect(n).toBeTruthy();
+    expect(n1).toBe("MAÏS FOURRAGE");
+    expect(n2).toBeTruthy();
   });
 });
 

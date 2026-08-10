@@ -382,6 +382,7 @@ body {
 }
 
 .fp-empty__card {
+  position: relative;
   pointer-events: auto;
   width: min(520px, 100%);
   background: var(--c-surface);

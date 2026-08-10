@@ -168,13 +168,15 @@ export default function DrawToolbar({
   const [splitLineCoords, setSplitLineCoords] = useState([]);
   const splitLineCoordsRef = useRef([]);
 
-  const btn = {
-    display: "inline-flex", alignItems: "center", gap: 8,
-    padding: compact ? "6px 8px" : "8px 12px",
-    borderRadius: 8, background: "#fff", border: "1px solid #d1d5db",
-    cursor: "pointer", fontSize: 14,
-  };
+  // Les outils à état (dessin, multi-sélection, découpe) s'affichent en couleur
+  // pleine tant qu'ils sont actifs et se désactivent si l'on reclique dessus.
+  const buttonClass = (active = false) =>
+    ["fp-btn", compact ? "fp-btn--sm" : "", active ? "fp-btn--primary" : ""]
+      .filter(Boolean)
+      .join(" ");
   const label = (t) => (compact ? null : <span>{t}</span>);
+  const isDrawing = mode === "draw_polygon";
+  const isMultiSelecting = mode === "multiple_selection";
 
   /** Agrandit les "poignées" (sommets/milieux) de Mapbox Draw pour faciliter la sélection */
   const enlargeVertexHitbox = useCallback((radius = 8, strokeWidth = 3) => {
@@ -206,8 +208,10 @@ export default function DrawToolbar({
     );
   }
 
-  function startDrawPolygon() {
-    drawRef?.current?.changeMode?.("draw_polygon");
+  function toggleDrawPolygon() {
+    const draw = drawRef?.current;
+    if (!draw) return;
+    draw.changeMode(mode === "draw_polygon" ? "simple_select" : "draw_polygon");
   }
 
   function deleteSelection() {
@@ -226,7 +230,12 @@ export default function DrawToolbar({
     draw.changeMode(next);
   }
 
-  function startSplitParcel() {
+  function toggleSplitParcel() {
+    // Un second clic sur l'outil de découpe annule le tracé en cours.
+    if (splitTargetId) {
+      cancelSplitParcel();
+      return;
+    }
     const draw = drawRef?.current;
     if (!draw) return;
     const selIds = (draw.getSelectedIds?.() || (draw.getSelected?.().features || []).map((f) => f.id)) || [];
@@ -470,73 +479,110 @@ export default function DrawToolbar({
 
 
   return (
-    <div className={className} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-      <button onClick={recenterOnFeatures} style={btn} title="Recentrer sur les parcelles">
+    <div className={className} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <button
+        type="button"
+        onClick={recenterOnFeatures}
+        className={buttonClass()}
+        title="Recentrer la carte sur les parcelles"
+      >
         <IconTarget /> {label("Recentrer")}
       </button>
 
-      <button onClick={startDrawPolygon} style={btn} title="Dessiner un polygone">
-        <IconPolygon /> {label("Polygone")}
+      <button
+        type="button"
+        onClick={toggleDrawPolygon}
+        className={buttonClass(isDrawing)}
+        aria-pressed={isDrawing}
+        title={
+          isDrawing
+            ? "Arrêter le dessin (cliquez à nouveau pour quitter le mode)"
+            : "Dessiner une nouvelle parcelle"
+        }
+      >
+        <IconPolygon /> {label(isDrawing ? "Dessin en cours" : "Dessin")}
       </button>
 
       <button
+        type="button"
         onClick={toggleMultipleSelection}
-        style={{ ...btn, background: mode === "multiple_selection" ? "#eef6ff" : "#fff" }}
-        title="Sélection multiple"
+        className={buttonClass(isMultiSelecting)}
+        aria-pressed={isMultiSelecting}
+        title={
+          isMultiSelecting
+            ? "Quitter la sélection multiple"
+            : "Sélectionner plusieurs parcelles à la fois"
+        }
       >
         <IconSelectBox /> {label("Multi-sélection")}
       </button>
 
-      <button onClick={resolveOverlaps} style={btn} title="Découper pour éviter les superpositions">
+      <button
+        type="button"
+        onClick={resolveOverlaps}
+        className={buttonClass()}
+        title="Découper les parcelles qui se superposent"
+      >
         <IconSplit /> {label("Découper chevauchements")}
       </button>
 
-      <button onClick={mergeSelection} style={btn} title="Fusionner les parcelles sélectionnées">
+      <button
+        type="button"
+        onClick={mergeSelection}
+        className={buttonClass()}
+        title="Fusionner les parcelles sélectionnées"
+      >
         <IconMerge /> {label("Fusionner")}
       </button>
 
       <button
-        onClick={startSplitParcel}
-        style={{ ...btn, background: splitTargetId ? "#eef6ff" : "#fff" }}
-        title="Tracer la ligne de découpe de la parcelle sélectionnée"
+        type="button"
+        onClick={toggleSplitParcel}
+        className={buttonClass(!!splitTargetId)}
+        aria-pressed={!!splitTargetId}
+        title={
+          splitTargetId
+            ? "Cliquez sur la carte pour poser les sommets de la ligne de découpe ; recliquez ici pour annuler"
+            : "Découper la parcelle sélectionnée le long d'une ligne"
+        }
       >
-        <IconSplit /> {label(splitTargetId ? "Tracer découpe…" : "Découper parcelle")}
+        <IconSplit /> {label(splitTargetId ? "Tracé en cours" : "Découper parcelle")}
       </button>
 
       {splitTargetId && splitLineCoords.length >= 2 && (
         <button
+          type="button"
           onClick={confirmSplitParcel}
-          style={{ ...btn, background: "#dcfce7", borderColor: "#86efac" }}
+          className={buttonClass()}
+          style={{ background: "#dcfce7", borderColor: "#86efac" }}
           title="Valider la découpe tracée"
         >
           <IconCheck /> {label("Valider découpe")}
         </button>
       )}
 
-      {splitTargetId && (
-        <button
-          onClick={cancelSplitParcel}
-          style={{ ...btn, background: "#fee2e2", borderColor: "#fca5a5" }}
-          title="Annuler le tracé de découpe"
-        >
-          <IconTrash /> {label(splitLineCoords.length ? "Annuler découpe" : "Annuler")}
-        </button>
-      )}
-
-      <button onClick={deleteSelection} style={btn} title="Supprimer la sélection">
+      <button
+        type="button"
+        onClick={deleteSelection}
+        className={buttonClass()}
+        title="Supprimer les parcelles sélectionnées"
+      >
         <IconTrash /> {label("Supprimer")}
       </button>
 
-      <button onClick={onReset} style={btn} title="Réinitialiser toutes les parcelles">
+      <button
+        type="button"
+        onClick={onReset}
+        className={buttonClass()}
+        title="Effacer tout le parcellaire"
+      >
         <IconReset /> {label("Réinitialiser")}
       </button>
 
-      {!compact && (
-        <span style={{ marginLeft: 6, fontSize: 12, color: "#666" }}>
-          Mode : <code>{mode}</code>
-          {splitTargetId
-            ? ` · Cliquez pour poser les sommets (${splitLineCoords.length} posé${splitLineCoords.length !== 1 ? "s" : ""}). Approchez d'une bordure pour l'accroche (●). Cliquez "Valider" pour découper.`
-            : ""}
+      {!compact && splitTargetId && (
+        <span style={{ marginLeft: 4, fontSize: 12, color: "var(--c-text-soft)" }}>
+          {splitLineCoords.length} sommet{splitLineCoords.length !== 1 ? "s" : ""} posé
+          {splitLineCoords.length !== 1 ? "s" : ""} — approchez une bordure pour l'accroche (●).
         </span>
       )}
     </div>

@@ -55,6 +55,30 @@ function parseBioFlag(value) {
   return false;
 }
 
+// Irrigabilité : exportée dans la colonne « Irrigabilité » du CSV Assolia.
+// La valeur est stockée en doublon minuscules/majuscules pour rester lisible
+// après un aller-retour par shapefile (attributs en majuscules).
+const IRRIGABLE_KEYS = ["irrigable", "IRRIGABLE", "irrigabilite", "irrigation"];
+
+function readIrrigableFlag(props = {}) {
+  for (const key of IRRIGABLE_KEYS) {
+    const value = props[key];
+    if (value != null && String(value).trim() !== "") return parseBioFlag(value);
+  }
+  return false;
+}
+
+function setIrrigableProps(props, irrigable) {
+  const next = { ...props };
+  if (irrigable) {
+    next.irrigable = true;
+    next.IRRIGABLE = true;
+  } else {
+    IRRIGABLE_KEYS.forEach((key) => delete next[key]);
+  }
+  return next;
+}
+
 function formatIlotParcelle(props = {}) {
   const ilot = String(props.ilot_numero ?? "").trim();
   const numero = String(props.numero ?? "").trim();
@@ -274,6 +298,7 @@ const TableRow = React.memo(function TableRow({
   const featureArea = featureAreaM2(feature);
   const surfaceHa = typeof featureArea === "number" ? featureArea / 10000 : null;
   const isBio = parseBioFlag(props.isOrganic ?? props.conduite_bio ?? props.bio ?? props.BIO);
+  const isIrrigable = readIrrigableFlag(props);
 
   const typedByColId = {
     next1: typedNext1,
@@ -350,6 +375,20 @@ const TableRow = React.memo(function TableRow({
             onClick={(e) => e.stopPropagation()}
           />
           <span>AB</span>
+        </label>
+      </td>
+      <td style={cellStyle}>
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+          <input
+            type="checkbox"
+            checked={isIrrigable}
+            onChange={(e) => {
+              const next = e.target.checked;
+              onUpdateField(idKey, (p) => setIrrigableProps(p, next));
+            }}
+            onClick={(e) => e.stopPropagation()}
+          />
+          <span>Irr.</span>
         </label>
       </td>
       {showAdvancedColumns
@@ -548,6 +587,30 @@ const CardItem = React.memo(function CardItem({
             placeholder="Ex. Argile"
             style={{ width: "100%", padding: "4px 6px", border: "1px solid #ccc", borderRadius: 4, marginTop: 2 }}
           />
+        </label>
+
+        <label
+          style={{
+            fontSize: 12,
+            flex: "1 1 180px",
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            alignSelf: "flex-end",
+            paddingBottom: 5,
+          }}
+          title="Exporté dans la colonne « Irrigabilité » du CSV Assolia"
+        >
+          <input
+            type="checkbox"
+            checked={readIrrigableFlag(props)}
+            onChange={(e) => {
+              const next = e.target.checked;
+              onUpdateField(idKey, (p) => setIrrigableProps(p, next));
+            }}
+            onClick={(e) => e.stopPropagation()}
+          />
+          <span>Parcelle irrigable</span>
         </label>
       </div>
 
@@ -1220,7 +1283,12 @@ export default function ParcelleEditor({
                   ) : null}
                 </th>
                 <th style={headerStyle}>Surface (ha)</th>
-                <th style={headerStyle}>Bio</th>
+                <th style={headerStyle} title="Conduite en agriculture biologique">
+                  Bio
+                </th>
+                <th style={headerStyle} title="Parcelle irrigable (colonne « Irrigabilité » du CSV Assolia)">
+                  Irrigable
+                </th>
                 {showAdvancedColumns
                   ? ADVANCED_COLUMNS.map((col) => (
                       <th key={col.id} style={headerStyle}>{col.label}</th>

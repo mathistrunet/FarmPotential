@@ -149,3 +149,36 @@ export function featureCentroid(feature) {
 export function polygonAreaM2(polygon) {
   return polygonAreaM2Internal(polygon);
 }
+
+/**
+ * Emprise géographique d'une liste de features, au format attendu par
+ * `map.fitBounds` : [[ouest, sud], [est, nord]]. Renvoie null si aucune
+ * coordonnée exploitable n'est trouvée.
+ */
+export function featuresBounds(features) {
+  let west = Infinity;
+  let south = Infinity;
+  let east = -Infinity;
+  let north = -Infinity;
+
+  const visit = (coordinates) => {
+    if (!Array.isArray(coordinates)) return;
+    if (Number.isFinite(coordinates[0]) && Number.isFinite(coordinates[1])) {
+      const [lon, lat] = coordinates;
+      if (lon < west) west = lon;
+      if (lat < south) south = lat;
+      if (lon > east) east = lon;
+      if (lat > north) north = lat;
+      return;
+    }
+    coordinates.forEach(visit);
+  };
+
+  (features || []).forEach((feature) => visit(feature?.geometry?.coordinates));
+
+  if (!Number.isFinite(west) || !Number.isFinite(south)) return null;
+  return [
+    [west, south],
+    [east, north],
+  ];
+}

@@ -202,6 +202,9 @@ export default function ParcellesEditorMap({ mapMode, onMapModeChange, onOpenGui
   const [sideExpanded, setSideExpanded] = useState(false); // largeur étendue pour le tableau
   const [activeTab, setActiveTab] = useState("parcelles"); // "parcelles" | "calques"
   const [parcelleViewMode, setParcelleViewMode] = useState("cards"); // "cards" | "table"
+  // Le message d'accueil n'est qu'une aide au démarrage : on peut le fermer et
+  // travailler sur la carte sans avoir chargé de parcellaire.
+  const [welcomeDismissed, setWelcomeDismissed] = useState(false);
   const [compact, setCompact] = useState(false);
   const [rrpVisible, setRrpVisible] = useState(false);
   const [rrpOpacity, setRrpOpacity] = useState(DEFAULT_FILL_OPACITY);
@@ -1123,9 +1126,19 @@ export default function ParcellesEditorMap({ mapMode, onMapModeChange, onOpenGui
 
             {/* Écran d'accueil : première chose que voit un utilisateur qui ouvre
                 l'outil sans parcellaire. */}
-            {!matchViewOpen && features.length === 0 && !parcellesLoading && (
+            {!matchViewOpen && features.length === 0 && !parcellesLoading && !welcomeDismissed && (
               <div className="fp-empty">
                 <div className="fp-empty__card">
+                  <button
+                    type="button"
+                    className="fp-modal__close"
+                    style={{ position: "absolute", top: 8, right: 10, marginLeft: 0 }}
+                    onClick={() => setWelcomeDismissed(true)}
+                    title="Fermer — vous pouvez aussi commencer par explorer la carte"
+                    aria-label="Fermer"
+                  >
+                    ×
+                  </button>
                   <h2 className="fp-empty__title">Aucun parcellaire chargé</h2>
                   <p className="fp-hint">
                     Commencez par importer votre parcellaire, ou dessinez directement vos

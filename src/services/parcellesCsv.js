@@ -18,6 +18,7 @@ const CSV_HEADERS = [
   "Surface parcelle",
   "Parcelle Bio",
   "Type de sol",
+  "Irrigabilité",
   "CultureN",
   "CultureN1",
   "CultureN2",
@@ -184,6 +185,15 @@ function formatParcelleBioValue(raw) {
   return String(raw);
 }
 
+// Irrigabilité : même convention Oui/Non que la colonne bio. Une parcelle sans
+// information est exportée « Non », valeur attendue par Assolia pour une
+// parcelle non irrigable.
+const formatIrrigabiliteValue = formatParcelleBioValue;
+
+// Clés possibles pour l'irrigabilité selon la provenance de la parcelle
+// (saisie dans l'outil, réimport CSV, shapefile en majuscules).
+const IRRIGABLE_KEYS = ["irrigable", "IRRIGABLE", "irrigabilite", "irrigabilité", "irrigation"];
+
 function parseCultureValue(raw, structureLookup = null) {
   const trimmed = raw == null ? "" : String(raw).trim();
   if (!trimmed) return { value: "", code: "", precision: "" };
@@ -254,6 +264,25 @@ function normalizeRowMap(row) {
   return map;
 }
 
+// Clés de repli pour les cultures précédentes N-1..N-4, alignées sur l'affichage de
+// ParcelleEditor. Les imports Télépac/shapefile stockent le précédent dans
+// culture_prec*/CULT_PREC* (et non cultureN_x), il faut donc les lire aussi à l'export.
+const CULTURE_PREV_KEYS = [
+  ["cultureN_1", "cultureN1", "culture_prec", "CULT_PREC"],
+  ["cultureN_2", "cultureN2", "culture_prec2", "CULT_PREC2"],
+  ["cultureN_3", "cultureN3", "culture_prec3", "CULT_PREC3"],
+  ["cultureN_4", "cultureN4", "culture_prec4", "CULT_PREC4"],
+];
+
+// Retourne la première valeur non vide parmi une liste de clés de propriété.
+function firstNonEmptyProp(props, keys) {
+  for (const key of keys) {
+    const v = props?.[key];
+    if (v != null && String(v).trim() !== "") return v;
+  }
+  return "";
+}
+
 // Lit la précision pour un indice d'année donné (0 = culture N, 1 = N-1, etc.)
 function getPrecisionByYearIndex(props, yearIndex) {
   const keys =
@@ -283,15 +312,16 @@ export async function buildParcellesCsv(
     }
   }
 
-  // Résout un code culture vers le libellé Assolia.
+  // Résout un code culture vers le libellé Assolia lorsqu'une structure est définie.
   // Essaie d'abord la clé complète CODE|precision pour correspondre à la bonne
   // culture Assolia (ex. blé bio ≠ blé standard), puis replie sur le code seul.
+  // Si aucune correspondance n'existe dans la structure, on émet « Autre assolé »
+  // (une case vide reste vide : pas de culture pour cette année).
   const resolveCulture = (raw, metacodeOverride = "", precision = "") => {
     const value = raw == null ? "" : String(raw).trim();
     if (!value && !metacodeOverride) return "";
     const metacode = metacodeOverride || getMetacodeFromValue(value);
-    if (!metacode) return formatCultureValue(value);
-    if (structureLookup?.byMetacode) {
+    if (metacode && structureLookup?.byMetacode) {
       // Tentative avec précision (ex. "BLE|1" pour blé semence)
       const precisionTrimmed = String(precision || "").trim();
       if (precisionTrimmed) {
@@ -301,8 +331,8 @@ export async function buildParcellesCsv(
       // Repli sur le code seul
       if (structureLookup.byMetacode[metacode]) return structureLookup.byMetacode[metacode];
     }
-    if (structureLookup?.fallbackName) return structureLookup.fallbackName;
-    return formatCultureValue(value);
+    // Structure définie mais aucune correspondance trouvée → « Autre assolé »
+    return "Autre assolé";
   };
 
   const rows = (features || []).map((feature, idx) => {
@@ -323,6 +353,7 @@ export async function buildParcellesCsv(
       props.parcelle_bio_label;
     const typeSol =
       props.type_sol ?? props.typeSol ?? props.type_de_sol ?? props.sol ?? "";
+    const irrigable = firstNonEmptyProp(props, IRRIGABLE_KEYS);
     const CULTURE_N_KEYS = ["culture", "Culture", "CULTURE", "cultureN", "cultureN_0", "cultureN0", "code_culture", "codeCulture", "code"];
     const cultureNRaw = (() => {
       for (const k of CULTURE_N_KEYS) {
@@ -337,10 +368,10 @@ export async function buildParcellesCsv(
     const cultureNOutput = structureLookup
       ? resolveCulture(cultureNValue, cultureNCode, precN)
       : cultureNValue;
-    const cultureN1Value = props.cultureN1 ?? props.cultureN_1 ?? "";
-    const cultureN2Value = props.cultureN2 ?? props.cultureN_2 ?? "";
-    const cultureN3Value = props.cultureN3 ?? props.cultureN_3 ?? "";
-    const cultureN4Value = props.cultureN4 ?? props.cultureN_4 ?? "";
+    const cultureN1Value = firstNonEmptyProp(props, CULTURE_PREV_KEYS[0]);
+    const cultureN2Value = firstNonEmptyProp(props, CULTURE_PREV_KEYS[1]);
+    const cultureN3Value = firstNonEmptyProp(props, CULTURE_PREV_KEYS[2]);
+    const cultureN4Value = firstNonEmptyProp(props, CULTURE_PREV_KEYS[3]);
 
     return [
       secteur || props.secteur || "",
@@ -350,6 +381,7 @@ export async function buildParcellesCsv(
       formatNumber(surfaceValue),
       formatParcelleBioValue(parcelleBio),
       typeSol == null ? "" : String(typeSol),
+      formatIrrigabiliteValue(irrigable),
       cultureNOutput,
       structureLookup
         ? resolveCulture(cultureN1Value, "", getPrecisionByYearIndex(props, 1))
@@ -421,6 +453,7 @@ export async function parseParcellesCsvToFeatures(file, options = {}) {
     const surfaceParcelle = parseSurfaceValue(map.get("surfaceparcelle"));
     const parcelleBio = map.get("parcellebio") ?? "";
     const typeSol = map.get("typedsol") ?? map.get("typedesol") ?? "";
+    const irrigable = map.get("irrigabilite") ?? map.get("irrigable") ?? "";
     const cultureN = parseCultureValue(map.get("culturen"), structureLookup);
     const cultureN1 = parseCultureValue(map.get("culturen1"), structureLookup);
     const cultureN2 = parseCultureValue(map.get("culturen2"), structureLookup);
@@ -442,6 +475,7 @@ export async function parseParcellesCsvToFeatures(file, options = {}) {
       ...(surfaceParcelle != null ? { surface_parcelle: surfaceParcelle } : {}),
       ...(parcelleBio ? { parcelle_bio: parcelleBio } : {}),
       ...(typeSol ? { type_sol: typeSol } : {}),
+      ...(irrigable ? { irrigable, IRRIGABLE: irrigable } : {}),
       ...cultureProps,
     };
 

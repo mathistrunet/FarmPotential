@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
@@ -15,7 +15,8 @@ import {
   buildDeterministicPalette,
   getFillColorExpression,
 } from "./parcellesLayers";
-import { applyFilters } from "./parcellesFilters";
+import { applyFilters, matchesFilters } from "./parcellesFilters";
+import { featuresBounds } from "../../utils/geometry";
 
 const DEFAULT_CENTER = [2.2137, 46.2276];
 const DEFAULT_ZOOM = 5;
@@ -272,6 +273,53 @@ export default function ParcellesViewerMap({
     applyFilters(map, filters);
   }, [filters]);
 
+  // Parcelles réellement affichées : le recentrage suit la sélection en cours
+  // plutôt que l'ensemble du parcellaire.
+  const visibleFeatures = useMemo(
+    () => (resolvedCollection?.features || []).filter((feature) => matchesFilters(feature, filters)),
+    [resolvedCollection, filters]
+  );
+
+  const recenter = useCallback(
+    (options = {}) => {
+      const map = mapRef.current;
+      if (!map) return false;
+      const bounds = featuresBounds(visibleFeatures);
+      if (!bounds) return false;
+      try {
+        map.fitBounds(bounds, { padding: 48, maxZoom: 16, duration: 500, ...options });
+        return true;
+      } catch {
+        return false; // emprise dégénérée (parcelle réduite à un point)
+      }
+    },
+    [visibleFeatures]
+  );
+
+  // Recentrage automatique : à la première arrivée des parcelles, puis à chaque
+  // fois que le jeu affiché change de nature (filtre d'année, de cultures…).
+  // La signature évite de rejouer l'animation à chaque re-rendu identique.
+  const visibleSignature = useMemo(
+    () =>
+      visibleFeatures.length
+        ? `${visibleFeatures.length}:${(featuresBounds(visibleFeatures) || []).flat().join(",")}`
+        : "",
+    [visibleFeatures]
+  );
+  const lastAutoFitRef = useRef("");
+
+  useEffect(() => {
+    if (!isActive || !visibleSignature) return;
+    if (lastAutoFitRef.current === visibleSignature) return;
+    // Laisse la source se mettre à jour avant de bouger la caméra.
+    const timeout = setTimeout(() => {
+      if (recenter({ duration: lastAutoFitRef.current ? 500 : 0 })) {
+        lastAutoFitRef.current = visibleSignature;
+      }
+    }, 80);
+    return () => clearTimeout(timeout);
+  }, [isActive, visibleSignature, recenter]);
+
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !isActive) return;
@@ -296,6 +344,29 @@ export default function ParcellesViewerMap({
         id="parcelles-viewer-map"
         style={{ position: "absolute", inset: 0 }}
       />
+      {hasFeatures ? (
+        <button
+          type="button"
+          className="fp-btn"
+          onClick={() => recenter()}
+          disabled={visibleFeatures.length === 0}
+          title={
+            visibleFeatures.length === 0
+              ? "Aucune parcelle ne correspond aux filtres en cours"
+              : "Recentrer la carte sur les parcelles affichées"
+          }
+          style={{
+            position: "absolute",
+            top: 12,
+            right: 12,
+            zIndex: 5,
+            boxShadow: "var(--shadow-md)",
+          }}
+        >
+          Recentrer
+        </button>
+      ) : null}
+
       {!isLoading && !hasFeatures ? (
         <div
           style={{
