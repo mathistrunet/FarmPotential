@@ -3,6 +3,10 @@ import { describe, expect, it, beforeEach, vi } from "vitest";
 
 const LEGACY_KEY = "parcelles.geojson";
 const CURRENT_KEY = "farmpotential.parcelles-temp";
+// Marqueur de version : sans lui, le module purge le brouillon local au premier
+// chargement (cette version démarre sans parcellaire enregistré).
+const VERSION_KEY = "farmpotential.parcelles-version";
+const VERSION = "2";
 
 const SAMPLE_COLLECTION = JSON.stringify({
   type: "FeatureCollection",
@@ -18,10 +22,36 @@ const SAMPLE_COLLECTION = JSON.stringify({
   ],
 });
 
-// The migration runs at module load time, so we re-import after each setup.
+// La purge et la migration s'exécutent au chargement du module : chaque test
+// prépare donc localStorage avant de ré-importer.
+describe("parcellesBackend — purge de première installation", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    vi.resetModules();
+  });
+
+  it("efface le brouillon local hérité et pose le marqueur de version", async () => {
+    window.localStorage.setItem(CURRENT_KEY, SAMPLE_COLLECTION);
+    window.localStorage.setItem(LEGACY_KEY, SAMPLE_COLLECTION);
+    await import("./parcellesBackend");
+    expect(window.localStorage.getItem(CURRENT_KEY)).toBeNull();
+    expect(window.localStorage.getItem(LEGACY_KEY)).toBeNull();
+    expect(window.localStorage.getItem(VERSION_KEY)).toBe(VERSION);
+  });
+
+  it("ne purge plus une fois le marqueur posé", async () => {
+    window.localStorage.setItem(VERSION_KEY, VERSION);
+    window.localStorage.setItem(CURRENT_KEY, SAMPLE_COLLECTION);
+    await import("./parcellesBackend");
+    expect(window.localStorage.getItem(CURRENT_KEY)).toBe(SAMPLE_COLLECTION);
+  });
+});
+
 describe("parcellesBackend — migration localStorage", () => {
   beforeEach(() => {
     window.localStorage.clear();
+    // Installation déjà initialisée : la purge de première ouverture n'entre pas en jeu.
+    window.localStorage.setItem(VERSION_KEY, VERSION);
     vi.resetModules();
   });
 

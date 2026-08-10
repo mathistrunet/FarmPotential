@@ -1,0 +1,490 @@
+/*
+ * Design tokens + primitives partagées de l'interface.
+ * Objectif : une seule source de vérité pour les couleurs, espacements et
+ * composants récurrents (boutons, cartes, champs, modales), afin que les écrans
+ * restent cohérents et lisibles pour un utilisateur qui découvre l'outil.
+ */
+
+:root {
+  /* Couleurs */
+  --c-bg: #f6f7f9;
+  --c-surface: #ffffff;
+  --c-surface-muted: #f9fafb;
+  --c-border: #e2e5ea;
+  --c-border-strong: #cbd2da;
+
+  --c-text: #16202c;
+  --c-text-soft: #56606d;
+  --c-text-faint: #808b98;
+
+  --c-accent: #1f7a4d;
+  --c-accent-hover: #196340;
+  --c-accent-soft: #e8f4ee;
+  --c-accent-border: #b7ddc9;
+
+  --c-info: #2563eb;
+  --c-info-soft: #eaf1ff;
+  --c-warn: #b45309;
+  --c-warn-soft: #fff5e6;
+  --c-warn-border: #f5d9a8;
+  --c-danger: #c0392b;
+  --c-danger-soft: #fdecea;
+
+  /* Rayons & ombres */
+  --r-sm: 6px;
+  --r-md: 9px;
+  --r-lg: 14px;
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
+  --shadow-md: 0 6px 18px rgba(16, 24, 40, 0.1);
+  --shadow-lg: 0 24px 60px rgba(16, 24, 40, 0.22);
+
+  /* Typographie */
+  --f-sans: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs-md: 13px;
+  --fs-lg: 15px;
+  --fs-xl: 18px;
+
+  /* Gabarit */
+  --topbar-h: 52px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--f-sans);
+  color: var(--c-text);
+  background: var(--c-bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------------------------------------------------------------- Boutons */
+
+.fp-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 7px 12px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--c-border-strong);
+  background: var(--c-surface);
+  color: var(--c-text);
+  font-family: inherit;
+  font-size: var(--fs-md);
+  font-weight: 500;
+  line-height: 1.2;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.fp-btn:hover:not(:disabled) {
+  background: var(--c-surface-muted);
+  border-color: var(--c-text-faint);
+}
+
+.fp-btn:focus-visible {
+  outline: 2px solid var(--c-info);
+  outline-offset: 2px;
+}
+
+.fp-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.fp-btn--primary {
+  background: var(--c-accent);
+  border-color: var(--c-accent);
+  color: #fff;
+}
+
+.fp-btn--primary:hover:not(:disabled) {
+  background: var(--c-accent-hover);
+  border-color: var(--c-accent-hover);
+}
+
+.fp-btn--ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--c-text-soft);
+}
+
+.fp-btn--ghost:hover:not(:disabled) {
+  background: rgba(22, 32, 44, 0.06);
+  border-color: transparent;
+}
+
+.fp-btn--danger {
+  color: var(--c-danger);
+  border-color: #eec4be;
+  background: var(--c-danger-soft);
+}
+
+.fp-btn--sm {
+  padding: 5px 9px;
+  font-size: var(--fs-sm);
+}
+
+.fp-btn--lg {
+  padding: 11px 18px;
+  font-size: var(--fs-lg);
+}
+
+.fp-btn--block {
+  width: 100%;
+}
+
+.fp-btn--active {
+  background: var(--c-accent-soft);
+  border-color: var(--c-accent-border);
+  color: var(--c-accent-hover);
+}
+
+/* Groupe de boutons segmenté (Carte / Tableau, Éditeur / Visualiseur…) */
+.fp-segmented {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  background: var(--c-surface-muted);
+  border: 1px solid var(--c-border);
+  border-radius: 999px;
+}
+
+.fp-segmented > button {
+  border: none;
+  background: transparent;
+  border-radius: 999px;
+  padding: 5px 13px;
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: var(--c-text-soft);
+  cursor: pointer;
+}
+
+.fp-segmented > button[aria-pressed="true"] {
+  background: var(--c-surface);
+  color: var(--c-text);
+  box-shadow: var(--shadow-sm);
+}
+
+/* ------------------------------------------------------- Surfaces / cartes */
+
+.fp-card {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-lg);
+  padding: 14px;
+}
+
+.fp-card--muted {
+  background: var(--c-surface-muted);
+}
+
+.fp-section-title {
+  margin: 0;
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--c-text-faint);
+}
+
+.fp-hint {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  color: var(--c-text-soft);
+}
+
+.fp-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--c-surface-muted);
+  border: 1px solid var(--c-border);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--c-text-soft);
+}
+
+.fp-badge--accent {
+  background: var(--c-accent-soft);
+  border-color: var(--c-accent-border);
+  color: var(--c-accent-hover);
+}
+
+/* ----------------------------------------------------------- Barre du haut */
+
+.fp-topbar {
+  height: var(--topbar-h);
+  flex: 0 0 var(--topbar-h);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  background: var(--c-surface);
+  border-bottom: 1px solid var(--c-border);
+  box-shadow: var(--shadow-sm);
+  z-index: 40;
+}
+
+.fp-topbar__brand {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-right: 4px;
+}
+
+.fp-topbar__title {
+  margin: 0;
+  font-size: var(--fs-lg);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.fp-topbar__subtitle {
+  font-size: var(--fs-xs);
+  color: var(--c-text-faint);
+}
+
+.fp-topbar__spacer {
+  flex: 1;
+  min-width: 8px;
+}
+
+.fp-topbar__divider {
+  width: 1px;
+  height: 24px;
+  background: var(--c-border);
+}
+
+/* ------------------------------------------------------------- Onglets */
+
+.fp-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--c-border);
+}
+
+.fp-tab {
+  border: none;
+  background: transparent;
+  padding: 9px 12px;
+  margin-bottom: -1px;
+  border-bottom: 2px solid transparent;
+  font-family: inherit;
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--c-text-soft);
+  cursor: pointer;
+}
+
+.fp-tab:hover {
+  color: var(--c-text);
+}
+
+.fp-tab[aria-selected="true"] {
+  color: var(--c-accent);
+  border-bottom-color: var(--c-accent);
+}
+
+/* -------------------------------------------------------------- Modales */
+
+.fp-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(16, 24, 40, 0.45);
+  backdrop-filter: blur(2px);
+}
+
+.fp-modal {
+  display: flex;
+  flex-direction: column;
+  width: min(760px, 100%);
+  max-height: min(86vh, 900px);
+  background: var(--c-surface);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+.fp-modal__header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--c-border);
+}
+
+.fp-modal__title {
+  margin: 0;
+  font-size: var(--fs-xl);
+  font-weight: 700;
+}
+
+.fp-modal__body {
+  padding: 18px 20px;
+  overflow-y: auto;
+}
+
+.fp-modal__footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--c-border);
+  background: var(--c-surface-muted);
+}
+
+.fp-modal__close {
+  margin-left: auto;
+  border: none;
+  background: transparent;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--c-text-faint);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: var(--r-sm);
+}
+
+.fp-modal__close:hover {
+  background: var(--c-surface-muted);
+  color: var(--c-text);
+}
+
+/* ---------------------------------------------------------- Écran d'accueil */
+
+.fp-empty {
+  position: absolute;
+  inset: 0;
+  z-index: 18;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  pointer-events: none;
+}
+
+.fp-empty__card {
+  pointer-events: auto;
+  width: min(520px, 100%);
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-md);
+  padding: 24px;
+  text-align: center;
+}
+
+.fp-empty__title {
+  margin: 0 0 6px;
+  font-size: var(--fs-xl);
+  font-weight: 700;
+}
+
+.fp-empty__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 18px;
+}
+
+.fp-format-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+  margin-top: 14px;
+}
+
+/* --------------------------------------------------------- Étapes du guide */
+
+.fp-steps {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: fp-step;
+}
+
+.fp-step {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+.fp-step__num {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--c-accent-soft);
+  border: 1px solid var(--c-accent-border);
+  color: var(--c-accent-hover);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+}
+
+.fp-step__title {
+  margin: 4px 0 3px;
+  font-size: var(--fs-md);
+  font-weight: 700;
+}
+
+.fp-step__text {
+  margin: 0;
+  font-size: var(--fs-md);
+  line-height: 1.55;
+  color: var(--c-text-soft);
+}
+
+/* ------------------------------------------------------------- Divers */
+
+.fp-scroll-x {
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.fp-kbd {
+  display: inline-block;
+  padding: 1px 5px;
+  border: 1px solid var(--c-border-strong);
+  border-bottom-width: 2px;
+  border-radius: var(--r-sm);
+  background: var(--c-surface-muted);
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: var(--fs-xs);
+}
+
+.fp-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}

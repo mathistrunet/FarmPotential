@@ -1,8 +1,8 @@
 // src/maps/parcelles/ParcellesEditorMap.jsx
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
-import centroid from "@turf/centroid";
 
+import AppTopBar from "../../components/AppTopBar";
 import RasterToggles from "../../components/RasterToggles";
 import ParcelleEditor from "../../components/ParcelleEditor";
 import { useMapInitialization } from "../../features/map/useMapInitialization";
@@ -18,11 +18,11 @@ import RpgFeature from "../../Front/useRpgLayer";
 import RpgRomaniaFeature from "../../Front/useRpgRomaniaLayer";
 // ✅ composant Dessin autonome (chemin conservé)
 import DrawToolbar from "../../Front/DrawToolbar";
-// ✅ Import/Export Télépac (chemin conservé)
-import ImportTelepacButton from "../../Front/TelepacButton";
+// Import multi-format / export multi-format
+import ImportParcellaireButton from "../../Front/ImportParcellaireButton";
 import ExportMenuButton from "../../Front/ExportMenuButton";
 import ParcelleMatchView from "../../components/ParcelleMatchView";
-import SoilTypeMappingPanel from "../../components/SoilTypeMappingPanel";
+import { IMPORT_FORMATS } from "../../services/parcellaireImport";
 
 // ✅ NOUVEAU : hook d’affichage RRP local (depuis un fichier MBTiles placé dans /public/data)
 import { useSoilLayerLocal } from "../../features/useSoilLayerLocal";
@@ -41,15 +41,6 @@ import {
   validateParcellesMatching,
 } from "../../services/parcellesBackend";
 import { useParcelles } from "./useParcelles";
-import {
-  loadSoilTypeLookupBySourceFile,
-  loadSoilTypeLookupByUcsId,
-  resolveFileUcs,
-  resolveUcsId,
-  buildSoilCombinationKey,
-} from "../../services/soilTypeMapping";
-import { featureAreaM2 } from "../../utils/geometry";
-import { fetchSoilGridsVisibleGrid } from "../../services/soilgridsGridBackend";
 
 const EARTH_RADIUS = 6378137;
 const DRAW_LAYER_IDS = [
@@ -108,41 +99,6 @@ const ensureFeaturesHaveYear = (inputFeatures) => {
   return { changed, nextFeatures };
 };
 const DRAW_LAYER_VARIANTS = ["", ".cold", ".hot"];
-const SOILGRIDS_GRID_SOURCE_ID = "soilgrids-grid-source";
-const SOILGRIDS_GRID_LAYER_ID = "soilgrids-grid-layer";
-const EMPTY_COLLECTION = { type: "FeatureCollection", features: [] };
-
-function buildSoilProbePoints(feature) {
-  const probes = [];
-  const register = (coordinates) => {
-    if (!Array.isArray(coordinates) || coordinates.length < 2) return;
-    const [lng, lat] = coordinates;
-    if (!Number.isFinite(lng) || !Number.isFinite(lat)) return;
-    const key = `${lng.toFixed(7)}:${lat.toFixed(7)}`;
-    if (!probes.some((probe) => probe.key === key)) {
-      probes.push({ key, coordinates: [lng, lat] });
-    }
-  };
-
-  register(centroid(feature).geometry?.coordinates);
-  const polygonCoordinates =
-    feature?.geometry?.type === "Polygon"
-      ? [feature.geometry.coordinates]
-      : feature?.geometry?.type === "MultiPolygon"
-        ? feature.geometry.coordinates
-        : [];
-
-  polygonCoordinates.forEach((polygon) => {
-    const firstRing = polygon?.[0] || [];
-    if (!firstRing.length) return;
-    const sampleIndexes = [0, Math.floor(firstRing.length / 3), Math.floor((firstRing.length * 2) / 3)];
-    sampleIndexes.forEach((index) => {
-      register(firstRing[index]);
-    });
-  });
-
-  return probes;
-}
 
 function projectLngLatTo3857(lng, lat) {
   const rad = Math.PI / 180;
@@ -220,7 +176,7 @@ function buildFeatureInfoUrl(def, map, point) {
   return url.toString();
 }
 
-export default function ParcellesEditorMap() {
+export default function ParcellesEditorMap({ mapMode, onMapModeChange, onOpenGuide }) {
   const {
     mapRef,
     drawRef,
@@ -228,7 +184,6 @@ export default function ParcellesEditorMap() {
     setFeatures,
     selectedId,
     selectFeatureOnMap,
-    selectFeaturesOnMap,
     setDrawFeatures,
     mapInitError,
     drawReady,
@@ -245,12 +200,8 @@ export default function ParcellesEditorMap() {
   // Onglets + panneau latéral repliable
   const [sideOpen, setSideOpen] = useState(true);          // panneau latéral ouvert/fermé
   const [sideExpanded, setSideExpanded] = useState(false); // largeur étendue pour le tableau
-  const [activeTab, setActiveTab] = useState("parcelles"); // "parcelles" | "calques" | "mapping-sols"
+  const [activeTab, setActiveTab] = useState("parcelles"); // "parcelles" | "calques"
   const [parcelleViewMode, setParcelleViewMode] = useState("cards"); // "cards" | "table"
-  const [soilMappingParcelCandidates, setSoilMappingParcelCandidates] = useState([]);
-  const [soilMappingRefreshTick, setSoilMappingRefreshTick] = useState(0);
-  const [soilMappingLoading, setSoilMappingLoading] = useState(false);
-  const soilMappingDebugLoggedRef = useRef(false);
   const [compact, setCompact] = useState(false);
   const [rrpVisible, setRrpVisible] = useState(false);
   const [rrpOpacity, setRrpOpacity] = useState(DEFAULT_FILL_OPACITY);
@@ -268,12 +219,6 @@ export default function ParcellesEditorMap() {
     });
     return initial;
   });
-  const [soilGridsGridVisible, setSoilGridsGridVisible] = useState(false);
-  const [soilGridsGridMeta, setSoilGridsGridMeta] = useState(null);
-  const [soilGridsGridError, setSoilGridsGridError] = useState(null);
-  const soilGridsGridAbortRef = useRef(null);
-  const soilGridsGridRequestRef = useRef(0);
-  const soilGridsGridPopupRef = useRef(null);
   const [mapClickInfo, setMapClickInfo] = useState(null);
   const [appWarnings, setAppWarnings] = useState([]);
   const defaultCsvCode = useMemo(
@@ -386,6 +331,21 @@ export default function ParcellesEditorMap() {
       setSideExpanded(false);
     }
   }, [parcelleViewMode, sideOpen]);
+
+  // La carte occupe désormais une cellule de grille : quand le panneau latéral
+  // s'ouvre, se ferme ou s'élargit, MapLibre doit recalculer sa taille de canvas.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return undefined;
+    const timeout = setTimeout(() => {
+      try {
+        map.resize();
+      } catch {
+        /* la carte peut avoir été détruite entre-temps */
+      }
+    }, 60);
+    return () => clearTimeout(timeout);
+  }, [mapRef, sideOpen, sideExpanded, matchViewOpen, compact]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -667,229 +627,9 @@ export default function ParcellesEditorMap() {
     [],
   );
 
-  const ensureSoilGridsGridLayer = useCallback(() => {
-    if (!mapInstance || !mapInstance.isStyleLoaded()) return false;
-
-    if (!mapInstance.getSource(SOILGRIDS_GRID_SOURCE_ID)) {
-      mapInstance.addSource(SOILGRIDS_GRID_SOURCE_ID, {
-        type: "geojson",
-        data: EMPTY_COLLECTION,
-      });
-    }
-
-    if (!mapInstance.getLayer(SOILGRIDS_GRID_LAYER_ID)) {
-      mapInstance.addLayer({
-        id: SOILGRIDS_GRID_LAYER_ID,
-        type: "line",
-        source: SOILGRIDS_GRID_SOURCE_ID,
-        paint: {
-          "line-color": "#ef4444",
-          "line-opacity": 0.6,
-          "line-width": 1,
-        },
-        layout: {
-          visibility: soilGridsGridVisible ? "visible" : "none",
-        },
-      });
-    }
-
-    return true;
-  }, [mapInstance, soilGridsGridVisible]);
-
-  const refreshSoilGridsGrid = useCallback(() => {
-    if (!mapInstance || !soilGridsGridVisible) return;
-    if (!ensureSoilGridsGridLayer()) return;
-
-    const bounds = mapInstance.getBounds?.();
-    if (!bounds) return;
-
-    const bbox = [
-      bounds.getWest(),
-      bounds.getSouth(),
-      bounds.getEast(),
-      bounds.getNorth(),
-    ];
-
-    if (soilGridsGridAbortRef.current) {
-      soilGridsGridAbortRef.current.abort();
-    }
-    const controller = new AbortController();
-    soilGridsGridAbortRef.current = controller;
-
-    const requestId = soilGridsGridRequestRef.current + 1;
-    soilGridsGridRequestRef.current = requestId;
-    setSoilGridsGridError(null);
-
-    fetchSoilGridsVisibleGrid({ bbox, limit: 6000, signal: controller.signal })
-      .then((payload) => {
-        if (requestId !== soilGridsGridRequestRef.current) return;
-        const source = mapInstance.getSource(SOILGRIDS_GRID_SOURCE_ID);
-        if (source?.setData) {
-          source.setData(payload?.collection || EMPTY_COLLECTION);
-        }
-        setSoilGridsGridMeta({
-          featureCount: payload?.featureCount ?? 0,
-          truncated: !!payload?.truncated,
-          coverageId: payload?.metadata?.coverageId || null,
-          crs: payload?.metadata?.crs || "EPSG:4326",
-        });
-      })
-      .catch((error) => {
-        if (controller.signal.aborted) return;
-        if (requestId !== soilGridsGridRequestRef.current) return;
-        const source = mapInstance.getSource(SOILGRIDS_GRID_SOURCE_ID);
-        if (source?.setData) {
-          source.setData(EMPTY_COLLECTION);
-        }
-        setSoilGridsGridMeta(null);
-        setSoilGridsGridError(error?.message || "Erreur de chargement de la grille SoilGrids");
-      });
-  }, [mapInstance, soilGridsGridVisible, ensureSoilGridsGridLayer]);
-
-  useEffect(() => {
-    if (!mapInstance) return;
-
-    if (!mapInstance.isStyleLoaded()) {
-      const onLoad = () => {
-        ensureSoilGridsGridLayer();
-      };
-      mapInstance.once("load", onLoad);
-      return () => mapInstance.off("load", onLoad);
-    }
-
-    ensureSoilGridsGridLayer();
-  }, [mapInstance, ensureSoilGridsGridLayer]);
-
-  useEffect(() => {
-    if (!mapInstance || !mapInstance.getLayer(SOILGRIDS_GRID_LAYER_ID)) return;
-
-    mapInstance.setLayoutProperty(
-      SOILGRIDS_GRID_LAYER_ID,
-      "visibility",
-      soilGridsGridVisible ? "visible" : "none",
-    );
-
-    if (!soilGridsGridVisible) {
-      if (soilGridsGridAbortRef.current) {
-        soilGridsGridAbortRef.current.abort();
-      }
-      const source = mapInstance.getSource(SOILGRIDS_GRID_SOURCE_ID);
-      if (source?.setData) source.setData(EMPTY_COLLECTION);
-      setSoilGridsGridMeta(null);
-      setSoilGridsGridError(null);
-      if (soilGridsGridPopupRef.current) {
-        soilGridsGridPopupRef.current.remove();
-        soilGridsGridPopupRef.current = null;
-      }
-      return;
-    }
-
-    refreshSoilGridsGrid();
-  }, [mapInstance, soilGridsGridVisible, refreshSoilGridsGrid]);
-
-  useEffect(() => {
-    if (!mapInstance || !soilGridsGridVisible) return;
-    let timer = null;
-
-    const handleMoveEnd = () => {
-      clearTimeout(timer);
-      timer = setTimeout(() => {
-        refreshSoilGridsGrid();
-      }, 120);
-    };
-
-    mapInstance.on("moveend", handleMoveEnd);
-    return () => {
-      mapInstance.off("moveend", handleMoveEnd);
-      clearTimeout(timer);
-    };
-  }, [mapInstance, soilGridsGridVisible, refreshSoilGridsGrid]);
-
-  useEffect(() => {
-    if (!mapInstance) return;
-
-    const parseBboxValue = (value) => {
-      if (Array.isArray(value) && value.length === 4) return value.map((item) => Number(item));
-      if (typeof value !== "string") return null;
-      const values = value.split(",").map((item) => Number(item.trim()));
-      if (values.length !== 4 || values.some((item) => !Number.isFinite(item))) return null;
-      return values;
-    };
-
-    const handleGridClick = (event) => {
-      const feature = event?.features?.[0];
-      if (!feature) return;
-      const props = feature.properties || {};
-      const centerLon = Number(props?.centerLon);
-      const centerLat = Number(props?.centerLat);
-      const center = Number.isFinite(centerLon) && Number.isFinite(centerLat) ? [centerLon, centerLat] : null;
-      const bbox = parseBboxValue(props?.bboxWgs84);
-
-      const html = [
-        `<strong>${props.pixelId || "Pixel SoilGrids"}</strong>`,
-        `Ligne / colonne : ${props.row ?? "?"} / ${props.col ?? "?"}`,
-        center ? `Centre : ${Number(center[1]).toFixed(6)}, ${Number(center[0]).toFixed(6)}` : null,
-        Array.isArray(bbox)
-          ? `BBox : ${bbox.map((v) => Number(v).toFixed(6)).join(", ")}`
-          : null,
-      ]
-        .filter(Boolean)
-        .join("<br />");
-
-      if (soilGridsGridPopupRef.current) {
-        soilGridsGridPopupRef.current.remove();
-      }
-      soilGridsGridPopupRef.current = new maplibregl.Popup({ closeButton: true })
-        .setLngLat(event.lngLat)
-        .setHTML(`<div style="font-size:12px;">${html}</div>`)
-        .addTo(mapInstance);
-    };
-
-    const handleMouseEnter = () => {
-      mapInstance.getCanvas().style.cursor = "pointer";
-    };
-    const handleMouseLeave = () => {
-      mapInstance.getCanvas().style.cursor = "";
-    };
-
-    const bindLayerEvents = () => {
-      if (!mapInstance.getLayer(SOILGRIDS_GRID_LAYER_ID)) return false;
-      mapInstance.on("click", SOILGRIDS_GRID_LAYER_ID, handleGridClick);
-      mapInstance.on("mouseenter", SOILGRIDS_GRID_LAYER_ID, handleMouseEnter);
-      mapInstance.on("mouseleave", SOILGRIDS_GRID_LAYER_ID, handleMouseLeave);
-      return true;
-    };
-
-    let bound = bindLayerEvents();
-    const handleStyleData = () => {
-      if (!bound) {
-        bound = bindLayerEvents();
-      }
-    };
-    if (!bound) {
-      mapInstance.on("styledata", handleStyleData);
-    }
-
-    return () => {
-      if (bound) {
-        mapInstance.off("click", SOILGRIDS_GRID_LAYER_ID, handleGridClick);
-        mapInstance.off("mouseenter", SOILGRIDS_GRID_LAYER_ID, handleMouseEnter);
-        mapInstance.off("mouseleave", SOILGRIDS_GRID_LAYER_ID, handleMouseLeave);
-      }
-      mapInstance.off("styledata", handleStyleData);
-      if (soilGridsGridPopupRef.current) {
-        soilGridsGridPopupRef.current.remove();
-        soilGridsGridPopupRef.current = null;
-      }
-    };
-  }, [mapInstance]);
   useEffect(() => () => {
     infoAbortControllers.current.forEach((controller) => controller.abort());
     infoAbortControllers.current = [];
-    if (soilGridsGridAbortRef.current) {
-      soilGridsGridAbortRef.current.abort();
-      soilGridsGridAbortRef.current = null;
-    }
   }, []);
 
   useEffect(() => {
@@ -1237,147 +977,16 @@ export default function ParcellesEditorMap() {
     return true;
   };
 
-  const resolveParcelsWithSoilRows = useCallback(async () => {
-    const map = mapRef.current;
-    if (!map || !rrpVisible || !map.getLayer("soils-rrp-fill")) {
-      throw new Error("Active la couche Carte des sols France avant de visualiser les sols.");
-    }
-    if (loadingTiles || !polygonsShown) {
-      throw new Error("Donn?es sols en cours de chargement.");
-    }
-
-    const [lookupBySourceFile, lookupByUcsId] = await Promise.all([
-      loadSoilTypeLookupBySourceFile(),
-      loadSoilTypeLookupByUcsId(),
-    ]);
-
-    return features.map((feature, index) => {
-      const areaM2 = featureAreaM2(feature) ?? 0;
-      const surfaceHa = areaM2 / 10000;
-      const probePoints = buildSoilProbePoints(feature);
-      if (!probePoints.length) {
-        return { index, feature, soilRow: null, surfaceHa };
-      }
-
-      let detectedSoilRow = null;
-      for (const probe of probePoints) {
-        const point = map.project([probe.coordinates[0], probe.coordinates[1]]);
-        const rendered = map.queryRenderedFeatures(point, { layers: ["soils-rrp-fill"] }) || [];
-        if (!soilMappingDebugLoggedRef.current && rendered.length) {
-          const sample = rendered[0];
-          const sampleProps = sample?.properties || {};
-          const sampleFileUcs = resolveFileUcs(sampleProps);
-          const sampleUcsId = resolveUcsId(sampleProps);
-          console.info("[SOIL_DEBUG] sample RRP feature properties", {
-            id: sample.id,
-            keys: Object.keys(sampleProps),
-            fileUcs: sampleFileUcs,
-            ucsId: sampleUcsId,
-            sampleProps,
-          });
-          soilMappingDebugLoggedRef.current = true;
-        }
-        for (const candidate of rendered) {
-          const soilProps = candidate?.properties || {};
-          const fileUcs = resolveFileUcs(soilProps);
-          const ucsId = resolveUcsId(soilProps);
-          const row =
-            (fileUcs && lookupBySourceFile.get(fileUcs.toLowerCase())) ||
-            (ucsId && lookupByUcsId.get(ucsId)) ||
-            null;
-          if (row) {
-            detectedSoilRow = row;
-            break;
-          }
-        }
-        if (detectedSoilRow) break;
-      }
-
-      return { index, feature, soilRow: detectedSoilRow, surfaceHa };
-    });
-  }, [features, mapRef, rrpVisible, loadingTiles, polygonsShown]);
-
-  useEffect(() => {
-    if (!rrpVisible) {
-      setSoilMappingParcelCandidates([]);
-      return undefined;
-    }
-    if (loadingTiles || !polygonsShown) {
-      return undefined;
-    }
-    let cancelled = false;
-    // Debounce 300ms : évite N×probes queryRenderedFeatures à chaque frappe/édition
-    const timeoutId = setTimeout(() => {
-      setSoilMappingLoading(true);
-      resolveParcelsWithSoilRows()
-        .then((candidates) => {
-          if (!cancelled) setSoilMappingParcelCandidates(candidates);
-        })
-        .catch(() => {
-          if (!cancelled) setSoilMappingParcelCandidates([]);
-        })
-        .finally(() => {
-          if (!cancelled) setSoilMappingLoading(false);
-        });
-    }, 300);
-    return () => {
-      cancelled = true;
-      clearTimeout(timeoutId);
-    };
-  }, [resolveParcelsWithSoilRows, rrpVisible, loadingTiles, polygonsShown, soilMappingRefreshTick]);
-
-  const refreshSoilMapping = useCallback(() => {
-    soilMappingDebugLoggedRef.current = false;
-    setSoilMappingRefreshTick((prev) => prev + 1);
-  }, []);
-
-  const applySoilMappingToParcels = useCallback((structureName, mapping) => {
-    if (!structureName || !mapping) return;
-    const combinationMap = mapping?.combinationMap || {};
-    const hasMapping = Object.keys(combinationMap).length > 0;
-    if (!hasMapping) {
-      alert("Aucun mapping defini pour cette structure.");
-      return;
-    }
-
-    const candidatesByIndex = new Map();
-    soilMappingParcelCandidates.forEach((candidate) => {
-      if (candidate && Number.isFinite(candidate.index)) {
-        candidatesByIndex.set(candidate.index, candidate);
-      }
-    });
-
-    const nextFeatures = features.map((feature, index) => {
-      const candidate = candidatesByIndex.get(index);
-      if (!candidate?.soilRow) return feature;
-      const key = buildSoilCombinationKey(candidate.soilRow);
-      const mappedName = combinationMap[key];
-      if (!mappedName) return feature;
-      const props = { ...(feature.properties || {}) };
-      props.type_sol = mappedName;
-      props.TYPE_SOL = mappedName;
-      return { ...feature, properties: props };
-    });
-
-    setFeatures(nextFeatures);
-  }, [features, soilMappingParcelCandidates, setFeatures]);
-
-  // ---- Styles de la barre d’outils bas
-  const bottomBarHeight = compact ? 56 : 64;
-  const barBase = {
-    position: "fixed",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    background: "#fff",
-    borderTop: "1px solid #e5e7eb",
-    boxShadow: "0 -6px 20px rgba(0,0,0,0.08)",
+  // ---- Barre d'outils basse : elle occupe sa propre ligne sous la carte plutôt
+  //      que de flotter au-dessus, ce qui évite de masquer les parcelles du bas.
+  const toolbarStyle = {
     display: "flex",
     alignItems: "center",
-    gap: 12,
-    padding: compact ? "6px 10px" : "10px 14px",
-    zIndex: 20,
-    minHeight: bottomBarHeight,
+    gap: 10,
+    padding: compact ? "6px 10px" : "9px 12px",
+    background: "var(--c-surface)",
+    borderTop: "1px solid var(--c-border)",
+    flex: "0 0 auto",
   };
   const toolbarScrollWrap = {
     display: "flex",
@@ -1389,7 +998,7 @@ export default function ParcellesEditorMap() {
   const toolbarScrollArea = {
     display: "flex",
     alignItems: "center",
-    gap: 12,
+    gap: 14,
     overflowX: "auto",
     paddingBottom: 4,
     marginBottom: -4,
@@ -1397,66 +1006,33 @@ export default function ParcellesEditorMap() {
   };
   const navButtonStyle = {
     padding: "6px 8px",
-    borderRadius: 6,
-    border: "1px solid #d1d5db",
-    background: "#fff",
+    borderRadius: "var(--r-sm)",
+    border: "1px solid var(--c-border-strong)",
+    background: "var(--c-surface)",
     cursor: "pointer",
-    fontSize: 14,
+    fontSize: 13,
     lineHeight: 1,
   };
-  const groupStyle = {
+  // Chaque groupe d'outils porte son intitulé : un nouvel utilisateur comprend à
+  // quoi sert chaque bloc sans avoir à survoler les boutons un par un.
+  const toolGroupStyle = {
     display: "flex",
-    alignItems: "center",
-    gap: compact ? 6 : 10,
-    paddingRight: compact ? 8 : 14,
-    marginRight: compact ? 4 : 8,
-    borderRight: "1px solid #eee",
+    flexDirection: "column",
+    gap: 3,
+    paddingRight: 14,
+    borderRight: "1px solid var(--c-border)",
   };
-  const btn = {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: 8,
-    padding: compact ? "6px 8px" : "8px 12px",
-    borderRadius: 8,
-    background: "#fff",
-    border: "1px solid #d1d5db",
-    cursor: "pointer",
-    fontSize: 14,
-  };
-  const label = (t) => (compact ? null : <span>{t}</span>);
 
-  // Petites icônes (chevron uniquement ici)
-  const iconStyle = {
-    width: 18,
-    height: 18,
-    display: "inline-block",
-    verticalAlign: "-3px",
-  };
   const IconChevron = ({ up = false }) => (
-    <svg viewBox="0 0 24 24" style={iconStyle}>
+    <svg
+      viewBox="0 0 24 24"
+      style={{ width: 16, height: 16, display: "inline-block", verticalAlign: "-3px" }}
+      aria-hidden="true"
+    >
       <path d={up ? "M7 14l5-5 5 5" : "M7 10l5 5 5-5"} fill="currentColor" />
     </svg>
   );
 
-  // ---- Layout racine (grille 2 colonnes conditionnelle)
-  const layoutStyle = {
-    height: "100%",
-    position: "relative",
-    display: "grid",
-    gridTemplateColumns: sideOpen
-      ? sideExpanded
-        ? "minmax(320px, 45%) minmax(420px, 55%)"
-        : "1fr 420px"
-      : "1fr 0px",
-  };
-  const sidePanelHeaderStyle = {
-    position: "sticky",
-    top: 0,
-    background: "#fff",
-    paddingBottom: 12,
-    zIndex: 1,
-    borderBottom: "1px solid #eee",
-  };
   const scrollToolbar = (direction) => {
     const el = toolbarScrollRef.current;
     if (!el) return;
@@ -1464,688 +1040,563 @@ export default function ParcellesEditorMap() {
     el.scrollBy({ left: delta, behavior: "smooth" });
   };
 
+  const sideWidth = sideExpanded ? "minmax(460px, 52%)" : "420px";
+
   return (
-    <div style={layoutStyle}>
-      {/* Carte */}
-      <div
-        id="map"
-        style={{
-          height: "100dvh",
-          width: "100%",
-          opacity: matchViewOpen ? 0 : 1,
-          pointerEvents: matchViewOpen ? "none" : "auto",
-        }}
-      />
-      {mapInitError && (
-        <div
-          style={{
-            position: "absolute",
-            inset: 12,
-            zIndex: 30,
-            background: "rgba(255,255,255,0.96)",
-            border: "1px solid #fca5a5",
-            borderRadius: 12,
-            padding: 16,
-            maxWidth: 520,
-            boxShadow: "0 10px 30px rgba(0,0,0,0.15)",
+    <div
+      style={{
+        height: "100%",
+        display: "flex",
+        flexDirection: "column",
+        minHeight: 0,
+        background: "var(--c-bg)",
+      }}
+    >
+      <AppTopBar
+        mode={mapMode}
+        onModeChange={onMapModeChange}
+        onOpenGuide={onOpenGuide}
+        parcelCount={features.length}
+      >
+        <ImportParcellaireButton
+          variant="primary"
+          mapRef={mapRef}
+          drawRef={drawRef}
+          setFeatures={setFeatures}
+          selectFeatureOnMap={selectFeatureOnMap}
+          onImportMeta={(meta) => {
+            if (!meta?.pacage) return;
+            setCsvValues((prev) => ({ ...prev, codeExploitation: meta.pacage }));
           }}
-        >
-          <h2 style={{ margin: 0, fontSize: 16, color: "#b91c1c" }}>
-            Erreur carte ({mapInitError.code || ERROR_CODES.MAP_INIT_FAILED})
-          </h2>
-          <p style={{ margin: "8px 0 0", color: "#7f1d1d", fontSize: 13 }}>
-            {mapInitError.message ||
-              "Impossible d'initialiser la carte. Vérifie la console pour plus de détails."}
-          </p>
-        </div>
-      )}
-      {appWarnings.length > 0 && (
-        <div
-          style={{
-            position: "absolute",
-            left: 12,
-            bottom: 72,
-            zIndex: 25,
-            background: "rgba(255,255,255,0.92)",
-            border: "1px solid #fde68a",
-            borderRadius: 10,
-            padding: 12,
-            maxWidth: 360,
-            fontSize: 12,
-            color: "#92400e",
+        />
+        <ExportMenuButton
+          features={features}
+          setFeatures={setFeatures}
+          csvValues={csvValues}
+          onCsvValuesChange={setCsvValues}
+        />
+        <button
+          type="button"
+          className={`fp-btn ${sideOpen ? "fp-btn--active" : ""}`}
+          onClick={() => {
+            setSideOpen((open) => !open);
+            if (sideOpen) setParcelleViewMode("cards");
           }}
+          title={sideOpen ? "Masquer la liste des parcelles" : "Afficher la liste des parcelles"}
+          aria-pressed={sideOpen}
         >
-          <strong>Alertes de configuration</strong>
-          <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>
-            {appWarnings.map((warning) => (
-              <li key={warning.code}>
-                [{warning.code}] {warning.message}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+          Liste des parcelles
+        </button>
+      </AppTopBar>
 
-      <MapInfoPanel info={mapClickInfo} onClose={handleCloseInfoPanel} />
-
-      {/* Panneau latéral (onglets + repliable) */}
       <div
         style={{
-          padding: sideOpen ? 16 : 0,
-          paddingBottom: sideOpen ? bottomBarHeight + 24 : 0,
-          borderLeft: sideOpen ? "1px solid #eee" : "none",
-          overflowY: "auto",
-          display: sideOpen && !matchViewOpen ? "block" : "none",
+          flex: 1,
+          minHeight: 0,
+          display: "grid",
+          gridTemplateColumns: sideOpen && !matchViewOpen ? `1fr ${sideWidth}` : "1fr",
         }}
       >
-        <div style={sidePanelHeaderStyle}>
-          {/* En-tête + bouton pour replier */}
+        {/* Colonne carte : la carte occupe la place restante, la barre d'outils
+            reste toujours visible en dessous. */}
+        <div
+          style={{
+            position: "relative",
+            display: "flex",
+            flexDirection: "column",
+            minWidth: 0,
+            minHeight: 0,
+          }}
+        >
           <div
             style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 8,
+              position: "relative",
+              flex: 1,
+              minHeight: 0,
+              opacity: matchViewOpen ? 0 : 1,
+              pointerEvents: matchViewOpen ? "none" : "auto",
             }}
           >
-            <h1 style={{ margin: 0, fontSize: 18 }}>Assolia Telepac Mapper</h1>
-            <button
-              onClick={() => {
-                setSideOpen(false);
-                setParcelleViewMode("cards");
-              }}
-              title="Replier le panneau"
-              style={{
-                padding: "6px 8px",
-                borderRadius: 6,
-                border: "1px solid #ddd",
-                background: "#fff",
-                cursor: "pointer",
-              }}
-            >
-              ◀
-            </button>
-          </div>
+            <div id="map" style={{ position: "absolute", inset: 0 }} />
 
-          {/* Onglets */}
-          <div
-            style={{ display: "flex", gap: 6, marginTop: 12, marginBottom: 8 }}
-          >
-            <button
-              onClick={() => setActiveTab("parcelles")}
-              style={{
-                padding: "8px 10px",
-                borderRadius: 8,
-                border: "1px solid #ddd",
-                background: activeTab === "parcelles" ? "#eef6ff" : "#fff",
-                cursor: "pointer",
-              }}
-            >
-              Parcelles
-            </button>
-            <button
-              onClick={() => setActiveTab("calques")}
-              style={{
-                padding: "8px 10px",
-                borderRadius: 8,
-                border: "1px solid #ddd",
-                background: activeTab === "calques" ? "#ffeeeeff" : "#fff",
-                cursor: "pointer",
-              }}
-            >
-              Calques
-            </button>
-            <button
-              onClick={() => setActiveTab("mapping-sols")}
-              style={{
-                padding: "8px 10px",
-                borderRadius: 8,
-                border: "1px solid #ddd",
-                background: activeTab === "mapping-sols" ? "#ecfeff" : "#fff",
-                cursor: "pointer",
-              }}
-            >
-              Sols presentes
-            </button>
-          </div>
+            <MapInfoPanel info={mapClickInfo} onClose={handleCloseInfoPanel} />
 
-          {activeTab === "parcelles" && (
-            <div
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                alignItems: "center",
-                gap: 8,
-                marginBottom: 4,
-              }}
-            >
-              <span style={{ fontSize: 12, color: "#555" }}>Affichage</span>
+            {/* Écran d'accueil : première chose que voit un utilisateur qui ouvre
+                l'outil sans parcellaire. */}
+            {!matchViewOpen && features.length === 0 && !parcellesLoading && (
+              <div className="fp-empty">
+                <div className="fp-empty__card">
+                  <h2 className="fp-empty__title">Aucun parcellaire chargé</h2>
+                  <p className="fp-hint">
+                    Commencez par importer votre parcellaire, ou dessinez directement vos
+                    parcelles sur la carte. Le format est détecté automatiquement et rien
+                    n'est envoyé sur Internet.
+                  </p>
+
+                  <div className="fp-format-list">
+                    {IMPORT_FORMATS.map((format) => (
+                      <span key={format.id} className="fp-badge" title={format.description}>
+                        {format.label}
+                      </span>
+                    ))}
+                  </div>
+
+                  <div className="fp-empty__actions">
+                    <ImportParcellaireButton
+                      variant="primary"
+                      className="fp-btn--lg"
+                      label="Importer un parcellaire"
+                      mapRef={mapRef}
+                      drawRef={drawRef}
+                      setFeatures={setFeatures}
+                      selectFeatureOnMap={selectFeatureOnMap}
+                      onImportMeta={(meta) => {
+                        if (!meta?.pacage) return;
+                        setCsvValues((prev) => ({ ...prev, codeExploitation: meta.pacage }));
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="fp-btn fp-btn--lg"
+                      onClick={() => drawRef.current?.changeMode?.("draw_polygon")}
+                    >
+                      Dessiner une parcelle
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="fp-btn fp-btn--ghost fp-btn--sm"
+                    style={{ marginTop: 12 }}
+                    onClick={onOpenGuide}
+                  >
+                    Découvrir le fonctionnement de l'outil
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {mapInitError && (
               <div
+                className="fp-card"
                 style={{
-                  display: "inline-flex",
-                  border: "1px solid #d1d5db",
-                  borderRadius: 999,
-                  padding: 2,
-                  background: "#f9fafb",
+                  position: "absolute",
+                  top: 12,
+                  left: 12,
+                  right: 12,
+                  zIndex: 30,
+                  maxWidth: 520,
+                  borderColor: "#f0b8b1",
+                  background: "var(--c-danger-soft)",
                 }}
               >
-                <button
-                  type="button"
-                  onClick={() => setParcelleViewMode("cards")}
-                  style={{
-                    padding: "6px 12px",
-                    borderRadius: 999,
-                    border: "none",
-                    cursor: "pointer",
-                    background:
-                      parcelleViewMode === "cards" ? "#2563eb" : "transparent",
-                    color: parcelleViewMode === "cards" ? "#fff" : "#111",
-                    fontSize: 12,
-                  }}
-                >
-                  Fiches
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setParcelleViewMode("table")}
-                  style={{
-                    padding: "6px 12px",
-                    borderRadius: 999,
-                    border: "none",
-                    cursor: "pointer",
-                    background:
-                      parcelleViewMode === "table" ? "#2563eb" : "transparent",
-                    color: parcelleViewMode === "table" ? "#fff" : "#111",
-                    fontSize: 12,
-                  }}
-                >
-                  Tableau
-                </button>
+                <h2 style={{ margin: 0, fontSize: "var(--fs-lg)", color: "var(--c-danger)" }}>
+                  La carte n'a pas pu démarrer ({mapInitError.code || ERROR_CODES.MAP_INIT_FAILED})
+                </h2>
+                <p className="fp-hint" style={{ marginTop: 8, color: "#7f1d1d" }}>
+                  {mapInitError.message ||
+                    "Impossible d'initialiser la carte. Vérifiez que votre navigateur accepte WebGL."}
+                </p>
               </div>
+            )}
+
+            {appWarnings.length > 0 && (
+              <div
+                className="fp-card"
+                style={{
+                  position: "absolute",
+                  left: 12,
+                  bottom: 12,
+                  zIndex: 25,
+                  maxWidth: 360,
+                  padding: 12,
+                  background: "var(--c-warn-soft)",
+                  borderColor: "var(--c-warn-border)",
+                  color: "var(--c-warn)",
+                }}
+              >
+                <strong style={{ fontSize: "var(--fs-md)" }}>Alertes de configuration</strong>
+                <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: "var(--fs-sm)" }}>
+                  {appWarnings.map((warning) => (
+                    <li key={warning.code}>{warning.message}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+
+          {/* Barre d'outils de dessin */}
+          {!matchViewOpen && (
+            <div style={toolbarStyle}>
+              <div style={toolbarScrollWrap}>
+                {compact && (
+                  <button
+                    type="button"
+                    onClick={() => scrollToolbar(-1)}
+                    style={navButtonStyle}
+                    title="Faire défiler les outils vers la gauche"
+                  >
+                    ◀
+                  </button>
+                )}
+                <div style={toolbarScrollArea} ref={toolbarScrollRef}>
+                  <div style={{ ...toolGroupStyle, borderRight: "none", paddingRight: 0 }}>
+                    {!compact && <span className="fp-section-title">Dessin et édition</span>}
+                    <DrawToolbar
+                      mapRef={mapRef}
+                      drawRef={drawRef}
+                      features={features}
+                      setFeatures={setFeatures}
+                      selectFeatureOnMap={selectFeatureOnMap}
+                      onReset={handleResetParcelles}
+                      compact={compact}
+                    />
+                  </div>
+                </div>
+                {compact && (
+                  <button
+                    type="button"
+                    onClick={() => scrollToolbar(1)}
+                    style={navButtonStyle}
+                    title="Faire défiler les outils vers la droite"
+                  >
+                    ▶
+                  </button>
+                )}
+              </div>
+
+              <button
+                type="button"
+                className="fp-btn fp-btn--sm"
+                onClick={() => setCompact((value) => !value)}
+                title={compact ? "Afficher les libellés des outils" : "Réduire la barre d'outils"}
+              >
+                <IconChevron up={compact} />
+                {compact ? "Agrandir" : "Réduire"}
+              </button>
             </div>
           )}
         </div>
 
-        {/* Contenu onglet “Parcelles” */}
-        {activeTab === "parcelles" && (
-          <>
-            <p style={{ color: "#666", marginTop: 0 }}>
-              • “Importer XML Télépac” pour charger un export.
-              <br />
-              • “Dessiner un polygone” pour ajouter une parcelle.
-              <br />• “Exporter XML Télépac” pour générer un fichier compatible
-              Assolia.
-            </p>
-
-            <div
-              style={{
-                border: "1px solid #e5e7eb",
-                borderRadius: 10,
-                padding: 10,
-                marginBottom: 12,
-                background: "#fafafa",
-              }}
-            >
-              <div style={{ fontWeight: 600, marginBottom: 8 }}>
-                Association inter-annees
+        {/* Panneau latéral : liste des parcelles et calques */}
+        {sideOpen && !matchViewOpen && (
+          <aside
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              minHeight: 0,
+              borderLeft: "1px solid var(--c-border)",
+              background: "var(--c-surface)",
+            }}
+          >
+            <div style={{ padding: "12px 16px 0", flex: "0 0 auto" }}>
+              <div className="fp-tabs" role="tablist">
+                <button
+                  type="button"
+                  role="tab"
+                  className="fp-tab"
+                  aria-selected={activeTab === "parcelles"}
+                  onClick={() => setActiveTab("parcelles")}
+                >
+                  Parcelles ({features.length})
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  className="fp-tab"
+                  aria-selected={activeTab === "calques"}
+                  onClick={() => setActiveTab("calques")}
+                >
+                  Calques
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={handleOpenParcelleMatch}
-                disabled={yearOptions.years.length < 2}
-                style={{
-                  padding: "8px 12px",
-                  borderRadius: 8,
-                  border: "1px solid #d1d5db",
-                  background: yearOptions.years.length < 2 ? "#f3f4f6" : "#fff",
-                  cursor: yearOptions.years.length < 2 ? "not-allowed" : "pointer",
-                  fontWeight: 600,
-                }}
-              >
-                {yearOptions.years.length < 2
-                  ? "Associer les parcelles (2 annees minimum)"
-                  : `Associer les parcelles (${yearOptions.years.length} annees detectees)`}
-              </button>
-              <p style={{ margin: "8px 0 0", fontSize: 12, color: "#666" }}>
-                Ouvre l'interface de comparaison pour valider les associations entre parcelles de millesimes differents.
-              </p>
-              {validatedMatches.length > 0 && (
-                <p style={{ margin: "6px 0 0", fontSize: 12, color: "#334155" }}>
-                  Dernière validation : {validatedMatches.length} correspondance
-                  {validatedMatches.length > 1 ? "s" : ""} enregistrée
-                  {validatedMatches.length > 1 ? "s" : ""}
-                  {validatedMatchesAt
-                    ? ` à ${validatedMatchesAt.toLocaleTimeString("fr-FR")}`
-                    : ""}
-                  .
-                </p>
+
+              {activeTab === "parcelles" && (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    flexWrap: "wrap",
+                    padding: "10px 0 4px",
+                  }}
+                >
+                  <span className="fp-hint">Affichage</span>
+                  <div className="fp-segmented">
+                    <button
+                      type="button"
+                      aria-pressed={parcelleViewMode === "cards"}
+                      onClick={() => setParcelleViewMode("cards")}
+                      title="Une fiche détaillée par parcelle"
+                    >
+                      Fiches
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={parcelleViewMode === "table"}
+                      onClick={() => setParcelleViewMode("table")}
+                      title="Saisie en série dans un tableau"
+                    >
+                      Tableau
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
 
-            <ParcelleEditor
-              features={features}
-              visibleFeatures={visibleFeatures}
-              setFeatures={setFeatures}
-              onFillNames={() => fillToponymieNames(features)}
-              isFillingNames={isToponymieNaming}
-              selectedId={selectedId}
-              onSelect={(id) => selectFeatureOnMap(id, true)}
-              drawRef={drawRef}
-              mapRef={mapRef}
-              viewMode={parcelleViewMode}
-              csvValues={csvValues}
-              onCsvValuesChange={setCsvValues}
-            />
+            <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "12px 16px 20px" }}>
+              {activeTab === "parcelles" && (
+                <>
+                  {features.length === 0 ? (
+                    <p className="fp-hint">
+                      Aucune parcelle pour le moment. Utilisez <strong>Importer</strong> dans la
+                      barre du haut, ou l'outil <strong>Polygone</strong> en bas de la carte.
+                    </p>
+                  ) : null}
 
-            <p style={{ fontSize: 12, color: "#777", marginTop: 10 }}>
-              Astuce : clique une fiche pour surligner la parcelle sur la carte
-              (et inversement).
-            </p>
-          </>
-        )}
-
-        {activeTab === "mapping-sols" && (
-          <SoilTypeMappingPanel
-            parcelCandidates={soilMappingParcelCandidates}
-            parcelCount={features.length}
-            rrpVisible={rrpVisible}
-            loading={soilMappingLoading || loadingTiles}
-            onRefresh={refreshSoilMapping}
-            onApplyMapping={applySoilMappingToParcels}
-            onSelectParcels={(ids) => selectFeaturesOnMap(ids, true)}
-          />
-        )}
-
-        {/* Calques (hors sols en ligne ; on garde les rasters/basemaps locaux ou tiers) */}
-        {activeTab === "calques" && (
-          <div style={{ marginTop: 6 }}>
-            <span
-              style={{ cursor: "default", fontWeight: 600, padding: "6px 0" }}
-            >
-              Calques
-            </span>
-            <div style={{ marginTop: 8 }}>
-              <RasterToggles
-                mapRef={mapRef}
-                layerState={layerState}
-                onLayerToggle={handleLayerToggle}
-                onLayerOpacityChange={handleLayerOpacityChange}
-              />
-              <div
-                style={{
-                  border: "1px solid #eee",
-                  borderRadius: 8,
-                  padding: 8,
-                  marginTop: 8,
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 6,
-                }}
-              >
-                <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <input
-                    type="checkbox"
-                    checked={soilGridsGridVisible}
-                    onChange={(event) => setSoilGridsGridVisible(event.target.checked)}
+                  <ParcelleEditor
+                    features={features}
+                    visibleFeatures={visibleFeatures}
+                    setFeatures={setFeatures}
+                    onFillNames={() => fillToponymieNames(features)}
+                    isFillingNames={isToponymieNaming}
+                    selectedId={selectedId}
+                    onSelect={(id) => selectFeatureOnMap(id, true)}
+                    drawRef={drawRef}
+                    mapRef={mapRef}
+                    viewMode={parcelleViewMode}
+                    csvValues={csvValues}
+                    onCsvValuesChange={setCsvValues}
                   />
-                  <span>Grille SoilGrids</span>
-                </label>
-                <p style={{ margin: 0, fontSize: 12, color: "#666" }}>
-                  Decoupage reel des pixels SoilGrids (WCS) sur l'emprise visible.
-                </p>
-                {soilGridsGridMeta ? (
-                  <p style={{ margin: 0, fontSize: 11, color: "#475569" }}>
-                    {soilGridsGridMeta.featureCount} pixel{soilGridsGridMeta.featureCount > 1 ? "s" : ""} affiche
-                    {soilGridsGridMeta.featureCount > 1 ? "s" : ""}
-                    {soilGridsGridMeta.truncated ? " (limite atteinte)" : ""}
-                    {soilGridsGridMeta.coverageId ? ` - ${soilGridsGridMeta.coverageId}` : ""}
-                    {soilGridsGridMeta.crs ? ` (${soilGridsGridMeta.crs})` : ""}
-                  </p>
-                ) : null}
-                {soilGridsGridError ? (
-                  <p style={{ margin: 0, fontSize: 11, color: "#b91c1c" }}>{soilGridsGridError}</p>
-                ) : null}
-              </div>
-              <div
-                style={{
-                  marginTop: 12,
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 6,
-                }}
-              >
-                {/* RPG (autonome) */}
-                <RpgFeature mapRef={mapRef} drawRef={drawRef} />
-                {/* RPG Roumanie (GeoPackage local, sous le RPG France) */}
-                <RpgRomaniaFeature mapRef={mapRef} drawRef={drawRef} />
-                <div
-                  style={{
-                    border: "1px solid #eee",
-                    borderRadius: 8,
-                    padding: 8,
-                    marginTop: 8,
-                  }}
-                >
-                  <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <input
-                      type="checkbox"
-                      checked={rrpVisible}
-                      onChange={(e) => setRrpVisible(e.target.checked)}
-                    />
-                    <span>Carte des sols France</span>
-                  </label>
-                  <p style={{ color: "#666", fontSize: 12, marginTop: 8 }}>
-                    Chargée depuis <code>/public/data/rrp_france_wgs84_shp.mbtiles</code>.
-                  </p>
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 8,
-                      marginTop: 6,
-                    }}
-                  >
-                    <span style={{ fontSize: 12, color: "#666" }}>Opacité</span>
-                    <input
-                      type="range"
-                      min="0"
-                      max="1"
-                      step="0.05"
-                      value={rrpOpacity}
-                      onInput={(e) => {
-                        const v = parseFloat(e.currentTarget.value);
-                        setRrpOpacity(v);
-                        const map = mapRef.current;
-                        if (map) map.setPaintProperty("soils-rrp-fill", "fill-opacity", v);
-                      }}
-                      style={{ width: "100%" }}
-                    />
-                  </div>
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 8,
-                      marginTop: 6,
-                    }}
-                  >
-                    <span style={{ fontSize: 12, color: "#666" }}>
-                      Opacité couleurs Géoportail
-                    </span>
-                    <input
-                      type="range"
-                      min="0"
-                      max="1"
-                      step="0.05"
-                      value={geoportalOpacity}
-                      onInput={(e) => {
-                        const v = parseFloat(e.currentTarget.value);
-                        setGeoportalOpacity(v);
-                      }}
-                      style={{ width: "100%" }}
-                    />
-                  </div>
-                  <div style={{ marginTop: 8 }}>
-                    <label
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 8,
-                        fontSize: 12,
-                        color: "#444",
-                      }}
+
+                  <div className="fp-card fp-card--muted" style={{ marginTop: 16 }}>
+                    <h3 className="fp-section-title">Comparer deux millésimes</h3>
+                    <p className="fp-hint" style={{ margin: "6px 0 10px" }}>
+                      Associez les parcelles d'une année à celles d'une autre pour reporter
+                      l'historique de cultures sur le parcellaire conservé.
+                    </p>
+                    <button
+                      type="button"
+                      className="fp-btn fp-btn--block"
+                      onClick={handleOpenParcelleMatch}
+                      disabled={yearOptions.years.length < 2}
+                      title={
+                        yearOptions.years.length < 2
+                          ? "Importez au moins deux années de parcellaire pour utiliser cet outil"
+                          : "Ouvrir la comparaison inter-années"
+                      }
                     >
+                      {yearOptions.years.length < 2
+                        ? "Associer les parcelles (2 années minimum)"
+                        : `Associer les parcelles (${yearOptions.years.length} années détectées)`}
+                    </button>
+                    {validatedMatches.length > 0 && (
+                      <p className="fp-hint" style={{ marginTop: 8 }}>
+                        Dernière validation : {validatedMatches.length} correspondance
+                        {validatedMatches.length > 1 ? "s" : ""} enregistrée
+                        {validatedMatches.length > 1 ? "s" : ""}
+                        {validatedMatchesAt
+                          ? ` à ${validatedMatchesAt.toLocaleTimeString("fr-FR")}`
+                          : ""}
+                        .
+                      </p>
+                    )}
+                  </div>
+
+                  <p className="fp-hint" style={{ marginTop: 12 }}>
+                    Astuce : cliquez une parcelle dans la liste pour la surligner sur la carte,
+                    et inversement.
+                  </p>
+                </>
+              )}
+
+              {activeTab === "calques" && (
+                <div style={{ display: "grid", gap: 14 }}>
+                  <div>
+                    <h3 className="fp-section-title">Fonds de carte et couches</h3>
+                    <p className="fp-hint" style={{ margin: "6px 0 10px" }}>
+                      Activez un fond pour vous repérer. Les couches marquées comme
+                      interrogeables affichent leurs informations au clic sur la carte.
+                    </p>
+                    <RasterToggles
+                      mapRef={mapRef}
+                      layerState={layerState}
+                      onLayerToggle={handleLayerToggle}
+                      onLayerOpacityChange={handleLayerOpacityChange}
+                    />
+                  </div>
+
+                  <div>
+                    <h3 className="fp-section-title">Parcellaires de référence</h3>
+                    <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+                      <RpgFeature mapRef={mapRef} drawRef={drawRef} />
+                      <RpgRomaniaFeature mapRef={mapRef} drawRef={drawRef} />
+                    </div>
+                  </div>
+
+                  <details className="fp-card fp-card--muted">
+                    <summary
+                      style={{ cursor: "pointer", fontSize: "var(--fs-md)", fontWeight: 600 }}
+                    >
+                      Carte des sols France (avancé)
+                    </summary>
+                    <p className="fp-hint" style={{ margin: "8px 0" }}>
+                      Couche pédologique locale (RRP). Elle nécessite les fichiers
+                      départementaux dans <code>public/data/soilmap_dep</code> et sert
+                      uniquement de repère visuel : le type de sol des parcelles reste saisi
+                      manuellement dans cette version.
+                    </p>
+
+                    <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <input
                         type="checkbox"
-                        checked={freezeTiles}
-                        onChange={(e) => setFreezeTiles(e.target.checked)}
-                        disabled={!rrpVisible}
+                        checked={rrpVisible}
+                        onChange={(event) => setRrpVisible(event.target.checked)}
                       />
-                      <span>Mettre en pause le rechargement automatique</span>
+                      <span>Afficher la carte des sols</span>
                     </label>
-                  </div>
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 4,
-                      fontSize: 12,
-                      color: "#444",
-                      marginTop: 8,
-                    }}
-                  >
-                    <div>Statut : {soilStatusLabel}</div>
-                    <div>
-                      Tuile visible : {currentTileSummary
-                        ? `${currentTileSummary.featureCount} polygone${
-                            currentTileSummary.featureCount > 1 ? "s" : ""
-                          }`
-                        : "—"}
+
+                    <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
+                      <label style={{ display: "grid", gap: 4, fontSize: "var(--fs-sm)" }}>
+                        Opacité des polygones
+                        <input
+                          type="range"
+                          min="0"
+                          max="1"
+                          step="0.05"
+                          value={rrpOpacity}
+                          onInput={(event) => {
+                            const value = parseFloat(event.currentTarget.value);
+                            setRrpOpacity(value);
+                            const map = mapRef.current;
+                            if (map && map.getLayer("soils-rrp-fill")) {
+                              map.setPaintProperty("soils-rrp-fill", "fill-opacity", value);
+                            }
+                          }}
+                        />
+                      </label>
+                      <label style={{ display: "grid", gap: 4, fontSize: "var(--fs-sm)" }}>
+                        Opacité des couleurs Géoportail
+                        <input
+                          type="range"
+                          min="0"
+                          max="1"
+                          step="0.05"
+                          value={geoportalOpacity}
+                          onInput={(event) =>
+                            setGeoportalOpacity(parseFloat(event.currentTarget.value))
+                          }
+                        />
+                      </label>
+                      <label
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          fontSize: "var(--fs-sm)",
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={freezeTiles}
+                          onChange={(event) => setFreezeTiles(event.target.checked)}
+                          disabled={!rrpVisible}
+                        />
+                        <span>Mettre en pause le rechargement automatique</span>
+                      </label>
                     </div>
-                    <div>
-                      Tuiles figées : {frozenTiles.length} ({totalFrozenFeatures} polygone
-                      {totalFrozenFeatures > 1 ? "s" : ""})
-                    </div>
-                  </div>
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 6,
-                      marginTop: 8,
-                    }}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => freezeCurrentTile()}
-                      disabled={!rrpVisible || !canFreezeCurrentTile}
-                      style={{
-                        padding: "6px 10px",
-                        fontSize: 12,
-                        borderRadius: 6,
-                        border: "1px solid #d1d5db",
-                        background: canFreezeCurrentTile ? "#fff" : "#f3f4f6",
-                        cursor:
-                          rrpVisible && canFreezeCurrentTile ? "pointer" : "not-allowed",
-                        opacity: rrpVisible && canFreezeCurrentTile ? 1 : 0.6,
-                        transition: "background-color 0.2s ease",
-                      }}
-                      title="Ajoute la tuile actuellement visible à la liste des tuiles figées"
-                    >
-                      Figer la tuile visible
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => clearFrozenTiles()}
-                      disabled={!frozenTiles.length}
-                      style={{
-                        padding: "6px 10px",
-                        fontSize: 12,
-                        borderRadius: 6,
-                        border: "1px solid #d1d5db",
-                        background: frozenTiles.length ? "#fff" : "#f3f4f6",
-                        cursor: frozenTiles.length ? "pointer" : "not-allowed",
-                        opacity: frozenTiles.length ? 1 : 0.6,
-                      }}
-                      title="Supprime toutes les tuiles figées"
-                    >
-                      Vider les tuiles figées
-                    </button>
-                  </div>
-                  {frozenTiles.length > 0 && (
+
                     <div
                       style={{
+                        display: "grid",
+                        gap: 3,
+                        fontSize: "var(--fs-sm)",
+                        color: "var(--c-text-soft)",
                         marginTop: 10,
-                        borderTop: "1px solid #eee",
-                        paddingTop: 8,
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: 6,
-                        fontSize: 12,
-                        color: "#444",
                       }}
                     >
-                      <strong style={{ fontSize: 12 }}>
-                        Tuiles figées ({frozenTiles.length})
-                      </strong>
+                      <div>Statut : {soilStatusLabel}</div>
+                      <div>
+                        Tuile visible :{" "}
+                        {currentTileSummary
+                          ? `${currentTileSummary.featureCount} polygone${
+                              currentTileSummary.featureCount > 1 ? "s" : ""
+                            }`
+                          : "—"}
+                      </div>
+                      <div>
+                        Tuiles figées : {frozenTiles.length} ({totalFrozenFeatures} polygone
+                        {totalFrozenFeatures > 1 ? "s" : ""})
+                      </div>
+                    </div>
+
+                    <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+                      <button
+                        type="button"
+                        className="fp-btn fp-btn--sm"
+                        onClick={() => freezeCurrentTile()}
+                        disabled={!rrpVisible || !canFreezeCurrentTile}
+                        title="Conserver à l'écran la tuile de sols actuellement chargée"
+                      >
+                        Figer la tuile visible
+                      </button>
+                      <button
+                        type="button"
+                        className="fp-btn fp-btn--sm"
+                        onClick={() => clearFrozenTiles()}
+                        disabled={!frozenTiles.length}
+                      >
+                        Vider les tuiles figées
+                      </button>
+                    </div>
+
+                    {frozenTiles.length > 0 && (
                       <ul
                         style={{
                           listStyle: "none",
                           padding: 0,
-                          margin: 0,
-                          display: "flex",
-                          flexDirection: "column",
+                          margin: "10px 0 0",
+                          display: "grid",
                           gap: 6,
+                          fontSize: "var(--fs-sm)",
                         }}
                       >
                         {frozenTiles.map((tile, index) => (
                           <li
                             key={tile.id}
                             style={{
-                              border: "1px solid #e5e7eb",
-                              borderRadius: 6,
-                              padding: 6,
-                              background: "#fafafa",
+                              border: "1px solid var(--c-border)",
+                              borderRadius: "var(--r-md)",
+                              padding: 8,
+                              background: "var(--c-surface)",
                             }}
                           >
                             <div style={{ fontWeight: 600 }}>
-                              #{index + 1} – {tile.features.length} polygone
+                              #{index + 1} — {tile.features.length} polygone
                               {tile.features.length > 1 ? "s" : ""}
                             </div>
-                            <div style={{ color: "#666" }}>
-                              Centre : {tile.center[1].toFixed(4)}°,{" "}
-                              {tile.center[0].toFixed(4)}°
+                            <div style={{ color: "var(--c-text-soft)" }}>
+                              Centre : {tile.center[1].toFixed(4)}°, {tile.center[0].toFixed(4)}°
                             </div>
                             <button
                               type="button"
+                              className="fp-btn fp-btn--sm"
+                              style={{ marginTop: 6 }}
                               onClick={() => removeFrozenTile(tile.id)}
-                              style={{
-                                marginTop: 6,
-                                padding: "4px 8px",
-                                fontSize: 12,
-                                borderRadius: 4,
-                                border: "1px solid #d1d5db",
-                                background: "#fff",
-                                cursor: "pointer",
-                              }}
                             >
                               Retirer cette tuile
                             </button>
                           </li>
                         ))}
                       </ul>
-                    </div>
-                  )}
+                    )}
+                  </details>
                 </div>
-                {/* ⛔️ retiré : contrôle sols en ligne (WMS/WFS) */}
-                {/* <SoilsControl ... /> */}
-              </div>
+              )}
             </div>
-          </div>
+          </aside>
         )}
       </div>
-
-      {/* Bouton flottant pour ouvrir le panneau quand il est fermé */}
-      {!sideOpen && !matchViewOpen && (
-        <button
-          onClick={() => setSideOpen(true)}
-          title="Déplier le panneau latéral"
-          style={{
-            position: "absolute",
-            top: 12,
-            right: 12,
-            zIndex: 15,
-            padding: "8px 10px",
-            borderRadius: 8,
-            border: "1px solid #ddd",
-            background: "#fff",
-            cursor: "pointer",
-            boxShadow: "0 2px 10px rgba(0,0,0,0.08)",
-          }}
-        >
-          ▶
-        </button>
-      )}
-
-      {/* Barre d’outils bas */}
-      {!matchViewOpen && (
-        <div style={barBase}>
-        <div style={toolbarScrollWrap}>
-          {compact && (
-            <button
-              type="button"
-              onClick={() => scrollToolbar(-1)}
-              style={navButtonStyle}
-              title="Faire défiler les actions vers la gauche"
-            >
-              ◀
-            </button>
-          )}
-          <div style={toolbarScrollArea} ref={toolbarScrollRef}>
-            {/* Import / Export Télépac */}
-            <div style={groupStyle}>
-              <ImportTelepacButton
-                mapRef={mapRef}
-                drawRef={drawRef}
-                setFeatures={setFeatures}
-                selectFeatureOnMap={selectFeatureOnMap}
-                compact={compact}
-                buttonStyle={btn}
-                structureName={csvValues.structureName}
-                onImportMeta={(meta) => {
-                  if (!meta?.pacage) return;
-                  setCsvValues((prev) => ({
-                    ...prev,
-                    codeExploitation: meta.pacage,
-                  }));
-                }}
-              />
-              <ExportMenuButton
-                features={features}
-                compact={compact}
-                buttonStyle={{ ...btn, background: "#111", color: "#fff", border: "none" }}
-                csvValues={csvValues}
-                onCsvValuesChange={setCsvValues}
-              />
-            </div>
-
-            {/* Dessin */}
-            <div style={{ ...groupStyle, borderRight: "none" }}>
-              <DrawToolbar
-                mapRef={mapRef}
-                drawRef={drawRef}
-                features={features}
-                setFeatures={setFeatures}
-                selectFeatureOnMap={selectFeatureOnMap}
-                onReset={handleResetParcelles}
-                compact={compact}
-              />
-            </div>
-          </div>
-          {compact && (
-            <button
-              type="button"
-              onClick={() => scrollToolbar(1)}
-              style={navButtonStyle}
-              title="Faire défiler les actions vers la droite"
-            >
-              ▶
-            </button>
-          )}
-        </div>
-
-        <div style={{ marginLeft: "auto" }}>
-          <button
-            onClick={() => setCompact((v) => !v)}
-            style={btn}
-            title={compact ? "Agrandir le panneau" : "Réduire en barre d’outils"}
-          >
-            <IconChevron up={compact} />
-            {label(compact ? "Agrandir" : "Réduire")}
-          </button>
-        </div>
-        </div>
-      )}
 
       <ParcelleMatchView
         open={matchViewOpen}
@@ -2158,5 +1609,3 @@ export default function ParcellesEditorMap() {
     </div>
   );
 }
-
-

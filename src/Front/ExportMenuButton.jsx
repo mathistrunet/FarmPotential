@@ -1,11 +1,18 @@
 // src/Front/ExportMenuButton.jsx
-import React, { useEffect, useMemo, useState } from "react";
+//
+// Sortie unique de l'outil : trois formats (CSV Assolia, XML Télépac, shapefile),
+// chacun précédé d'un court formulaire de paramétrage.
+
+import { useEffect, useMemo, useState } from "react";
+
+import Modal from "../components/Modal";
 import { buildTelepacXML } from "../services/telepacXml";
 import { buildParcellesCsv } from "../services/parcellesCsv";
+import { buildParcelShapefileZip } from "../services/parcelleShapefile";
 
-const iconStyle = { width: 18, height: 18, display: "inline-block", verticalAlign: "-3px" };
+const iconStyle = { width: 17, height: 17, display: "inline-block", verticalAlign: "-3px" };
 const IconDownload = () => (
-  <svg viewBox="0 0 24 24" style={iconStyle}>
+  <svg viewBox="0 0 24 24" style={iconStyle} aria-hidden="true">
     <path d="M11 5h2v8h3l-4 4-4-4h3V5zM5 19h14v2H5v-2z" fill="currentColor" />
   </svg>
 );
@@ -21,7 +28,8 @@ function downloadBlob(blob, filename) {
 
 // Type de sol d'une parcelle, dans le même ordre de résolution que l'export CSV.
 function getFeatureSoilType(props = {}) {
-  const raw = props.type_sol ?? props.TYPE_SOL ?? props.typeSol ?? props.type_de_sol ?? props.sol ?? "";
+  const raw =
+    props.type_sol ?? props.TYPE_SOL ?? props.typeSol ?? props.type_de_sol ?? props.sol ?? "";
   return raw == null ? "" : String(raw).trim();
 }
 
@@ -36,46 +44,79 @@ function sanitizeFilename(name, fallback = "export") {
   return cleaned || fallback;
 }
 
-// Coquille de modale partagée : la croix (×) et un clic « à côté » ferment, mais une sélection de
-// texte qui démarre dans la modale et se relâche sur l'overlay NE ferme pas (on n'écoute que le
-// mousedown dont la cible est l'overlay lui-même).
-function ModalShell({ onClose, children }) {
-  const handleOverlayMouseDown = (e) => {
-    if (e.target === e.currentTarget) onClose();
-  };
-  return (
-    <div style={overlayStyle} onMouseDown={handleOverlayMouseDown}>
-      <div style={modalStyle}>
-        <button type="button" aria-label="Fermer" onClick={onClose} style={closeXStyle}>
-          ×
-        </button>
-        {children}
-      </div>
-    </div>
-  );
-}
+const labelStyle = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 4,
+  fontSize: "var(--fs-md)",
+  fontWeight: 600,
+};
 
-function ChoiceModal({ onClose, onTelepac, onCsv }) {
+const inputStyle = {
+  padding: "8px 10px",
+  borderRadius: "var(--r-md)",
+  border: "1px solid var(--c-border-strong)",
+  fontSize: "var(--fs-md)",
+  fontFamily: "inherit",
+  fontWeight: 400,
+};
+
+const EXPORT_CHOICES = [
+  {
+    id: "csv",
+    title: "CSV Assolia",
+    description:
+      "Assolement complet (cultures N à N-4, surfaces, type de sol) prêt à importer dans Assolia.",
+  },
+  {
+    id: "xml",
+    title: "XML Télépac",
+    description: "Fichier de déclaration au format Télépac, à partir d'une colonne de culture.",
+  },
+  {
+    id: "shp",
+    title: "Shapefile (.zip)",
+    description: "Contours et attributs pour un SIG (QGIS, ArcGIS) ou un outil tiers.",
+  },
+];
+
+function ChoiceModal({ onClose, onSelect }) {
   return (
-    <ModalShell onClose={onClose}>
-      <div>
-        <h2 style={{ marginTop: 0 }}>Choisir un format d&apos;export</h2>
-        <p style={{ color: "#555", marginBottom: 16 }}>
-          Sélectionne le format souhaité pour générer ton fichier.
-        </p>
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <button type="button" style={modalButtonStyle} onClick={onTelepac}>
-            Export Télépac (XML)
-          </button>
-          <button type="button" style={modalButtonStyle} onClick={onCsv}>
-            Export CSV
-          </button>
-        </div>
-        <button type="button" style={modalSecondaryButtonStyle} onClick={onClose}>
+    <Modal
+      open
+      width={560}
+      title="Exporter le parcellaire"
+      subtitle="Choisissez le format de sortie ; un formulaire vous demandera ensuite les quelques informations nécessaires."
+      onClose={onClose}
+      footer={
+        <button type="button" className="fp-btn" onClick={onClose}>
           Annuler
         </button>
+      }
+    >
+      <div style={{ display: "grid", gap: 10 }}>
+        {EXPORT_CHOICES.map((choice) => (
+          <button
+            key={choice.id}
+            type="button"
+            className="fp-btn"
+            onClick={() => onSelect(choice.id)}
+            style={{
+              flexDirection: "column",
+              alignItems: "flex-start",
+              gap: 3,
+              padding: "12px 14px",
+              textAlign: "left",
+            }}
+          >
+            <span style={{ fontSize: "var(--fs-lg)", fontWeight: 700 }}>{choice.title}</span>
+            <span className="fp-hint" style={{ fontWeight: 400 }}>
+              {choice.description}
+            </span>
+          </button>
+        ))}
       </div>
-    </ModalShell>
+    </Modal>
   );
 }
 
@@ -93,288 +134,288 @@ function CsvModal({
   onMissingSoilFillChange,
 }) {
   return (
-    <ModalShell onClose={onCancel}>
-      <div>
-        <h2 style={{ marginTop: 0 }}>Paramètres de l&apos;export CSV</h2>
-        <p style={{ color: "#555", marginBottom: 16 }}>
-          Ces informations seront appliquées à chaque parcelle exportée.
-        </p>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            onConfirm();
-          }}
-          style={{ display: "flex", flexDirection: "column", gap: 12 }}
-        >
+    <Modal
+      open
+      width={560}
+      title="Export CSV Assolia"
+      subtitle="Ces informations identifient l'exploitation dans le fichier généré."
+      onClose={onCancel}
+      footer={
+        <>
+          <button type="button" className="fp-btn" onClick={onCancel}>
+            Annuler
+          </button>
+          <button
+            type="submit"
+            form="fp-csv-form"
+            className="fp-btn fp-btn--primary"
+            style={{ marginLeft: "auto" }}
+            disabled={disabled}
+          >
+            Télécharger le CSV
+          </button>
+        </>
+      }
+    >
+      <form
+        id="fp-csv-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          onConfirm();
+        }}
+        style={{ display: "flex", flexDirection: "column", gap: 14 }}
+      >
+        <label style={labelStyle}>
+          Secteur
+          <input
+            type="text"
+            value={values.secteur}
+            onChange={(event) => onChange({ ...values, secteur: event.target.value })}
+            style={inputStyle}
+          />
+        </label>
+        <label style={labelStyle}>
+          Exploitation
+          <input
+            type="text"
+            value={values.exploitation}
+            onChange={(event) => onChange({ ...values, exploitation: event.target.value })}
+            style={inputStyle}
+          />
+          <span className="fp-hint" style={{ fontWeight: 400 }}>
+            Donne aussi son nom au fichier téléchargé.
+          </span>
+        </label>
+        <label style={labelStyle}>
+          Numéro PACAGE
+          <input
+            type="text"
+            value={values.codeExploitation}
+            onChange={(event) => onChange({ ...values, codeExploitation: event.target.value })}
+            style={inputStyle}
+          />
+        </label>
+        <label style={labelStyle}>
+          Nom de la structure
+          <input
+            type="text"
+            value={values.structureName}
+            onChange={(event) => onChange({ ...values, structureName: event.target.value })}
+            style={inputStyle}
+            placeholder="Ex : Assolia"
+          />
+          <span className="fp-hint" style={{ fontWeight: 400 }}>
+            Laissez vide pour conserver les libellés de culture tels quels.
+          </span>
+        </label>
+
+        {missingSoilCount > 0 && (
           <label style={labelStyle}>
-            Secteur
+            Type de sol des {missingSoilCount} parcelle{missingSoilCount > 1 ? "s" : ""} sans
+            valeur
             <input
               type="text"
-              value={values.secteur}
-              onChange={(e) => onChange({ ...values, secteur: e.target.value })}
+              value={missingSoilFill}
+              placeholder="Laisser vide pour ne rien écrire"
+              onChange={(event) => onMissingSoilFillChange(event.target.value)}
               style={inputStyle}
             />
           </label>
-          <label style={labelStyle}>
-            Exploitation
-            <input
-              type="text"
-              value={values.exploitation}
-              onChange={(e) =>
-                onChange({ ...values, exploitation: e.target.value })
-              }
-              style={inputStyle}
-            />
-          </label>
-          <label style={labelStyle}>
-            Numero pacage
-            <input
-              type="text"
-              value={values.codeExploitation}
-              onChange={(e) =>
-                onChange({ ...values, codeExploitation: e.target.value })
-              }
-              style={inputStyle}
-            />
-          </label>
-          <label style={labelStyle}>
-            Nom de la structure
-            <input
-              type="text"
-              value={values.structureName}
-              onChange={(e) =>
-                onChange({ ...values, structureName: e.target.value })
-              }
-              style={inputStyle}
-              placeholder="Ex: Assolia"
-            />
-          </label>
+        )}
 
-          {missingSoilCount > 0 && (
-            <label style={labelStyle}>
-              Type de sol pour les {missingSoilCount} parcelle(s) sans valeur
-              <span style={{ color: "#777", fontWeight: 400 }}> (vide = laissé vide)</span>
-              <input
-                type="text"
-                value={missingSoilFill}
-                placeholder="Saisir un type de sol à appliquer"
-                onChange={(e) => onMissingSoilFillChange(e.target.value)}
-                style={inputStyle}
-              />
-            </label>
-          )}
-
-          {soilTypes.length > 0 && (
-            <div>
-              <div style={{ fontSize: 14, color: "#333", marginBottom: 6 }}>
-                Remplacement des types de sol
-                <span style={{ color: "#777" }}> (vide = valeur conservée)</span>
-              </div>
-              <div style={soilTableWrapStyle}>
-                <table style={soilTableStyle}>
-                  <thead>
-                    <tr>
-                      <th style={soilThStyle}>Type de sol</th>
-                      <th style={soilThStyle}>Remplacer par</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {soilTypes.map((soil) => (
-                      <tr key={soil}>
-                        <td style={soilTdStyle}>{soil}</td>
-                        <td style={soilTdStyle}>
-                          <input
-                            type="text"
-                            value={soilReplacements[soil] ?? ""}
-                            placeholder={soil}
-                            onChange={(e) => onSoilReplacementChange(soil, e.target.value)}
-                            style={{ ...inputStyle, marginTop: 0, width: "100%", boxSizing: "border-box" }}
-                          />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
-            <button type="button" style={modalSecondaryButtonStyle} onClick={onCancel}>
-              Annuler
-            </button>
-            <button type="submit" style={modalButtonStyle} disabled={disabled}>
-              Exporter en CSV
-            </button>
-          </div>
-        </form>
-      </div>
-    </ModalShell>
-  );
-}
-
-function XmlModal({ cultureColumns, selectedColumn, onSelectColumn, onCancel, onConfirm, disabled }) {
-  return (
-    <ModalShell onClose={onCancel}>
-      <div>
-        <h2 style={{ marginTop: 0 }}>Paramètres de l&apos;export Télépac</h2>
-        <p style={{ color: "#555", marginBottom: 16 }}>
-          Choisis la colonne culture à utiliser pour remplir le code culture XML.
-        </p>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            onConfirm();
-          }}
-          style={{ display: "flex", flexDirection: "column", gap: 12 }}
-        >
-          <label style={labelStyle}>
-            Colonne culture
-            <select
-              value={selectedColumn}
-              onChange={(e) => onSelectColumn(e.target.value)}
-              style={inputStyle}
+        {soilTypes.length > 0 && (
+          <details>
+            <summary style={{ cursor: "pointer", fontSize: "var(--fs-md)", fontWeight: 600 }}>
+              Renommer les types de sol ({soilTypes.length})
+            </summary>
+            <div
+              style={{
+                maxHeight: 190,
+                overflowY: "auto",
+                border: "1px solid var(--c-border)",
+                borderRadius: "var(--r-md)",
+                marginTop: 8,
+              }}
             >
-              {cultureColumns.map((column) => (
-                <option key={column} value={column}>
-                  {column}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
-            <button type="button" style={modalSecondaryButtonStyle} onClick={onCancel}>
-              Annuler
-            </button>
-            <button type="submit" style={modalButtonStyle} disabled={disabled}>
-              Exporter en XML
-            </button>
-          </div>
-        </form>
-      </div>
-    </ModalShell>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "var(--fs-md)", tableLayout: "fixed" }}>
+                <thead>
+                  <tr>
+                    <th style={soilThStyle}>Type de sol</th>
+                    <th style={soilThStyle}>Remplacer par</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {soilTypes.map((soil) => (
+                    <tr key={soil}>
+                      <td style={soilTdStyle}>{soil}</td>
+                      <td style={soilTdStyle}>
+                        <input
+                          type="text"
+                          value={soilReplacements[soil] ?? ""}
+                          placeholder={soil}
+                          onChange={(event) => onSoilReplacementChange(soil, event.target.value)}
+                          style={{ ...inputStyle, width: "100%", boxSizing: "border-box" }}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="fp-hint" style={{ marginTop: 6 }}>
+              Un champ laissé vide conserve la valeur d'origine.
+            </p>
+          </details>
+        )}
+      </form>
+    </Modal>
   );
 }
-
-const overlayStyle = {
-  position: "fixed",
-  inset: 0,
-  background: "rgba(0,0,0,0.45)",
-  zIndex: 30,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  padding: 16,
-};
-
-const modalStyle = {
-  position: "relative",
-  background: "#fff",
-  borderRadius: 12,
-  padding: 24,
-  maxWidth: 420,
-  width: "100%",
-  maxHeight: "85vh",
-  overflowY: "auto",
-  boxShadow: "0 15px 40px rgba(0,0,0,0.18)",
-};
-
-const closeXStyle = {
-  position: "absolute",
-  top: 8,
-  right: 10,
-  width: 30,
-  height: 30,
-  border: "none",
-  background: "transparent",
-  fontSize: 24,
-  lineHeight: "28px",
-  color: "#6b7280",
-  cursor: "pointer",
-  padding: 0,
-};
-
-const soilTableWrapStyle = {
-  maxHeight: 180,
-  overflowY: "auto",
-  border: "1px solid #e5e7eb",
-  borderRadius: 6,
-};
-
-const soilTableStyle = {
-  width: "100%",
-  borderCollapse: "collapse",
-  fontSize: 13,
-  tableLayout: "fixed",
-};
 
 const soilThStyle = {
   textAlign: "left",
   padding: "6px 8px",
-  borderBottom: "1px solid #e5e7eb",
+  borderBottom: "1px solid var(--c-border)",
   position: "sticky",
   top: 0,
-  background: "#f9fafb",
+  background: "var(--c-surface-muted)",
   fontWeight: 600,
 };
 
 const soilTdStyle = {
   padding: "4px 8px",
-  borderBottom: "1px solid #f1f5f9",
+  borderBottom: "1px solid var(--c-border)",
   verticalAlign: "middle",
   wordBreak: "break-word",
 };
 
-const modalButtonStyle = {
-  padding: "10px 14px",
-  borderRadius: 8,
-  border: "none",
-  background: "#2563eb",
-  color: "#fff",
-  fontSize: 14,
-  cursor: "pointer",
-};
+function XmlModal({ cultureColumns, selectedColumn, onSelectColumn, onCancel, onConfirm, disabled }) {
+  return (
+    <Modal
+      open
+      width={460}
+      title="Export XML Télépac"
+      subtitle="Indiquez quelle colonne de culture doit alimenter le code culture du fichier."
+      onClose={onCancel}
+      footer={
+        <>
+          <button type="button" className="fp-btn" onClick={onCancel}>
+            Annuler
+          </button>
+          <button
+            type="submit"
+            form="fp-xml-form"
+            className="fp-btn fp-btn--primary"
+            style={{ marginLeft: "auto" }}
+            disabled={disabled}
+          >
+            Télécharger le XML
+          </button>
+        </>
+      }
+    >
+      <form
+        id="fp-xml-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          onConfirm();
+        }}
+      >
+        <label style={labelStyle}>
+          Colonne culture
+          <select
+            value={selectedColumn}
+            onChange={(event) => onSelectColumn(event.target.value)}
+            style={inputStyle}
+          >
+            {cultureColumns.map((column) => (
+              <option key={column} value={column}>
+                {column}
+              </option>
+            ))}
+          </select>
+        </label>
+      </form>
+    </Modal>
+  );
+}
 
-const modalSecondaryButtonStyle = {
-  padding: "8px 12px",
-  borderRadius: 8,
-  border: "1px solid #d1d5db",
-  background: "#fff",
-  color: "#111",
-  fontSize: 14,
-  cursor: "pointer",
-};
-
-const labelStyle = {
-  display: "flex",
-  flexDirection: "column",
-  fontSize: 14,
-  color: "#333",
-};
-
-const inputStyle = {
-  marginTop: 4,
-  padding: "8px 10px",
-  borderRadius: 6,
-  border: "1px solid #d1d5db",
-  fontSize: 14,
-};
+function ShapefileModal({ values, onChange, onCancel, onConfirm, disabled }) {
+  return (
+    <Modal
+      open
+      width={460}
+      title="Export shapefile"
+      subtitle="Une archive .zip contenant .shp, .dbf, .shx et .prj est générée."
+      onClose={onCancel}
+      footer={
+        <>
+          <button type="button" className="fp-btn" onClick={onCancel}>
+            Annuler
+          </button>
+          <button
+            type="submit"
+            form="fp-shp-form"
+            className="fp-btn fp-btn--primary"
+            style={{ marginLeft: "auto" }}
+            disabled={disabled || !values.raisSoc.trim()}
+          >
+            Télécharger le shapefile
+          </button>
+        </>
+      }
+    >
+      <form
+        id="fp-shp-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          onConfirm();
+        }}
+        style={{ display: "flex", flexDirection: "column", gap: 14 }}
+      >
+        <label style={labelStyle}>
+          Nom de l'exploitation
+          <input
+            type="text"
+            value={values.raisSoc}
+            onChange={(event) => onChange({ ...values, raisSoc: event.target.value })}
+            style={inputStyle}
+            placeholder="Obligatoire"
+          />
+          <span className="fp-hint" style={{ fontWeight: 400 }}>
+            Écrit en majuscules dans l'attribut RAIS_SOCIA.
+          </span>
+        </label>
+        <label style={labelStyle}>
+          Campagne
+          <input
+            type="text"
+            value={values.campagne}
+            onChange={(event) => onChange({ ...values, campagne: event.target.value })}
+            style={inputStyle}
+          />
+        </label>
+      </form>
+    </Modal>
+  );
+}
 
 export default function ExportMenuButton({
   features = [],
-  compact = false,
-  buttonStyle,
+  setFeatures,
   disabled = false,
-  label = "Faire un export",
+  variant = "default",
+  label = "Exporter",
+  className = "",
   filenamePrefixXml = "telepac_export_",
   filenamePrefixCsv = "parcelles_",
+  filenamePrefixShp = "parcellaire_",
   csvValues: csvValuesProp,
   onCsvValuesChange,
 }) {
-  const [showChoice, setShowChoice] = useState(false);
-  const [showCsv, setShowCsv] = useState(false);
-  const [showXml, setShowXml] = useState(false);
+  const [activeModal, setActiveModal] = useState(null); // null | "choice" | "csv" | "xml" | "shp"
   const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState(null);
   const [selectedCultureColumn, setSelectedCultureColumn] = useState("code");
 
   const cultureColumns = useMemo(() => {
@@ -396,7 +437,7 @@ export default function ExportMenuButton({
     }
   }, [cultureColumns, selectedCultureColumn]);
 
-  // Types de sol distincts présents dans la sélection à exporter (pour la table de remplacement).
+  // Types de sol distincts présents dans la sélection à exporter (table de remplacement).
   const soilTypes = useMemo(() => {
     const set = new Set();
     features.forEach((feature) => {
@@ -406,12 +447,10 @@ export default function ExportMenuButton({
     return Array.from(set).sort((a, b) => a.localeCompare(b, "fr"));
   }, [features]);
 
-  // Map { typeDeSolOriginal -> valeur de remplacement }. Une valeur vide conserve l'original.
   const [soilReplacements, setSoilReplacements] = useState({});
   const handleSoilReplacementChange = (soil, value) =>
     setSoilReplacements((prev) => ({ ...prev, [soil]: value }));
 
-  // Nombre de parcelles sans type de sol renseigné, et valeur à leur appliquer à l'export.
   const missingSoilCount = useMemo(
     () => features.filter((feature) => !getFeatureSoilType(feature?.properties)).length,
     [features]
@@ -432,59 +471,52 @@ export default function ExportMenuButton({
   const csvValues = csvValuesProp ?? internalCsvValues;
   const setCsvValues = onCsvValuesChange ?? setInternalCsvValues;
 
-  const btnDefault = {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: 8,
-    padding: compact ? "6px 8px" : "8px 12px",
-    borderRadius: 8,
-    background: "#111",
-    color: "#fff",
-    border: "none",
-    cursor: disabled || loading ? "not-allowed" : "pointer",
-    opacity: disabled || loading ? 0.7 : 1,
-    fontSize: 14,
-  };
+  const [shapefileValues, setShapefileValues] = useState({
+    raisSoc: "",
+    campagne: String(new Date().getFullYear()),
+  });
 
-  const btn = { ...btnDefault, ...(buttonStyle || {}) };
+  const closeAllModals = () => setActiveModal(null);
 
-  const closeAllModals = () => {
-    setShowChoice(false);
-    setShowCsv(false);
-    setShowXml(false);
-  };
-
-  const ensureFeatures = () => {
+  const openExport = () => {
     if (!features.length) {
-      alert("Dessine ou importe au moins une parcelle.");
-      closeAllModals();
-      return false;
+      setErrorMessage(
+        "Aucune parcelle à exporter. Importez un parcellaire ou dessinez au moins une parcelle."
+      );
+      return;
     }
-    return true;
+    // Pré-remplit le nom d'exploitation du shapefile avec ce qui est déjà connu.
+    const firstProps = features[0]?.properties || {};
+    setShapefileValues((prev) => ({
+      ...prev,
+      raisSoc:
+        prev.raisSoc ||
+        String(firstProps.RAIS_SOCIA || firstProps.rais_soc || csvValues.exploitation || "")
+          .trim()
+          .toUpperCase(),
+      campagne: prev.campagne || String(firstProps.CAMPAGNE || new Date().getFullYear()),
+    }));
+    setActiveModal("choice");
   };
 
   const exportTelepac = () => {
-    if (!ensureFeatures()) return;
     setLoading(true);
     try {
-      const xml = buildTelepacXML(features, {
-        cultureColumn: selectedCultureColumn,
-      });
-      const blob = new Blob([xml], {
-        type: "application/xml;charset=UTF-8",
-      });
-      downloadBlob(blob, `${filenamePrefixXml}${Date.now()}.xml`);
+      const xml = buildTelepacXML(features, { cultureColumn: selectedCultureColumn });
+      downloadBlob(
+        new Blob([xml], { type: "application/xml;charset=UTF-8" }),
+        `${filenamePrefixXml}${Date.now()}.xml`
+      );
       closeAllModals();
-    } catch (err) {
-      console.error(err);
-      alert("Échec de l’export Télépac.");
+    } catch (error) {
+      console.error("[EXPORT_XML]", error);
+      setErrorMessage("Échec de l'export Télépac. Consultez la console pour le détail.");
     } finally {
       setLoading(false);
     }
   };
 
   const exportCsv = async () => {
-    if (!ensureFeatures()) return;
     setLoading(true);
     try {
       // Applique les types de sol : remplacement pour les parcelles qui en ont un (vide = conservé),
@@ -506,49 +538,65 @@ export default function ExportMenuButton({
         csvValues.codeExploitation,
         { structureName: csvValues.structureName }
       );
-      const blob = new Blob([csv], {
-        type: "text/csv;charset=utf-8",
-      });
-      // Nom de fichier = nom de l'exploitation. Le navigateur ajoute « (1) », « (2) »… si un
-      // fichier du même nom existe déjà dans les téléchargements.
-      downloadBlob(blob, `${sanitizeFilename(csvValues.exploitation, filenamePrefixCsv || "export")}.csv`);
+      downloadBlob(
+        new Blob([csv], { type: "text/csv;charset=utf-8" }),
+        `${sanitizeFilename(csvValues.exploitation, filenamePrefixCsv || "export")}.csv`
+      );
       closeAllModals();
-    } catch (err) {
-      console.error(err);
-      alert("Échec de l’export CSV.");
+    } catch (error) {
+      console.error("[EXPORT_CSV]", error);
+      setErrorMessage("Échec de l'export CSV. Consultez la console pour le détail.");
     } finally {
       setLoading(false);
     }
   };
 
+  const exportShapefile = async () => {
+    const name = shapefileValues.raisSoc.trim();
+    if (!name) return;
+    setLoading(true);
+    try {
+      const { blob, updatedFeatures } = await buildParcelShapefileZip(features, {
+        raisSoc: name,
+        campagne: shapefileValues.campagne.trim() || String(new Date().getFullYear()),
+      });
+      if (typeof setFeatures === "function") setFeatures(updatedFeatures);
+      downloadBlob(blob, `${sanitizeFilename(name, filenamePrefixShp)}.zip`);
+      closeAllModals();
+    } catch (error) {
+      console.error("[EXPORT_SHP]", error);
+      setErrorMessage(
+        error?.message === "RAIS_SOCIA_REQUIRED"
+          ? "Renseignez un nom d'exploitation pour l'export shapefile."
+          : "Échec de l'export shapefile. Consultez la console pour le détail."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const buttonClass = ["fp-btn", variant === "primary" ? "fp-btn--primary" : "", className]
+    .filter(Boolean)
+    .join(" ");
+
   return (
     <>
       <button
-        onClick={() => !disabled && !loading && setShowChoice(true)}
-        style={btn}
-        title="Exporter des données"
+        type="button"
+        className={buttonClass}
+        onClick={() => !disabled && !loading && openExport()}
         disabled={disabled || loading}
+        title="Exporter le parcellaire (CSV Assolia, XML Télépac ou shapefile)"
       >
-        <IconDownload /> {compact ? null : <span>{label}</span>}
+        <IconDownload />
+        <span>{loading ? "Export en cours…" : label}</span>
       </button>
 
-      {showChoice && (
-        <ChoiceModal
-          onClose={closeAllModals}
-          onTelepac={() => {
-            if (!ensureFeatures()) return;
-            setShowChoice(false);
-            setShowXml(true);
-          }}
-          onCsv={() => {
-            if (!ensureFeatures()) return;
-            setShowChoice(false);
-            setShowCsv(true);
-          }}
-        />
+      {activeModal === "choice" && (
+        <ChoiceModal onClose={closeAllModals} onSelect={(id) => setActiveModal(id)} />
       )}
 
-      {showCsv && (
+      {activeModal === "csv" && (
         <CsvModal
           values={csvValues}
           onChange={setCsvValues}
@@ -564,7 +612,7 @@ export default function ExportMenuButton({
         />
       )}
 
-      {showXml && (
+      {activeModal === "xml" && (
         <XmlModal
           cultureColumns={cultureColumns}
           selectedColumn={selectedCultureColumn}
@@ -573,6 +621,37 @@ export default function ExportMenuButton({
           onConfirm={exportTelepac}
           disabled={loading}
         />
+      )}
+
+      {activeModal === "shp" && (
+        <ShapefileModal
+          values={shapefileValues}
+          onChange={setShapefileValues}
+          onCancel={closeAllModals}
+          onConfirm={exportShapefile}
+          disabled={loading}
+        />
+      )}
+
+      {errorMessage && (
+        <Modal
+          open
+          width={440}
+          title="Export impossible"
+          onClose={() => setErrorMessage(null)}
+          footer={
+            <button
+              type="button"
+              className="fp-btn fp-btn--primary"
+              style={{ marginLeft: "auto" }}
+              onClick={() => setErrorMessage(null)}
+            >
+              Fermer
+            </button>
+          }
+        >
+          <p style={{ margin: 0, fontSize: "var(--fs-md)", lineHeight: 1.6 }}>{errorMessage}</p>
+        </Modal>
       )}
     </>
   );

@@ -49,6 +49,24 @@ const canUseLocalStorage = () =>
 
 // Migration one-shot : déplace les données de l'ancienne clé vers la clé unifiée
 const LEGACY_STORAGE_KEY = "parcelles.geojson";
+
+// Cette version démarre volontairement sans parcellaire enregistré. Un marqueur
+// de version purge donc une seule fois le brouillon local laissé par une
+// installation antérieure ; ensuite, la persistance reprend normalement d'une
+// session à l'autre.
+const STORAGE_VERSION_KEY = "farmpotential.parcelles-version";
+const STORAGE_VERSION = "2";
+const resetLocalStorageOnVersionChange = () => {
+  if (!canUseLocalStorage()) return;
+  try {
+    if (window.localStorage.getItem(STORAGE_VERSION_KEY) === STORAGE_VERSION) return;
+    window.localStorage.removeItem(LOCAL_STORAGE_KEY);
+    window.localStorage.removeItem(LEGACY_STORAGE_KEY);
+    window.localStorage.setItem(STORAGE_VERSION_KEY, STORAGE_VERSION);
+  } catch { /* silencieux */ }
+};
+resetLocalStorageOnVersionChange();
+
 const migrateLocalStorageOnce = () => {
   if (!canUseLocalStorage()) return;
   try {
@@ -57,7 +75,7 @@ const migrateLocalStorageOnce = () => {
     if (!legacy) return;
     window.localStorage.setItem(LOCAL_STORAGE_KEY, legacy);
     window.localStorage.removeItem(LEGACY_STORAGE_KEY);
-  } catch (_) { /* silencieux */ }
+  } catch { /* silencieux */ }
 };
 migrateLocalStorageOnce();
 

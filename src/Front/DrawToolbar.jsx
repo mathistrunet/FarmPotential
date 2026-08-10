@@ -375,7 +375,7 @@ export default function DrawToolbar({
       }
     };
 
-    const onCreate = (event) => {
+    const onCreate = () => {
       refreshFromDraw();
     };
 

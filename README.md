@@ -1,57 +1,101 @@
-# Telepac Mapper
+# FarmPotential — Parcellaire
 
-Telepac Mapper is a small React application for viewing and editing agricultural parcels on top of an interactive map. It can import and export parcels in the Télépac XML format and display raster layers such as OpenStreetMap, OpenTopoMap and optional IGN layers.
+Application locale de préparation de parcellaire agricole : on importe un
+parcellaire existant, on corrige les contours sur une carte, on complète les
+informations (nom, surface, conduite AB, cultures N à N-6, type de sol), puis on
+exporte vers Assolia (CSV), Télépac (XML) ou un SIG (shapefile).
 
-## Features
-- Draw, edit and delete parcel polygons on a MapLibre map.
-- Import existing parcels from a Télépac XML file and export your edits back to XML.
-- Toggle various raster layers and overlays (OpenStreetMap, OpenTopoMap, IGN).
-- Load RPG (Registre Parcellaire Graphique) data for the map's current extent.
+Tout se passe sur le poste : aucune donnée de parcellaire n'est envoyée sur
+Internet, seules les tuiles des fonds de carte sont téléchargées.
 
-## Guide d'installation pour une utilisation locale
+## Démarrage rapide (Windows)
 
-1. **Prérequis**
-   - [Node.js](https://nodejs.org/) (version LTS recommandée) et `npm` installés sur votre machine.
-   - L'accès à un terminal (macOS/Linux) ou PowerShell (Windows).
+Double-cliquez sur **`FarmPotential.exe`** à la racine du projet. Le lanceur
+installe les dépendances si nécessaire, construit l'interface, démarre le
+serveur local et ouvre le navigateur sur <http://localhost:4174>. Fermer la
+fenêtre du lanceur arrête le serveur.
 
-2. **Cloner le dépôt**
-   ```bash
-   git clone https://github.com/<votre-compte>/FarmPotential.git
-   cd FarmPotential
-   ```
+Seul prérequis : [Node.js](https://nodejs.org/) (version LTS).
 
-3. **Installer les dépendances**
-   ```bash
-   npm install
-   ```
+Pour régénérer l'exécutable après modification du lanceur :
 
-4. **Configurer la clé API IGN (optionnel)**
-   - Certaines couches cartographiques nécessitent une clé API IGN.
-   - Ouvrez `src/config/rasterLayers.js` et remplacez la valeur de `YOUR_IGN_KEY` par votre clé.
-
-5. **Démarrer le serveur de développement**
-   ```bash
-   npm run dev
-   ```
-   L'application est accessible sur [http://localhost:5173](http://localhost:5173).
-
-6. **Construire une version de production (facultatif)**
-   ```bash
-   npm run build
-   ```
-   Pour prévisualiser le build :
-   ```bash
-   npm run preview
-   ```
-
-## Building
-Create a production build in `dist/`:
 ```bash
-npm run build
+npm run build:exe
 ```
-Preview the built app locally:
+
+Le lanceur est compilé avec `csc.exe`, fourni avec Windows : aucune dépendance
+supplémentaire n'est nécessaire.
+
+## Démarrage manuel
+
 ```bash
-npm run preview
+npm install
+npm start
+```
+
+`npm start` construit l'interface puis démarre le serveur sur
+<http://localhost:4174>, qui sert à la fois l'application et l'API locale.
+
+Pour développer avec rechargement à chaud, deux terminaux :
+
+```bash
+npm run backend   # API locale sur le port 4174
+npm run dev       # interface sur http://localhost:5173
+```
+
+## Fonctionnement de l'outil
+
+Le bouton **Guide**, en haut à droite de l'application, ouvre une fenêtre qui
+résume le fonctionnement. En résumé :
+
+1. **Importer** un parcellaire — le format est détecté automatiquement.
+2. **Corriger** les contours avec les outils de dessin (dessiner, découper,
+   fusionner, supprimer, résoudre les chevauchements).
+3. **Compléter** les informations dans le panneau de droite, en fiches ou en
+   tableau.
+4. **Exporter** en CSV Assolia, XML Télépac ou shapefile.
+
+### Formats d'import acceptés
+
+| Format | Extensions | Remarques |
+| --- | --- | --- |
+| XML Télépac | `.xml` | Export de déclaration PAC ; une fenêtre demande la colonne de culture visée. |
+| Shapefile | `.zip` ou dossier | Le LPIS roumain (Stereo70) est reconnu et reprojeté automatiquement. |
+| GeoJSON | `.geojson`, `.json` | WGS84, Lambert-93, Web Mercator ou Stereo70. |
+| KML / KMZ | `.kml`, `.kmz` | Seuls les polygones deviennent des parcelles. |
+| GeoPackage | `.gpkg` | Première couche géométrique du fichier. |
+| CSV | `.csv` | Tableau avec colonne de géométrie. |
+
+Les géométries non surfaciques (points, lignes) sont ignorées. Les imports
+successifs s'ajoutent au parcellaire courant, y compris pour des millésimes
+différents.
+
+### Périmètre de cette version
+
+La déduction automatique du type de sol (SoilGrids / cartes pédologiques) n'est
+pas activée : le type de sol se saisit manuellement. La carte des sols France
+reste disponible comme simple repère visuel dans l'onglet Calques.
+
+L'application démarre sans parcellaire enregistré. Le travail en cours est
+sauvegardé automatiquement sur le poste et rechargé à l'ouverture suivante ; le
+bouton **Réinitialiser** de la barre d'outils efface tout.
+
+## Configuration optionnelle
+
+Certaines couches IGN nécessitent une clé GeoPlateforme. Créez un fichier
+`.env` à partir de `.env.example` et renseignez `VITE_GEO_PORTAIL_API_KEY`.
+Sans clé, les couches ouvertes (OpenStreetMap, OpenTopoMap, satellite ESRI)
+restent disponibles.
+
+Les couches locales volumineuses (carte des sols, toponymie, RPG Roumanie) se
+placent dans `public/data/` ; elles sont facultatives et l'application
+fonctionne sans elles.
+
+## Qualité
+
+```bash
+npm run lint
+npm test
 ```
 
 ## IGN / GeoPlateforme API key and endpoints
@@ -118,35 +162,3 @@ map.addSource("wmts-layer", {
 map.addLayer({ id: "wmts-layer", type: "raster", source: "wmts-layer" });
 ```
 
-### Reading the GeoPlateforme WMTS capabilities
-Use the GetCapabilities document to confirm the correct `LAYER`,
-`TILEMATRIXSET` (usually `PM` for WebMercator) and `FORMAT` values before
-configuring MapLibre:
-
-```bash
-curl "https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetCapabilities&apikey=${YOUR_IGN_KEY}" \
-  | xmllint --format - \
-  | rg -n "<Layer>" -A6
-```
-
-In the XML output you will find each `<Layer>` block listing the identifier to
-use in the `LAYER` parameter along with compatible `<TileMatrixSetLink>` entries
-(`PM` is the standard WebMercator pyramid) and supported output formats such as
-`image/png` or `image/jpeg`. Pick the matching values for the WMTS URL template
-shown above.
-
-Without a key, only open data layers such as OpenStreetMap will be available.
-
-## Linting
-Run ESLint on the project with:
-```bash
-npm run lint
-```
-
-## SoilGrids (point GPS)
-- Endpoint interne: `GET /api/parcels/{parcelId}/soilgrids?refresh=true|false&depth_profile=0-5cm,5-15cm,...`
-- Source: SoilGrids v2 `properties/query` (résolution ~250m).
-- Cache backend: `data/parcel-soilgrids-cache.json` avec TTL par défaut de 30 jours (modifiable dans `SoilGridsCacheRepository`).
-- Déduplication par pixel: la clé de cache est le pixel natif SoilGrids 250 m (projection Homolosine, `scripts/soilgrids/homolosine.mjs`). Toutes les parcelles d'un même pixel partagent un seul appel ISRIC ; le rate-limit (60/min) ne compte que les vrais appels amont (les cache-hits sont gratuits).
-- Stratégie du point: `SOILGRIDS_POINT_STRATEGY=centroid|inside_point` (fallback automatique bbox center si géométrie invalide). Le point d'échantillonnage (lat/lon/stratégie) est conservé dans le cache et la réponse normalisée.
-- Les indicateurs dérivés (texture, MO, porosité, RU, drainage, profondeur cible) sont heuristiques et affichés comme estimations.

@@ -1,5 +1,5 @@
 import http from "node:http";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   applyCorrespondencesAndMerge,
@@ -21,6 +21,9 @@ import { closeRpgRomaniaCache, queryRpgRomaniaByBbox } from "./rpg-romania-query
 
 const PORT = Number(process.env.PORT || 4174);
 const DATA_DIR = path.resolve(process.cwd(), "data");
+// Application compilée : servie par ce même serveur quand elle existe, pour que le
+// lanceur n'ait qu'un seul processus à démarrer (pas de proxy /api à configurer).
+const DIST_DIR = path.resolve(process.cwd(), "dist");
 const DATA_FILE = path.join(DATA_DIR, "parcelles.geojson");
 const SOIL_MAPPING_FILE = path.join(DATA_DIR, "soil-type-mappings.json");
 const PUBLIC_DATA_DIR = path.resolve(process.cwd(), "public", "data");
@@ -402,6 +405,68 @@ async function loadWrbForParcel({ parcelId, refresh }) {
   return buildPayload(wrbClassName, probability, false);
 }
 
+const STATIC_CONTENT_TYPES = {
+  ".html": "text/html; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".mjs": "text/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".ico": "image/x-icon",
+  ".woff": "font/woff",
+  ".woff2": "font/woff2",
+  ".wasm": "application/wasm",
+  ".gpkg": "application/geopackage+sqlite3",
+  ".csv": "text/csv; charset=utf-8",
+  ".mbtiles": "application/octet-stream",
+};
+
+/**
+ * Sert un fichier de `dist/`. Toute route inconnue retombe sur index.html
+ * (application monopage). Renvoie false si l'application n'est pas construite,
+ * afin que le serveur puisse répondre 404 comme avant.
+ */
+async function serveStatic(requestUrl, res) {
+  let indexStat;
+  try {
+    indexStat = await stat(path.join(DIST_DIR, "index.html"));
+  } catch {
+    return false;
+  }
+  if (!indexStat.isFile()) return false;
+
+  const decoded = decodeURIComponent(requestUrl.pathname);
+  // path.join normalise les « .. » : on vérifie ensuite que la cible reste dans dist/.
+  const candidate = path.join(DIST_DIR, decoded);
+  const relative = path.relative(DIST_DIR, candidate);
+  const insideDist = relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+
+  let filePath = path.join(DIST_DIR, "index.html");
+  if (insideDist) {
+    try {
+      const candidateStat = await stat(candidate);
+      if (candidateStat.isFile()) filePath = candidate;
+    } catch {
+      // fichier absent : on retombe sur index.html (routes de l'application)
+    }
+  }
+
+  try {
+    const body = await readFile(filePath);
+    const type = STATIC_CONTENT_TYPES[path.extname(filePath).toLowerCase()] || "application/octet-stream";
+    res.writeHead(200, { "Content-Type": type });
+    res.end(body);
+  } catch (error) {
+    res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
+    res.end(`Lecture impossible: ${error?.message || "erreur inconnue"}`);
+  }
+  return true;
+}
+
 const server = http.createServer(async (req, res) => {
   if (!req.url) return void res.end();
   const requestUrl = parseUrl(req.url);
@@ -757,6 +822,12 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(405);
     res.end(JSON.stringify({ error: "Method not allowed." }));
     return;
+  }
+
+  // Hors /api : application compilée si elle est disponible. Une route /api
+  // inconnue reste un 404 franc, elle ne doit pas renvoyer la page HTML.
+  if (!requestUrl.pathname.startsWith("/api/") && (req.method === "GET" || req.method === "HEAD")) {
+    if (await serveStatic(requestUrl, res)) return;
   }
 
   res.writeHead(404);

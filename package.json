@@ -10,7 +10,9 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest",
-    "build:rrp": "node scripts/build-rrp-lookup.mjs"
+    "build:rrp": "node scripts/build-rrp-lookup.mjs",
+    "build:exe": "powershell -ExecutionPolicy Bypass -File scripts/build-launcher.ps1",
+    "start": "npm run build && node scripts/geojson-server.mjs"
   },
   "dependencies": {
     "@mapbox/mapbox-gl-draw": "^1.5.1",

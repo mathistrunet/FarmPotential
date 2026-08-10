@@ -4,6 +4,7 @@ import './index.css'
 import App from './App.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import "./global.css";
+import "./styles/theme.css";
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>

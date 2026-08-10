@@ -14,6 +14,11 @@ type CoordinateProjector = (coords: readonly [number, number]) => [number, numbe
 
 type WkbParseResult = { geometry: GeoJSON.Geometry | null; offset: number };
 
+async function openGeoPackageBuffer(bytes: Uint8Array): Promise<Database> {
+  const sql = await getSqlModule();
+  return new sql.Database(bytes);
+}
+
 async function openGeoPackage(url: string): Promise<Database> {
   const base = typeof window !== "undefined" ? window.location.href : undefined;
   const resolvedUrl = new URL(url, base).toString();
@@ -22,8 +27,7 @@ async function openGeoPackage(url: string): Promise<Database> {
     throw new Error(`Could not download GeoPackage ${url}: ${resp.status} ${resp.statusText}`);
   }
   const arrayBuffer = await resp.arrayBuffer();
-  const sql = await getSqlModule();
-  return new sql.Database(new Uint8Array(arrayBuffer));
+  return openGeoPackageBuffer(new Uint8Array(arrayBuffer));
 }
 
 function readGeometryInfo(db: Database): GeometryRow {
@@ -319,7 +323,18 @@ function transformPosition(
 export async function loadGeoPackageFeatureCollection(
   url: string
 ): Promise<FeatureCollection> {
-  const db = await openGeoPackage(url);
+  return readFeatureCollection(await openGeoPackage(url));
+}
+
+/** Même lecture, à partir d'un GeoPackage déjà en mémoire (fichier choisi par l'utilisateur). */
+export async function parseGeoPackageBuffer(
+  buffer: ArrayBuffer | Uint8Array
+): Promise<FeatureCollection> {
+  const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+  return readFeatureCollection(await openGeoPackageBuffer(bytes));
+}
+
+async function readFeatureCollection(db: Database): Promise<FeatureCollection> {
   try {
     const { table, column, srs } = readGeometryInfo(db);
     const transform = createGeometryTransformer(srs);
