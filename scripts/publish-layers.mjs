@@ -181,12 +181,26 @@ async function publishDataset(dataset) {
     }
   }
 
+  // Relecture des assets publiés : leur date de mise à jour sert de référence
+  // pour détecter, sur chaque poste, qu'une couche a été republiée depuis.
+  let publishedByName = new Map();
+  if (!dryRun) {
+    try {
+      const raw = await gh(["release", "view", dataset.tag, "--repo", REPO, "--json", "assets"]);
+      const { assets = [] } = JSON.parse(raw);
+      publishedByName = new Map(assets.map((asset) => [asset.name, asset]));
+    } catch {
+      publishedByName = new Map();
+    }
+  }
+
   return files.map((file) => ({
     dataset: dataset.id,
     directory: dataset.directory,
     name: file.name,
     size: file.size,
     bbox: file.bbox,
+    updatedAt: publishedByName.get(file.name)?.updatedAt ?? null,
     url: `https://github.com/${REPO}/releases/download/${dataset.tag}/${encodeURIComponent(file.name)}`,
   }));
 }

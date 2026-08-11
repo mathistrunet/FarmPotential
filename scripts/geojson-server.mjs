@@ -19,6 +19,11 @@ import { soilGridsPixelKey } from "./soilgrids/homolosine.mjs";
 import { closeGeoPackageCache, queryGeoPackageByBbox } from "./geopackage-query.mjs";
 import { closeRpgRomaniaCache, queryRpgRomaniaByBbox } from "./rpg-romania-query.mjs";
 import { ensureDatasetForBbox, ensureLayer } from "./layer-store.mjs";
+import {
+  applyLayerUpdates,
+  getLayerUpdateReport,
+  scheduleStartupCheck,
+} from "./layer-updates.mjs";
 
 const PORT = Number(process.env.PORT || 4174);
 const DATA_DIR = path.resolve(process.cwd(), "data");
@@ -565,6 +570,45 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // État des couches : y a-t-il une version plus récente publiée ?
+  if (requestUrl.pathname === "/api/layers/updates") {
+    res.setHeader("Content-Type", "application/json");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    if (req.method === "OPTIONS") return void res.writeHead(204).end();
+
+    try {
+      if (req.method === "GET") {
+        const force = requestUrl.searchParams.get("refresh") === "true";
+        const report = await getLayerUpdateReport({ force });
+        res.writeHead(200);
+        res.end(JSON.stringify(report));
+        return;
+      }
+      // POST : accepte la mise à jour, les couches périmées seront reprises au
+      // prochain affichage.
+      if (req.method === "POST") {
+        const report = await getLayerUpdateReport({ force: true });
+        const removed = await applyLayerUpdates(report);
+        res.writeHead(200);
+        res.end(JSON.stringify({ status: "ok", updated: removed }));
+        return;
+      }
+    } catch (error) {
+      log("LAYER_UPDATES_ERROR", { message: error?.message || String(error) });
+      res.writeHead(200);
+      // Une vérification impossible n'est pas une erreur pour l'utilisateur :
+      // l'application continue de fonctionner avec ses couches actuelles.
+      res.end(JSON.stringify({ checkedAt: null, outdated: [], added: [], offline: true }));
+      return;
+    }
+
+    res.writeHead(405);
+    res.end(JSON.stringify({ error: "Method not allowed." }));
+    return;
+  }
+
   if (requestUrl.pathname === "/api/soilgrids/grid") {
     res.setHeader("Content-Type", "application/json");
     res.setHeader("Access-Control-Allow-Origin", "*");
@@ -916,6 +960,9 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`GeoJSON backend listening on http://localhost:${PORT}`);
+  // Vérification des couches en tâche de fond : le résultat est prêt quand
+  // l'interface le demande, et son échec n'empêche jamais le démarrage.
+  scheduleStartupCheck();
 });
 
 process.on("exit", () => {

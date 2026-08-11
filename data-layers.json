@@ -8,6 +8,7 @@
       "name": "assolia_cultures_export.csv",
       "size": 67577,
       "bbox": null,
+      "updatedAt": "2026-08-11T06:58:35Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-referentiels-v1/assolia_cultures_export.csv"
     },
     {
@@ -16,6 +17,7 @@
       "name": "Soil_type_RRP.csv",
       "size": 1963876,
       "bbox": null,
+      "updatedAt": "2026-08-11T06:58:35Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-referentiels-v1/Soil_type_RRP.csv"
     },
     {
@@ -29,6 +31,7 @@
         26.460071085545522,
         44.77477545503731
       ],
+      "updatedAt": "2026-08-11T06:57:55Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-rpg-romania-v1/region_Bucuresti-Ilfov.gpkg"
     },
     {
@@ -42,6 +45,7 @@
         26.476456288463435,
         47.172214207198394
       ],
+      "updatedAt": "2026-08-11T06:58:29Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-rpg-romania-v1/region_Centru.gpkg"
     },
     {
@@ -55,6 +59,7 @@
         28.371459371832696,
         48.27533868452871
       ],
+      "updatedAt": "2026-08-11T06:58:27Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-rpg-romania-v1/region_Nord-Est.gpkg"
     },
     {
@@ -68,6 +73,7 @@
         25.095391080705596,
         48.13352750585879
       ],
+      "updatedAt": "2026-08-11T06:58:32Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-rpg-romania-v1/region_Nord-Vest.gpkg"
     },
     {
@@ -81,6 +87,7 @@
         29.76989613790012,
         46.22424383870537
       ],
+      "updatedAt": "2026-08-11T06:58:14Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-rpg-romania-v1/region_Sud-Est.gpkg"
     },
     {
@@ -94,6 +101,7 @@
         28.154804129896934,
         45.60995563282401
       ],
+      "updatedAt": "2026-08-11T06:58:05Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-rpg-romania-v1/region_Sud-Muntenia.gpkg"
     },
     {
@@ -107,6 +115,7 @@
         24.887929578154157,
         45.59410815837747
       ],
+      "updatedAt": "2026-08-11T06:58:19Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-rpg-romania-v1/region_Sud-Vest-Oltenia.gpkg"
     },
     {
@@ -120,6 +129,7 @@
         23.61879623705992,
         46.7145522627392
       ],
+      "updatedAt": "2026-08-11T06:58:28Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-rpg-romania-v1/region_Vest.gpkg"
     },
     {
@@ -133,6 +143,7 @@
         6.170198423395058,
         46.51211250422806
       ],
+      "updatedAt": "2026-08-11T06:56:43Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_01.gpkg"
     },
     {
@@ -146,6 +157,7 @@
         4.524837529336703,
         50.04798250833952
       ],
+      "updatedAt": "2026-08-11T06:56:43Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_02.gpkg"
     },
     {
@@ -159,6 +171,7 @@
         3.999401568872273,
         46.94017844598845
       ],
+      "updatedAt": "2026-08-11T06:56:44Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_03.gpkg"
     },
     {
@@ -172,6 +185,7 @@
         7.54089156034516,
         44.74734717421819
       ],
+      "updatedAt": "2026-08-11T06:56:43Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_04.gpkg"
     },
     {
@@ -185,6 +199,7 @@
         7.077146944385974,
         45.18027212647972
       ],
+      "updatedAt": "2026-08-11T06:56:43Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_05.gpkg"
     },
     {
@@ -198,6 +213,7 @@
         7.718983685520391,
         44.35597565214083
       ],
+      "updatedAt": "2026-08-11T06:56:44Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_06.gpkg"
     },
     {
@@ -211,6 +227,7 @@
         4.884305686977361,
         45.41728499549887
       ],
+      "updatedAt": "2026-08-11T06:56:44Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_07.gpkg"
     },
     {
@@ -224,6 +241,7 @@
         5.392208037826777,
         50.16914777696518
       ],
+      "updatedAt": "2026-08-11T06:56:44Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_08.gpkg"
     },
     {
@@ -237,6 +255,7 @@
         2.149162506603666,
         43.52292240986705
       ],
+      "updatedAt": "2026-08-11T06:56:46Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_09.gpkg"
     },
     {
@@ -250,6 +269,7 @@
         4.849728955590105,
         48.69931525142876
       ],
+      "updatedAt": "2026-08-11T06:56:46Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_10.gpkg"
     },
     {
@@ -263,6 +283,7 @@
         3.301493747539063,
         43.77678323282298
       ],
+      "updatedAt": "2026-08-11T06:56:46Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_11.gpkg"
     },
     {
@@ -276,6 +297,7 @@
         3.546591193877311,
         45.04984593685883
       ],
+      "updatedAt": "2026-08-11T06:56:47Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_12.gpkg"
     },
     {
@@ -289,6 +311,7 @@
         6.03067196646998,
         43.93328263605773
       ],
+      "updatedAt": "2026-08-11T06:56:46Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_13.gpkg"
     },
     {
@@ -302,6 +325,7 @@
         0.4435369856485371,
         49.42407952331915
       ],
+      "updatedAt": "2026-08-11T06:56:47Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_14.gpkg"
     },
     {
@@ -315,6 +339,7 @@
         3.403633502526547,
         45.4803787635231
       ],
+      "updatedAt": "2026-08-11T06:56:47Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_15.gpkg"
     },
     {
@@ -328,6 +353,7 @@
         1.040020430848813,
         46.26409556821418
       ],
+      "updatedAt": "2026-08-11T06:56:47Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_16.gpkg"
     },
     {
@@ -341,6 +367,7 @@
         0.3178777025652569,
         46.46258123443192
       ],
+      "updatedAt": "2026-08-11T06:56:49Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_17.gpkg"
     },
     {
@@ -354,6 +381,7 @@
         3.318181348030694,
         47.62740368922243
       ],
+      "updatedAt": "2026-08-11T06:56:52Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_18.gpkg"
     },
     {
@@ -367,6 +395,7 @@
         2.671165162662052,
         45.8467484904747
       ],
+      "updatedAt": "2026-08-11T06:56:49Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_19.gpkg"
     },
     {
@@ -380,6 +409,7 @@
         6.082664820086249,
         48.21376066822853
       ],
+      "updatedAt": "2026-08-11T06:56:49Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_21.gpkg"
     },
     {
@@ -393,6 +423,7 @@
         -1.926693444197477,
         48.87084451107263
       ],
+      "updatedAt": "2026-08-11T06:56:49Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_22.gpkg"
     },
     {
@@ -406,6 +437,7 @@
         2.576102511891784,
         46.43597728340828
       ],
+      "updatedAt": "2026-08-11T06:56:50Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_23.gpkg"
     },
     {
@@ -419,6 +451,7 @@
         1.527331208204614,
         46.08327570621319
       ],
+      "updatedAt": "2026-08-11T06:56:51Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_24.gpkg"
     },
     {
@@ -432,6 +465,7 @@
         7.062213616853496,
         47.68625786865365
       ],
+      "updatedAt": "2026-08-11T06:56:50Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_25.gpkg"
     },
     {
@@ -445,6 +479,7 @@
         5.829805183565324,
         45.31852255320792
       ],
+      "updatedAt": "2026-08-11T06:56:54Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_26.gpkg"
     },
     {
@@ -458,6 +493,7 @@
         1.975067428291688,
         49.54787475921655
       ],
+      "updatedAt": "2026-08-11T06:56:54Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_27.gpkg"
     },
     {
@@ -471,6 +507,7 @@
         2.151635880649783,
         48.86283078502066
       ],
+      "updatedAt": "2026-08-11T06:56:54Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_28.gpkg"
     },
     {
@@ -484,6 +521,7 @@
         -3.330300279778923,
         48.75351961168145
       ],
+      "updatedAt": "2026-08-11T06:56:54Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_29.gpkg"
     },
     {
@@ -497,6 +535,7 @@
         9.560093606942253,
         43.02769339392126
       ],
+      "updatedAt": "2026-08-11T06:56:53Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_2A.gpkg"
     },
     {
@@ -510,6 +549,7 @@
         5.045608744921524,
         44.44950594570984
       ],
+      "updatedAt": "2026-08-11T06:56:54Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_30.gpkg"
     },
     {
@@ -523,6 +563,7 @@
         2.166407186733787,
         44.12274403823123
       ],
+      "updatedAt": "2026-08-11T06:56:55Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_31.gpkg"
     },
     {
@@ -536,6 +577,7 @@
         1.17343394368735,
         44.1518360995041
       ],
+      "updatedAt": "2026-08-11T06:56:55Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_32.gpkg"
     },
     {
@@ -549,6 +591,7 @@
         0.2909599972443807,
         45.57362968092742
       ],
+      "updatedAt": "2026-08-11T06:56:57Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_33.gpkg"
     },
     {
@@ -562,6 +605,7 @@
         4.161794127912735,
         43.98837870111558
       ],
+      "updatedAt": "2026-08-11T06:56:57Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_34.gpkg"
     },
     {
@@ -575,6 +619,7 @@
         -0.8903836653153483,
         48.71269810469474
       ],
+      "updatedAt": "2026-08-11T06:56:58Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_35.gpkg"
     },
     {
@@ -588,6 +633,7 @@
         2.372513936883061,
         47.34319891298033
       ],
+      "updatedAt": "2026-08-11T06:56:57Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_36.gpkg"
     },
     {
@@ -601,6 +647,7 @@
         1.330946677293177,
         47.69781015346623
       ],
+      "updatedAt": "2026-08-11T06:56:57Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_37.gpkg"
     },
     {
@@ -614,6 +661,7 @@
         6.326069681573519,
         45.87236702062019
       ],
+      "updatedAt": "2026-08-11T06:56:58Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_38.gpkg"
     },
     {
@@ -627,6 +675,7 @@
         6.156604715716866,
         47.30638577581087
       ],
+      "updatedAt": "2026-08-11T06:56:58Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_39.gpkg"
     },
     {
@@ -640,6 +689,7 @@
         0.06188347206020425,
         44.48710296130822
       ],
+      "updatedAt": "2026-08-11T06:56:58Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_40.gpkg"
     },
     {
@@ -653,6 +703,7 @@
         2.246489466603023,
         48.11775628250052
       ],
+      "updatedAt": "2026-08-11T06:57:00Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_41.gpkg"
     },
     {
@@ -666,6 +717,7 @@
         4.755162423371519,
         46.32109716363412
       ],
+      "updatedAt": "2026-08-11T06:56:59Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_42.gpkg"
     },
     {
@@ -679,6 +731,7 @@
         4.560582320968296,
         45.47919510355232
       ],
+      "updatedAt": "2026-08-11T06:56:59Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_43.gpkg"
     },
     {
@@ -692,6 +745,7 @@
         -0.9542034774518444,
         47.82801650857251
       ],
+      "updatedAt": "2026-08-11T06:57:00Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_44.gpkg"
     },
     {
@@ -705,6 +759,7 @@
         3.140682295660073,
         48.32002091127275
       ],
+      "updatedAt": "2026-08-11T06:56:59Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_45.gpkg"
     },
     {
@@ -718,6 +773,7 @@
         2.243817821351275,
         45.10160551403639
       ],
+      "updatedAt": "2026-08-11T06:57:00Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_46.gpkg"
     },
     {
@@ -731,6 +787,7 @@
         1.288377541140122,
         44.83649461041055
       ],
+      "updatedAt": "2026-08-11T06:57:01Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_47.gpkg"
     },
     {
@@ -744,6 +801,7 @@
         3.983353726694214,
         44.95023329272409
       ],
+      "updatedAt": "2026-08-11T06:57:00Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_48.gpkg"
     },
     {
@@ -757,6 +815,7 @@
         0.3794884283769454,
         47.94894283147993
       ],
+      "updatedAt": "2026-08-11T06:57:07Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_49.gpkg"
     },
     {
@@ -770,6 +829,7 @@
         -0.4724463695457172,
         49.72777202836348
       ],
+      "updatedAt": "2026-08-11T06:57:03Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_50.gpkg"
     },
     {
@@ -783,6 +843,7 @@
         5.239036395685501,
         49.53512170261942
       ],
+      "updatedAt": "2026-08-11T06:57:07Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_51.gpkg"
     },
     {
@@ -796,6 +857,7 @@
         6.231687452306788,
         48.67439705602018
       ],
+      "updatedAt": "2026-08-11T06:57:03Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_52.gpkg"
     },
     {
@@ -809,6 +871,7 @@
         0.03624474949436501,
         48.55520534541512
       ],
+      "updatedAt": "2026-08-11T06:57:12Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_53.gpkg"
     },
     {
@@ -822,6 +885,7 @@
         7.32405936110869,
         49.56962539323387
       ],
+      "updatedAt": "2026-08-11T06:57:07Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_54.gpkg"
     },
     {
@@ -835,6 +899,7 @@
         5.816747951995414,
         50.16914777696518
       ],
+      "updatedAt": "2026-08-11T06:57:07Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_55.gpkg"
     },
     {
@@ -848,6 +913,7 @@
         -2.04722374684621,
         48.30744114606615
       ],
+      "updatedAt": "2026-08-11T06:57:08Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_56.gpkg"
     },
     {
@@ -861,6 +927,7 @@
         7.86906512832563,
         49.51509240150853
       ],
+      "updatedAt": "2026-08-11T06:57:26Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_57.gpkg"
     },
     {
@@ -874,6 +941,7 @@
         4.225888966484838,
         47.56039027040137
       ],
+      "updatedAt": "2026-08-11T06:57:14Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_58.gpkg"
     },
     {
@@ -887,6 +955,7 @@
         4.231586342058524,
         51.08892999950575
       ],
+      "updatedAt": "2026-08-11T06:57:14Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_59.gpkg"
     },
     {
@@ -900,6 +969,7 @@
         3.126521742995103,
         49.95085423456523
       ],
+      "updatedAt": "2026-08-11T06:57:14Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_60.gpkg"
     },
     {
@@ -913,6 +983,7 @@
         1.492491626070334,
         49.35579793237569
       ],
+      "updatedAt": "2026-08-11T06:57:20Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_61.gpkg"
     },
     {
@@ -926,6 +997,7 @@
         3.121195774890575,
         50.99186851669505
       ],
+      "updatedAt": "2026-08-11T06:57:20Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_62.gpkg"
     },
     {
@@ -939,6 +1011,7 @@
         4.488917967832163,
         46.56156790985811
       ],
+      "updatedAt": "2026-08-11T06:57:22Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_63.gpkg"
     },
     {
@@ -952,6 +1025,7 @@
         0.083537146565182,
         43.7686322230272
       ],
+      "updatedAt": "2026-08-11T06:57:22Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_64.gpkg"
     },
     {
@@ -965,6 +1039,7 @@
         0.6296513087690628,
         43.59986325680647
       ],
+      "updatedAt": "2026-08-11T06:57:28Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_65.gpkg"
     },
     {
@@ -978,6 +1053,7 @@
         3.177845807112419,
         42.88664539699862
       ],
+      "updatedAt": "2026-08-11T06:57:27Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_66.gpkg"
     },
     {
@@ -991,6 +1067,7 @@
         8.233519154422854,
         49.06555627231071
       ],
+      "updatedAt": "2026-08-11T06:57:28Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_67.gpkg"
     },
     {
@@ -1004,6 +1081,7 @@
         7.621065157376953,
         48.2871892925527
       ],
+      "updatedAt": "2026-08-11T06:57:28Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_68.gpkg"
     },
     {
@@ -1017,6 +1095,7 @@
         5.207410709065071,
         46.54251428203527
       ],
+      "updatedAt": "2026-08-11T06:57:28Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_69.gpkg"
     },
     {
@@ -1030,6 +1109,7 @@
         6.805034777925941,
         48.01326157501374
       ],
+      "updatedAt": "2026-08-11T06:57:29Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_70.gpkg"
     },
     {
@@ -1043,6 +1123,7 @@
         5.799660095330061,
         47.27011055050689
       ],
+      "updatedAt": "2026-08-11T06:57:29Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_71.gpkg"
     },
     {
@@ -1056,6 +1137,7 @@
         1.261075758895923,
         48.47931185702132
       ],
+      "updatedAt": "2026-08-11T06:57:29Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_72.gpkg"
     },
     {
@@ -1069,6 +1151,7 @@
         7.185561311647538,
         45.93303195724147
       ],
+      "updatedAt": "2026-08-11T06:57:32Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_73.gpkg"
     },
     {
@@ -1082,6 +1165,7 @@
         7.0450650168028,
         46.40823623434825
       ],
+      "updatedAt": "2026-08-11T06:57:32Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_74.gpkg"
     },
     {
@@ -1095,6 +1179,7 @@
         1.771299327256955,
         50.06473385228407
       ],
+      "updatedAt": "2026-08-11T06:57:32Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_76.gpkg"
     },
     {
@@ -1108,6 +1193,7 @@
         3.676070200193343,
         49.23908080453422
       ],
+      "updatedAt": "2026-08-11T06:57:30Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_77.gpkg"
     },
     {
@@ -1121,6 +1207,7 @@
         2.898238357532643,
         49.24787904826562
       ],
+      "updatedAt": "2026-08-11T06:57:30Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_78.gpkg"
     },
     {
@@ -1134,6 +1221,7 @@
         0.1897621143687688,
         47.09879667545174
       ],
+      "updatedAt": "2026-08-11T06:57:31Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_79.gpkg"
     },
     {
@@ -1147,6 +1235,7 @@
         3.170577981890459,
         50.3657906140922
       ],
+      "updatedAt": "2026-08-11T06:57:31Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_80.gpkg"
     },
     {
@@ -1160,6 +1249,7 @@
         2.921545535497174,
         44.19848748294058
       ],
+      "updatedAt": "2026-08-11T06:57:32Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_81.gpkg"
     },
     {
@@ -1173,6 +1263,7 @@
         1.982295395469952,
         44.39340196604356
       ],
+      "updatedAt": "2026-08-11T06:57:34Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_82.gpkg"
     },
     {
@@ -1186,6 +1277,7 @@
         7.017951008929475,
         43.8088399232362
       ],
+      "updatedAt": "2026-08-11T06:57:34Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_83.gpkg"
     },
     {
@@ -1199,6 +1291,7 @@
         5.738219460215716,
         44.42251746936476
       ],
+      "updatedAt": "2026-08-11T06:57:33Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_84.gpkg"
     },
     {
@@ -1212,6 +1305,7 @@
         -0.5975451531726684,
         47.070367841271
       ],
+      "updatedAt": "2026-08-11T06:57:35Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_85.gpkg"
     },
     {
@@ -1225,6 +1319,7 @@
         1.31466093418974,
         47.16975499832282
       ],
+      "updatedAt": "2026-08-11T06:57:34Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_86.gpkg"
     },
     {
@@ -1238,6 +1333,7 @@
         1.969807195185352,
         46.37510865218143
       ],
+      "updatedAt": "2026-08-11T06:57:34Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_87.gpkg"
     },
     {
@@ -1251,6 +1347,7 @@
         7.370118336527457,
         48.89149567968057
       ],
+      "updatedAt": "2026-08-11T06:57:35Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_88.gpkg"
     },
     {
@@ -1264,6 +1361,7 @@
         4.39414192783445,
         48.51958283544022
       ],
+      "updatedAt": "2026-08-11T06:57:35Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_89.gpkg"
     },
     {
@@ -1277,6 +1375,7 @@
         7.188823450535173,
         47.81711488750347
       ],
+      "updatedAt": "2026-08-11T06:57:36Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_90.gpkg"
     },
     {
@@ -1290,6 +1389,7 @@
         2.901832849698906,
         48.73451377015698
       ],
+      "updatedAt": "2026-08-11T06:57:36Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_91.gpkg"
     },
     {
@@ -1303,6 +1403,7 @@
         2.328757165403502,
         48.9499982509949
       ],
+      "updatedAt": "2026-08-11T06:57:36Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_92.gpkg"
     },
     {
@@ -1316,6 +1417,7 @@
         2.575795787711448,
         48.99534832911198
       ],
+      "updatedAt": "2026-08-11T06:57:36Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_93.gpkg"
     },
     {
@@ -1329,6 +1431,7 @@
         3.129882289941512,
         48.85646774663886
       ],
+      "updatedAt": "2026-08-11T06:57:36Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_94.gpkg"
     },
     {
@@ -1342,6 +1445,7 @@
         2.57336119121976,
         49.22835186806118
       ],
+      "updatedAt": "2026-08-11T06:57:37Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_95.gpkg"
     },
     {
@@ -1355,6 +1459,7 @@
         7.972210504223397,
         50.09759729212643
       ],
+      "updatedAt": "2026-08-11T06:57:37Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_NULL.gpkg"
     },
     {
@@ -1368,6 +1473,7 @@
         7.290023725450871,
         46.84262036237103
       ],
+      "updatedAt": "2026-08-11T06:57:43Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-toponymie-v1/TOPONYMIE_ARA.gpkg"
     },
     {
@@ -1381,6 +1487,7 @@
         7.276002900680293,
         48.443381797638764
       ],
+      "updatedAt": "2026-08-11T06:57:42Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-toponymie-v1/TOPONYMIE_BFC.gpkg"
     },
     {
@@ -1394,6 +1501,7 @@
         -0.9030634130800862,
         49.01028006900242
       ],
+      "updatedAt": "2026-08-11T06:57:42Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-toponymie-v1/TOPONYMIE_Bratagne.gpkg"
     },
     {
@@ -1407,6 +1515,7 @@
         3.19887867163203,
         48.994593727261915
       ],
+      "updatedAt": "2026-08-11T06:57:42Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-toponymie-v1/TOPONYMIE_Centre.gpkg"
     },
     {
@@ -1420,6 +1529,7 @@
         8.338143165952445,
         50.18165221932358
       ],
+      "updatedAt": "2026-08-11T06:57:42Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-toponymie-v1/TOPONYMIE_GEst.gpkg"
     },
     {
@@ -1433,6 +1543,7 @@
         4.355407745479825,
         51.088732376420566
       ],
+      "updatedAt": "2026-08-11T06:57:44Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-toponymie-v1/TOPONYMIE_HDF.gpkg"
     },
     {
@@ -1446,6 +1557,7 @@
         3.6342521105774437,
         49.288525325053534
       ],
+      "updatedAt": "2026-08-11T06:57:43Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-toponymie-v1/TOPONYMIE_IDF.gpkg"
     },
     {
@@ -1459,6 +1571,7 @@
         2.6894355995902157,
         47.25856434968335
       ],
+      "updatedAt": "2026-08-11T06:57:46Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-toponymie-v1/TOPONYMIE_NAquitaine.gpkg"
     },
     {
@@ -1472,6 +1585,7 @@
         1.8922738796770155,
         50.11609240795363
       ],
+      "updatedAt": "2026-08-11T06:57:49Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-toponymie-v1/TOPONYMIE_Normandie.gpkg"
     },
     {
@@ -1485,6 +1599,7 @@
         4.94420207751948,
         45.08292763176183
       ],
+      "updatedAt": "2026-08-11T06:57:51Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-toponymie-v1/TOPONYMIE_Occitanie.gpkg"
     },
     {
@@ -1498,6 +1613,7 @@
         7.80797919011198,
         45.217168551046214
       ],
+      "updatedAt": "2026-08-11T06:57:49Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-toponymie-v1/TOPONYMIE_PACA.gpkg"
     },
     {
@@ -1511,6 +1627,7 @@
         1.0510202972469376,
         48.639037948862125
       ],
+      "updatedAt": "2026-08-11T06:57:50Z",
       "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-toponymie-v1/TOPONYMIE_PDL.gpkg"
     }
   ]

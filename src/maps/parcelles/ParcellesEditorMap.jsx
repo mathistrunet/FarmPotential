@@ -22,11 +22,13 @@ import DrawToolbar from "../../Front/DrawToolbar";
 import ImportParcellaireButton from "../../Front/ImportParcellaireButton";
 import ExportMenuButton from "../../Front/ExportMenuButton";
 import ParcelleMatchView from "../../components/ParcelleMatchView";
+import LayerUpdateNotice from "../../components/LayerUpdateNotice";
 import { IMPORT_FORMATS } from "../../services/parcellaireImport";
 
 // ✅ NOUVEAU : hook d’affichage RRP local (depuis un fichier MBTiles placé dans /public/data)
 import { useSoilLayerLocal } from "../../features/useSoilLayerLocal";
 import { useToponymieAutoNaming } from "../../features/useToponymieAutoNaming";
+import { useLayerUpdates } from "../../features/useLayerUpdates";
 import { withBasePath } from "../../utils/publicBase";
 import { ERROR_CODES } from "../../utils/errors";
 import {
@@ -196,6 +198,9 @@ export default function ParcellesEditorMap({ mapMode, onMapModeChange, onOpenGui
   } = useParcelles();
 
   const { fillToponymieNames, isNaming: isToponymieNaming } = useToponymieAutoNaming(setFeatures);
+  // Vérifie au démarrage si les cartes hébergées ont été republiées depuis leur
+  // téléchargement sur ce poste.
+  const layerUpdates = useLayerUpdates();
 
   // Onglets + panneau latéral repliable
   const [sideOpen, setSideOpen] = useState(true);          // panneau latéral ouvert/fermé
@@ -1319,8 +1324,27 @@ export default function ParcellesEditorMap({ mapMode, onMapModeChange, onOpenGui
                   className="fp-tab"
                   aria-selected={activeTab === "calques"}
                   onClick={() => setActiveTab("calques")}
+                  title={
+                    layerUpdates.pending > 0
+                      ? "Une mise à jour des cartes est disponible"
+                      : undefined
+                  }
                 >
                   Calques
+                  {layerUpdates.pending > 0 ? (
+                    <span
+                      aria-label="mise à jour disponible"
+                      style={{
+                        display: "inline-block",
+                        width: 7,
+                        height: 7,
+                        marginLeft: 6,
+                        borderRadius: 999,
+                        background: "var(--c-warn)",
+                        verticalAlign: "middle",
+                      }}
+                    />
+                  ) : null}
                 </button>
               </div>
 
@@ -1425,6 +1449,14 @@ export default function ParcellesEditorMap({ mapMode, onMapModeChange, onOpenGui
 
               {activeTab === "calques" && (
                 <div style={{ display: "grid", gap: 14 }}>
+                  <LayerUpdateNotice
+                    report={layerUpdates.report}
+                    pending={layerUpdates.pending}
+                    applying={layerUpdates.applying}
+                    appliedCount={layerUpdates.appliedCount}
+                    onApply={layerUpdates.apply}
+                  />
+
                   <div>
                     <h3 className="fp-section-title">Fonds de carte et couches</h3>
                     <p className="fp-hint" style={{ margin: "6px 0 10px" }}>

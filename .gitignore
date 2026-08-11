@@ -31,3 +31,4 @@ dist-ssr
 # Claude worktrees (sessions isolées, jamais commitées)
 .claude/worktrees/
 .claude/settings.local.json
+data/layer-update-check.json

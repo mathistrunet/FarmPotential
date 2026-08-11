@@ -100,7 +100,22 @@ fois suivantes, c'est instantané et hors ligne. Le parcellaire roumain est
 filtré par emprise : seules les régions visibles à l'écran sont récupérées.
 
 Le fichier `data-layers.json`, lui, est versionné : il décrit chaque couche
-(URL, taille, emprise) et sert d'annuaire au téléchargement.
+(URL, taille, emprise, date de publication) et sert d'annuaire au téléchargement.
+
+### Mise à jour des cartes
+
+Au démarrage, le serveur interroge les Releases et compare la date de
+publication de chaque couche à celle du fichier présent sur le poste. Si une
+carte a été republiée depuis, un encart apparaît dans l'onglet Calques — avec
+une pastille sur l'onglet pour le signaler sans avoir à l'ouvrir.
+
+« Mettre à jour » écarte simplement les copies périmées : la version à jour est
+reprise au prochain affichage de la couche, ce qui évite d'imposer plusieurs
+centaines de mégaoctets à l'ouverture de l'application.
+
+La vérification est mise en cache 24 h (`data/layer-update-check.json`) pour
+rester sous le quota de l'API GitHub anonyme, et reste silencieuse hors ligne :
+sans réseau, l'application fonctionne avec ses couches actuelles.
 
 Pour republier les couches après les avoir mises à jour :
 
