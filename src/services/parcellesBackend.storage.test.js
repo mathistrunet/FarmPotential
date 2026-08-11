@@ -2,10 +2,10 @@
 import { describe, expect, it, beforeEach, vi } from "vitest";
 
 const LEGACY_KEY = "parcelles.geojson";
-const CURRENT_KEY = "farmpotential.parcelles-temp";
+const CURRENT_KEY = "studioparcellaire.parcelles-temp";
 // Marqueur de version : sans lui, le module purge le brouillon local au premier
 // chargement (cette version démarre sans parcellaire enregistré).
-const VERSION_KEY = "farmpotential.parcelles-version";
+const VERSION_KEY = "studioparcellaire.parcelles-version";
 const VERSION = "2";
 
 const SAMPLE_COLLECTION = JSON.stringify({

@@ -12,7 +12,7 @@ const ParcellesEditorMap = lazy(() => import("./maps/parcelles/ParcellesEditorMa
 const UNKNOWN_YEAR = "unknown";
 // Le guide s'ouvre tout seul à la première utilisation sur ce poste ; ensuite il
 // reste accessible par le bouton « Guide ».
-const GUIDE_SEEN_KEY = "farmpotential.guide-vu.v1";
+const GUIDE_SEEN_KEY = "studioparcellaire.guide-vu.v1";
 
 function normalizeYearValue(value) {
   if (value == null || value === "") return null;

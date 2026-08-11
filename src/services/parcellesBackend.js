@@ -1,7 +1,7 @@
 const PARCELLES_ENDPOINT = "/api/parcelles";
 const MATCH_VALIDATE_ENDPOINT = "/api/parcelles/matching/validate";
 // Clé unifiée avec ParcellesStore pour éviter deux entrées localStorage désynchronisées
-const LOCAL_STORAGE_KEY = "farmpotential.parcelles-temp";
+const LOCAL_STORAGE_KEY = "studioparcellaire.parcelles-temp";
 
 const normalizeFeature = (feature) => {
   if (!feature || typeof feature !== "object") return null;
@@ -54,7 +54,7 @@ const LEGACY_STORAGE_KEY = "parcelles.geojson";
 // de version purge donc une seule fois le brouillon local laissé par une
 // installation antérieure ; ensuite, la persistance reprend normalement d'une
 // session à l'autre.
-const STORAGE_VERSION_KEY = "farmpotential.parcelles-version";
+const STORAGE_VERSION_KEY = "studioparcellaire.parcelles-version";
 const STORAGE_VERSION = "2";
 const resetLocalStorageOnVersionChange = () => {
   if (!canUseLocalStorage()) return;

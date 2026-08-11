@@ -3,7 +3,7 @@
 ## 1. Identite du document
 
 - Produit : `Studio Parcellaire`
-- Depot : `C:\Users\Mathis Trunet\Documents\GitHub\FarmPotential`
+- Depot : `C:\Users\Mathis Trunet\Documents\GitHub\StudioParcellaire`
 - Version du document : `v1 - etat actuel du depot au 21/04/2026`
 - Statut du document : `document de reference evolutif`
 - Finalite :
@@ -343,9 +343,9 @@ Referentiels identifies :
 
 Les documents suivants completent ce cahier des charges :
 
-- guide d'installation et d'utilisation : [GUIDE_INSTALLATION_UTILISATION.md](C:/Users/Mathis%20Trunet/Documents/GitHub/FarmPotential/docs/GUIDE_INSTALLATION_UTILISATION.md)
-- suivi des fonctionnalites : [SUIVI_FONCTIONNALITES.md](C:/Users/Mathis%20Trunet/Documents/GitHub/FarmPotential/docs/SUIVI_FONCTIONNALITES.md)
-- fiches detaillees par fonctionnalite : [fonctionnalites/README.md](C:/Users/Mathis%20Trunet/Documents/GitHub/FarmPotential/docs/fonctionnalites/README.md)
+- guide d'installation et d'utilisation : [GUIDE_INSTALLATION_UTILISATION.md](C:/Users/Mathis%20Trunet/Documents/GitHub/StudioParcellaire/docs/GUIDE_INSTALLATION_UTILISATION.md)
+- suivi des fonctionnalites : [SUIVI_FONCTIONNALITES.md](C:/Users/Mathis%20Trunet/Documents/GitHub/StudioParcellaire/docs/SUIVI_FONCTIONNALITES.md)
+- fiches detaillees par fonctionnalite : [fonctionnalites/README.md](C:/Users/Mathis%20Trunet/Documents/GitHub/StudioParcellaire/docs/fonctionnalites/README.md)
 
 ## 8. Risques, limites et dette technique constates
 

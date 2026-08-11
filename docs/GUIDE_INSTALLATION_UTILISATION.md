@@ -146,6 +146,6 @@ Persistance actuelle :
 
 ## 9. Documents lies
 
-- cahier des charges : [CAHIER_DES_CHARGES_Studio Parcellaire.md](C:/Users/Mathis%20Trunet/Documents/GitHub/FarmPotential/docs/CAHIER_DES_CHARGES_Studio Parcellaire.md)
-- suivi des fonctionnalites : [SUIVI_FONCTIONNALITES.md](C:/Users/Mathis%20Trunet/Documents/GitHub/FarmPotential/docs/SUIVI_FONCTIONNALITES.md)
-- fiches fonctionnelles : [fonctionnalites/README.md](C:/Users/Mathis%20Trunet/Documents/GitHub/FarmPotential/docs/fonctionnalites/README.md)
+- cahier des charges : [CAHIER_DES_CHARGES_Studio_Parcellaire.md](C:/Users/Mathis%20Trunet/Documents/GitHub/StudioParcellaire/docs/CAHIER_DES_CHARGES_Studio_Parcellaire.md)
+- suivi des fonctionnalites : [SUIVI_FONCTIONNALITES.md](C:/Users/Mathis%20Trunet/Documents/GitHub/StudioParcellaire/docs/SUIVI_FONCTIONNALITES.md)
+- fiches fonctionnelles : [fonctionnalites/README.md](C:/Users/Mathis%20Trunet/Documents/GitHub/StudioParcellaire/docs/fonctionnalites/README.md)

@@ -5,7 +5,7 @@
 
 import path from "node:path";
 
-export const REPO = process.env.FARMPOTENTIAL_REPO || "mathistrunet/FarmPotential";
+export const REPO = process.env.STUDIO_PARCELLAIRE_REPO || "mathistrunet/StudioParcellaire";
 
 export const PUBLIC_DATA_DIR = path.resolve(process.cwd(), "public", "data");
 export const MANIFEST_PATH = path.resolve(process.cwd(), "data-layers.json");

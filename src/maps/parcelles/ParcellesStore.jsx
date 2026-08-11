@@ -6,7 +6,7 @@ import { featureCollectionsEqual } from "../../utils/featureCollectionEquality";
 
 import { ParcellesContext } from "./ParcellesContext";
 const EMPTY_COLLECTION = { type: "FeatureCollection", features: [] };
-const LOCAL_STORAGE_KEY = "farmpotential.parcelles-temp";
+const LOCAL_STORAGE_KEY = "studioparcellaire.parcelles-temp";
 
 const readFromStorage = () => {
   if (typeof window === "undefined") return null;
