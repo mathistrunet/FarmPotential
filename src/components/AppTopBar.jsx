@@ -1,3 +1,5 @@
+import { APP_VERSION } from "../config/version";
+
 /**
  * Barre d'application commune aux deux modes.
  * Elle réunit ce qu'un utilisateur cherche en premier : le nom de l'outil, le
@@ -14,7 +16,9 @@ export default function AppTopBar({
     <header className="fp-topbar">
       <div className="fp-topbar__brand">
         <h1 className="fp-topbar__title">Studio Parcellaire</h1>
-        <span className="fp-topbar__subtitle">Préparation d'assolement</span>
+        <span className="fp-topbar__subtitle" title="Version installée sur ce poste">
+          {APP_VERSION}
+        </span>
       </div>
 
       <div className="fp-segmented" role="group" aria-label="Mode d'affichage">

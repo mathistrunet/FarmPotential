@@ -37,16 +37,26 @@ export default function RpgFeature({
   mapRef,
   drawRef,
   minZoom     = RPG_MIN_ZOOM,
-  years       = [2024, 2023, 2022, 2021, 2020, 2019, 2018],
+  // Millésimes réellement exposés par le WFS GEOPF (vérifiés un par un).
+  years       = [2024, 2023, 2022, 2021, 2020, 2019, 2018, 2017, 2016, 2015],
   defaultYear = 2023,
   debounceMs  = 400,
   colorMap,
   defaultColor,
+  onImported,
 }) {
   const [visible, setVisible] = useState(false);
   const [year, setYear]       = useState(defaultYear);
   const [count, setCount]     = useState(null);
   const debounceRef           = useRef(null);
+
+  // Les gestionnaires de clic ne sont posés qu'une fois, à la création des
+  // couches : ils captureraient sinon la première valeur de `year` et le
+  // premier `onImported`. On passe donc par des refs tenues à jour.
+  const yearRef       = useRef(year);
+  const onImportedRef = useRef(onImported);
+  useEffect(() => { yearRef.current = year; }, [year]);
+  useEffect(() => { onImportedRef.current = onImported; }, [onImported]);
 
   /** Expression MapLibre pour colorer selon le code culture */
   const buildFillColorExpr = useCallback(() => {
@@ -167,19 +177,28 @@ export default function RpgFeature({
           if (f.geometry?.type === "MultiPolygon")
             for (const poly of f.geometry.coordinates) polys.push(poly);
 
+          let ajoutees = 0;
           polys.forEach((coords) => {
             const feature = {
               type: "Feature",
               properties: {
                 source: "RPG",
-                annee:  year,
+                annee:  yearRef.current,
                 code:   code || null, // clé normalisée pour la couleur
                 numero: f.properties?.NUMERO || f.properties?.ID_PARCELLE || null,
               },
               geometry: { type: "Polygon", coordinates: coords },
             };
-            try { draw.add(feature); } catch (err) { console.error("Erreur ajout Draw:", err); }
+            try {
+              draw.add(feature);
+              ajoutees += 1;
+            } catch (err) { console.error("Erreur ajout Draw:", err); }
           });
+
+          // draw.add() n'émet aucun évènement : sans ce signal, la parcelle
+          // n'apparaîtrait dans la liste qu'au prochain déplacement d'une autre
+          // parcelle. C'est aussi ici que le nommage par toponymie est déclenché.
+          if (ajoutees) onImportedRef.current?.();
         });
       };
       map.on("click", RPG_LAYER_FILL, onClick);
@@ -188,7 +207,9 @@ export default function RpgFeature({
 
     if (styleReady(map)) addAll();
     else map.once("load", addAll);
-  }, [mapRef, drawRef, year, buildFillColorExpr, colorMap]);
+    // `year` n'est volontairement plus une dépendance : les couches ne sont
+    // créées qu'une fois, et le millésime est lu via yearRef au moment du clic.
+  }, [mapRef, drawRef, buildFillColorExpr, colorMap]);
 
   /** Masque la couche RPG (safe même si style pas prêt) */
   const hideRpg = useCallback(() => {
@@ -251,6 +272,17 @@ export default function RpgFeature({
     if (visible) refreshRpg();
     else hideRpg();
   }, [visible, year, refreshRpg, hideRpg]);
+
+  /**
+   * Masque la couche quand le panneau Calques est quitté.
+   *
+   * Le contenu de l'onglet est démonté au changement d'onglet : sans ce
+   * nettoyage, les polygones RPG restaient affichés et cliquables sur la vue
+   * Parcelles — au risque d'importer une parcelle par inadvertance — et ne
+   * disparaissaient qu'au retour dans Calques, le composant se remontant alors
+   * avec `visible` à faux.
+   */
+  useEffect(() => () => hideRpg(), [hideRpg]);
 
   /** UI compacte intégrée */
   return (

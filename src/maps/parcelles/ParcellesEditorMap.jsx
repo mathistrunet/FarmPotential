@@ -482,6 +482,25 @@ export default function ParcellesEditorMap({ mapMode, onMapModeChange, onOpenGui
     setDrawFeatures,
   ]);
 
+  /**
+   * Suite d'un import depuis une couche RPG.
+   *
+   * Mapbox Draw n'émet aucun évènement sur `draw.add()` : la liste des parcelles
+   * restait donc figée jusqu'au prochain déplacement d'une parcelle. On relit
+   * l'état du draw, puis on enchaîne le nommage par toponymie IGN — la parcelle
+   * arrivant du RPG sans nom exploitable.
+   */
+  const handleRpgImported = useCallback(() => {
+    const draw = drawRef.current;
+    if (!draw || typeof draw.getAll !== "function") return;
+    const polygones = (draw.getAll()?.features ?? []).filter(
+      (feature) =>
+        feature.geometry?.type === "Polygon" || feature.geometry?.type === "MultiPolygon"
+    );
+    setFeatures(polygones);
+    void fillToponymieNames(polygones);
+  }, [drawRef, setFeatures, fillToponymieNames]);
+
   const handleResetParcelles = useCallback(async () => {
     setDrawFeatures(emptyParcellesCollection);
     lastSavedPayloadRef.current = JSON.stringify(emptyParcellesCollection);
@@ -1474,17 +1493,21 @@ export default function ParcellesEditorMap({ mapMode, onMapModeChange, onOpenGui
                   <div>
                     <h3 className="fp-section-title">Parcellaires de référence</h3>
                     <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
-                      <RpgFeature mapRef={mapRef} drawRef={drawRef} />
-                      <RpgRomaniaFeature mapRef={mapRef} drawRef={drawRef} />
+                      <RpgFeature
+                        mapRef={mapRef}
+                        drawRef={drawRef}
+                        onImported={handleRpgImported}
+                      />
+                      <RpgRomaniaFeature
+                        mapRef={mapRef}
+                        drawRef={drawRef}
+                        onImported={handleRpgImported}
+                      />
                     </div>
                   </div>
 
-                  <details className="fp-card fp-card--muted">
-                    <summary
-                      style={{ cursor: "pointer", fontSize: "var(--fs-md)", fontWeight: 600 }}
-                    >
-                      Carte des sols France (avancé)
-                    </summary>
+                  <div className="fp-card fp-card--muted">
+                    <h3 className="fp-section-title">Carte des sols France</h3>
                     <p className="fp-hint" style={{ margin: "8px 0" }}>
                       Couche pédologique locale (RRP). Elle nécessite les fichiers
                       départementaux dans <code>public/data/soilmap_dep</code> et sert
@@ -1635,7 +1658,7 @@ export default function ParcellesEditorMap({ mapMode, onMapModeChange, onOpenGui
                         ))}
                       </ul>
                     )}
-                  </details>
+                  </div>
                 </div>
               )}
             </div>

@@ -39,11 +39,17 @@ export default function RpgRomaniaFeature({
   drawRef,
   minZoom    = RPG_RO_MIN_ZOOM,
   debounceMs = 400,
+  onImported,
 }) {
   const [visible, setVisible] = useState(false);
   const [count, setCount]     = useState(null);
   const debounceRef           = useRef(null);
   const abortRef              = useRef(null);
+
+  // Le gestionnaire de clic n'est posé qu'une fois : il capturerait sinon le
+  // premier `onImported` reçu.
+  const onImportedRef = useRef(onImported);
+  useEffect(() => { onImportedRef.current = onImported; }, [onImported]);
 
   /** Crée la source + les couches + les handlers (une fois par style chargé) */
   const ensureSourceAndLayers = useCallback(() => {
@@ -127,6 +133,7 @@ export default function RpgRomaniaFeature({
           if (f.geometry?.type === "MultiPolygon")
             for (const poly of f.geometry.coordinates) polys.push(poly);
 
+          let ajoutees = 0;
           polys.forEach((coords) => {
             const feature = {
               type: "Feature",
@@ -136,8 +143,15 @@ export default function RpgRomaniaFeature({
               },
               geometry: { type: "Polygon", coordinates: coords },
             };
-            try { draw.add(feature); } catch (err) { console.error("Erreur ajout Draw:", err); }
+            try {
+              draw.add(feature);
+              ajoutees += 1;
+            } catch (err) { console.error("Erreur ajout Draw:", err); }
           });
+
+          // draw.add() n'émet aucun évènement : il faut signaler l'ajout pour
+          // que la parcelle apparaisse aussitôt dans la liste.
+          if (ajoutees) onImportedRef.current?.();
         });
       };
       map.on("click", RPG_RO_LAYER_FILL, onClick);
@@ -215,6 +229,10 @@ export default function RpgRomaniaFeature({
     if (visible) refresh();
     else hide();
   }, [visible, refresh, hide]);
+
+  // Le panneau Calques est démonté au changement d'onglet : on masque la couche
+  // pour qu'elle ne reste pas affichée et cliquable sur la vue Parcelles.
+  useEffect(() => () => hide(), [hide]);
 
   /** UI compacte intégrée */
   return (
