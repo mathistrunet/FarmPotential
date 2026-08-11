@@ -12,37 +12,7 @@ import { featureAreaM2 } from "../utils/geometry";
 import { fetchRpgGeoJSON, getCultureLabel, getMapBoundsCRS84 } from "../services/rpg";
 import { RPG_MIN_ZOOM } from "../Front/useRpgLayer";
 
-function computeCultureWarning(raw, fallbackPrecision = "") {
-  const value = (raw ?? "").trim();
-  if (value === "") return null;
-  const split = splitCultureKey(value);
-  const isCodeLike = /^[A-Z0-9]{2,10}$/.test(split.code);
-  if (isCodeLike) {
-    const precision = split.precision || String(fallbackPrecision || "").trim();
-    const known = !!(labelFromCode(split.code, precision) || labelFromCode(split.code));
-    if (!known) {
-      return { type: "code", value: split.code };
-    }
-    return null;
-  }
-  const knownByLabel = !!codeFromLabel(value);
-  if (!knownByLabel) {
-    return { type: "label", value };
-  }
-  return null;
-}
 
-function renderCultureWarningPure(raw, precision, displayLookup) {
-  if (!raw) return null;
-  if (displayLookup.has(String(raw).trim().toLowerCase())) return null;
-  const warn = computeCultureWarning(raw, precision);
-  if (!warn) return null;
-  return (
-    <div style={{ fontSize: 12, color: "#a00", marginTop: 4 }}>
-      "{warn.value}" n'est pas un {warn.type === "code" ? <b>code culture</b> : <b>nom de culture</b>} reconnu.
-    </div>
-  );
-}
 
 function parseBioFlag(value) {
   if (typeof value === "boolean") return value;
@@ -333,6 +303,49 @@ function FlagCell({ cellStyle, checked, onToggle, label, title }) {
 }
 
 // ---------------------------------------------------------------------------
+// Modèle de colonnes du tableau
+//
+// Une seule description sert à la fois à l'en-tête, aux cellules et au filtre
+// d'affichage : ajouter une colonne ou la masquer ne demande de toucher qu'ici.
+// Les largeurs sont des minimums — le tableau défile horizontalement plutôt que
+// de comprimer les champs jusqu'à les rendre illisibles.
+// ---------------------------------------------------------------------------
+const FIXED_COLUMNS = [
+  { id: "ilot", label: "Ilot.Parcelle", width: 120 },
+  { id: "nom", label: "Nom", width: 190 },
+  { id: "surface", label: "Surface (ha)", width: 95 },
+  { id: "bio", label: "Bio", width: 70 },
+  { id: "irrigable", label: "Irrigable", width: 85 },
+];
+
+const SOIL_COLUMN = { id: "type_sol", label: "Type de sol", width: 160 };
+
+/** Toutes les colonnes proposées au filtre, dans l'ordre d'affichage. */
+const ALL_COLUMNS = [
+  ...FIXED_COLUMNS,
+  ...CULTURE_COLUMNS.map((col) => ({ id: col.id, label: col.label, width: 150 })),
+  SOIL_COLUMN,
+  ...ADVANCED_COLUMNS.map((col) => ({ id: col.id, label: col.label, width: 150 })),
+];
+
+// Colonnes masquées au premier affichage : les options avancées et les
+// millésimes les plus anciens, rarement renseignés, encombrent la saisie.
+const DEFAULT_HIDDEN_COLUMNS = [
+  ...ADVANCED_COLUMNS.map((col) => col.id),
+  "prev5",
+  "prev6",
+];
+
+const HIDDEN_COLUMNS_KEY = "studioparcellaire.colonnes-masquees";
+
+const COLUMN_HINTS = {
+  bio: "Conduite en agriculture biologique",
+  irrigable: "Parcelle irrigable — colonne « Irrigabilité » du CSV Assolia",
+  prev5: "Conservée dans l'outil, non exportée vers le CSV Assolia",
+  prev6: "Conservée dans l'outil, non exportée vers le CSV Assolia",
+};
+
+// ---------------------------------------------------------------------------
 // Memoized table row — re-renders only when its own feature or typed values change
 // ---------------------------------------------------------------------------
 const TableRow = React.memo(function TableRow({
@@ -340,7 +353,7 @@ const TableRow = React.memo(function TableRow({
   idKey,
   isSelected,
   rowParity,
-  showAdvancedColumns,
+  visibleColumns,
   typedNext1,
   typedCurrent,
   typedPrev1,
@@ -361,6 +374,7 @@ const TableRow = React.memo(function TableRow({
   const surfaceHa = typeof featureArea === "number" ? featureArea / 10000 : null;
   const isBio = readBioFlag(props);
   const isIrrigable = readIrrigableFlag(props);
+  const affiche = (id) => visibleColumns.has(id);
 
   const typedByColId = {
     next1: typedNext1,
@@ -383,76 +397,61 @@ const TableRow = React.memo(function TableRow({
 
   return (
     <tr ref={ref} onClick={() => onSelect?.(feature.id ?? idKey)} style={rowStyle}>
-      <td style={cellStyle}>
-        <input
-          value={formatIlotParcelle(props)}
-          onChange={(e) => {
-            const next = splitIlotParcelle(e.target.value);
-            onUpdateField(idKey, (p) => ({ ...p, ilot_numero: next.ilot, numero: next.numero }));
-          }}
-          onClick={(e) => e.stopPropagation()}
-          style={inputStyle}
+      {affiche("ilot") && (
+        <td style={cellStyle}>
+          <input
+            value={formatIlotParcelle(props)}
+            onChange={(e) => {
+              const next = splitIlotParcelle(e.target.value);
+              onUpdateField(idKey, (p) => ({ ...p, ilot_numero: next.ilot, numero: next.numero }));
+            }}
+            onClick={(e) => e.stopPropagation()}
+            style={inputStyle}
+          />
+        </td>
+      )}
+      {affiche("nom") && (
+        <td style={cellStyle}>
+          <input
+            value={props.nom_parcelle ?? props.NOM_PARCEL ?? ""}
+            onChange={(e) => {
+              const val = e.target.value;
+              onUpdateField(idKey, (p) => ({
+                ...p,
+                nom_parcelle: val,
+                NOM_PARCEL: val,
+                nom_affiche: val || p.nom_affiche,
+              }));
+            }}
+            onClick={(e) => e.stopPropagation()}
+            style={inputStyle}
+          />
+        </td>
+      )}
+      {affiche("surface") && (
+        <td style={{ ...cellStyle, fontSize: 13 }}>
+          {surfaceHa != null && !Number.isNaN(surfaceHa) ? surfaceHa.toFixed(2) : "-"}
+        </td>
+      )}
+      {affiche("bio") && (
+        <FlagCell
+          cellStyle={cellStyle}
+          checked={isBio}
+          label="AB"
+          title="Parcelle conduite en agriculture biologique"
+          onToggle={(next) => onUpdateField(idKey, (p) => setBioProps(p, next))}
         />
-      </td>
-      <td style={cellStyle}>
-        <input
-          value={props.nom_parcelle ?? props.NOM_PARCEL ?? ""}
-          onChange={(e) => {
-            const val = e.target.value;
-            onUpdateField(idKey, (p) => ({
-              ...p,
-              nom_parcelle: val,
-              NOM_PARCEL: val,
-              nom_affiche: val || p.nom_affiche,
-            }));
-          }}
-          onClick={(e) => e.stopPropagation()}
-          style={inputStyle}
+      )}
+      {affiche("irrigable") && (
+        <FlagCell
+          cellStyle={cellStyle}
+          checked={isIrrigable}
+          label="Irr."
+          title="Parcelle irrigable — colonne « Irrigabilité » du CSV Assolia"
+          onToggle={(next) => onUpdateField(idKey, (p) => setIrrigableProps(p, next))}
         />
-      </td>
-      <td style={{ ...cellStyle, fontSize: 13 }}>
-        {surfaceHa != null && !Number.isNaN(surfaceHa) ? surfaceHa.toFixed(2) : "-"}
-      </td>
-      <FlagCell
-        cellStyle={cellStyle}
-        checked={isBio}
-        label="AB"
-        title="Parcelle conduite en agriculture biologique"
-        onToggle={(next) => onUpdateField(idKey, (p) => setBioProps(p, next))}
-      />
-      <FlagCell
-        cellStyle={cellStyle}
-        checked={isIrrigable}
-        label="Irr."
-        title="Parcelle irrigable — colonne « Irrigabilité » du CSV Assolia"
-        onToggle={(next) => onUpdateField(idKey, (p) => setIrrigableProps(p, next))}
-      />
-      {showAdvancedColumns
-        ? ADVANCED_COLUMNS.map((col) => (
-            <td key={col.id} style={cellStyle}>
-              {col.type === "bool" ? (
-                <input
-                  type="checkbox"
-                  checked={parseBioFlag(props[col.id])}
-                  onChange={(e) => {
-                    onUpdateField(idKey, (p) => ({ ...p, [col.id]: e.target.checked }));
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                />
-              ) : (
-                <input
-                  value={props[col.id] ?? ""}
-                  onChange={(e) => {
-                    onUpdateField(idKey, (p) => ({ ...p, [col.id]: e.target.value }));
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                  style={{ width: "100%", padding: "4px 6px", border: "1px solid #d1d5db", borderRadius: 4 }}
-                />
-              )}
-            </td>
-          ))
-        : null}
-      {CULTURE_COLUMNS.map((col) => (
+      )}
+      {CULTURE_COLUMNS.filter((col) => affiche(col.id)).map((col) => (
         <td key={col.id} style={cellStyle}>
           <input
             list={`cultures-col-${col.id}`}
@@ -463,220 +462,47 @@ const TableRow = React.memo(function TableRow({
           />
         </td>
       ))}
-      <td style={cellStyle}>
-        <input
-          value={props.type_sol ?? props.TYPE_SOL ?? ""}
-          onChange={(e) => {
-            const val = e.target.value;
-            onUpdateField(idKey, (p) => ({ ...p, type_sol: val, TYPE_SOL: val }));
-          }}
-          onClick={(e) => e.stopPropagation()}
-          style={inputStyle}
-        />
-      </td>
-    </tr>
-  );
-});
-
-// ---------------------------------------------------------------------------
-// Memoized card — re-renders only when its own feature or typed values change
-// ---------------------------------------------------------------------------
-const CardItem = React.memo(function CardItem({
-  feature,
-  idKey,
-  isSelected,
-  typedCurrent,
-  typedPrev1,
-  displayLookup,
-  onSelect,
-  onUpdateField,
-  onUpdateCulture,
-  onRegisterRef,
-}) {
-  const ref = useCallback((el) => onRegisterRef(idKey, el), [onRegisterRef, idKey]);
-
-  const props = feature.properties || {};
-  const rawId = feature.id ?? idKey;
-  const featureArea = featureAreaM2(feature);
-  const surfaceHa = typeof featureArea === "number" ? featureArea / 10000 : null;
-  const nomParcelle = props.nom_parcelle ?? props.NOM_PARCEL ?? "";
-  const typeSol = props.type_sol ?? props.TYPE_SOL ?? "";
-  const ilot = (props.ilot_numero ?? "").toString().trim();
-  const num = (props.numero ?? "").toString().trim();
-  const titre = ilot && num ? `${ilot}.${num}` : ilot || num || "";
-
-  const currentCol = CULTURE_COLUMNS.find((c) => c.id === "current");
-  const prev1Col = CULTURE_COLUMNS.find((c) => c.id === "prev1");
-
-  return (
-    <div
-      ref={ref}
-      onClick={() => onSelect?.(rawId)}
-      style={{
-        border: isSelected ? "2px solid #2563eb" : "1px solid #ddd",
-        boxShadow: isSelected ? "0 0 0 2px rgba(37,99,235,0.15)" : "none",
-        borderRadius: 10,
-        padding: 10,
-        marginTop: 8,
-        cursor: "pointer",
-        transition: "box-shadow .15s ease, border-color .15s ease",
-        background: "#fff",
-      }}
-      title="Cliquer pour selectionner la parcelle sur la carte"
-    >
-      <div style={{ fontWeight: 600, marginBottom: 6 }}>
-        Parcelle {titre || nomParcelle || rawId}
-      </div>
-      {surfaceHa != null && !Number.isNaN(surfaceHa) && (
-        <div style={{ fontSize: 12, color: "#555", marginBottom: 6 }}>
-          Surface : {surfaceHa.toFixed(2)} ha
-        </div>
-      )}
-      {(feature.properties?.overlap_warning || feature.properties?.import_mismatch) && (
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
-          {feature.properties?.overlap_warning && (
-            <span
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 4,
-                padding: "2px 8px",
-                borderRadius: 999,
-                background: "#fee2e2",
-                color: "#991b1b",
-                fontSize: 11,
-                fontWeight: 600,
-              }}
-            >
-              Chevauchement detecte
-            </span>
-          )}
-          {feature.properties?.import_mismatch && (
-            <span
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 4,
-                padding: "2px 8px",
-                borderRadius: 999,
-                background: "#ffedd5",
-                color: "#9a3412",
-                fontSize: 11,
-                fontWeight: 600,
-              }}
-            >
-              Import mismatch
-            </span>
-          )}
-        </div>
-      )}
-
-      <label style={{ fontSize: 12, display: "block", marginBottom: 6 }}>
-        Nom de la parcelle
-        <input
-          value={nomParcelle}
-          onChange={(e) => {
-            const val = e.target.value;
-            onUpdateField(idKey, (p) => ({
-              ...p,
-              nom_parcelle: val,
-              NOM_PARCEL: val,
-              nom_affiche: val || p.nom_affiche,
-            }));
-          }}
-          onClick={(e) => e.stopPropagation()}
-          placeholder="Ex. Parcelle 1"
-          style={{
-            width: "100%",
-            padding: "4px 6px",
-            border: "1px solid #ccc",
-            borderRadius: 4,
-            marginTop: 2,
-          }}
-        />
-      </label>
-
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 6 }}>
-        <label style={{ fontSize: 12, flex: "1 1 180px" }}>
-          Ilot.Parcelle
+      {affiche("type_sol") && (
+        <td style={cellStyle}>
           <input
-            value={formatIlotParcelle(props)}
-            onChange={(e) => {
-              const next = splitIlotParcelle(e.target.value);
-              onUpdateField(idKey, (p) => ({ ...p, ilot_numero: next.ilot, numero: next.numero }));
-            }}
-            onClick={(e) => e.stopPropagation()}
-            placeholder="Ex. 9.1"
-            style={{ width: "100%", padding: "4px 6px", border: "1px solid #ccc", borderRadius: 4, marginTop: 2 }}
-          />
-        </label>
-
-        <label style={{ fontSize: 12, flex: "1 1 180px" }}>
-          Type de sol
-          <input
-            value={typeSol}
+            value={props.type_sol ?? props.TYPE_SOL ?? ""}
             onChange={(e) => {
               const val = e.target.value;
               onUpdateField(idKey, (p) => ({ ...p, type_sol: val, TYPE_SOL: val }));
             }}
             onClick={(e) => e.stopPropagation()}
-            placeholder="Ex. Argile"
-            style={{ width: "100%", padding: "4px 6px", border: "1px solid #ccc", borderRadius: 4, marginTop: 2 }}
+            style={inputStyle}
           />
-        </label>
-
-        {/* Le clic est arrêté sur tout le bloc : sinon il atteint la fiche, qui
-            resélectionne la parcelle et recadre la carte pendant la saisie. */}
-        <div
-          style={{ flex: "1 1 180px", alignSelf: "flex-end", paddingBottom: 5 }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <label
-            style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}
-            title="Exporté dans la colonne « Irrigabilité » du CSV Assolia"
-          >
+        </td>
+      )}
+      {ADVANCED_COLUMNS.filter((col) => affiche(col.id)).map((col) => (
+        <td key={col.id} style={cellStyle}>
+          {col.type === "bool" ? (
             <input
               type="checkbox"
-              checked={readIrrigableFlag(props)}
-              onChange={(e) => onUpdateField(idKey, (p) => setIrrigableProps(p, e.target.checked))}
+              checked={parseBioFlag(props[col.id])}
+              onChange={(e) => {
+                onUpdateField(idKey, (p) => ({ ...p, [col.id]: e.target.checked }));
+              }}
+              onClick={(e) => e.stopPropagation()}
             />
-            <span>Parcelle irrigable</span>
-          </label>
-        </div>
-      </div>
-
-      <label style={{ fontSize: 12, display: "block", marginBottom: 6 }}>
-        Culture (Assolia)
-        <input
-          list="cultures-card-current"
-          value={typedCurrent}
-          onChange={(e) =>
-            onUpdateCulture("current", idKey, e.target.value, currentCol.targetKeys, PRECISION_KEYS.current)
-          }
-          onClick={(e) => e.stopPropagation()}
-          placeholder="Tapez le nom (ou le code)..."
-          style={{ width: "90%", padding: "6px 8px", border: "1px solid #ccc", borderRadius: 6, marginTop: 2 }}
-        />
-        {renderCultureWarningPure(typedCurrent, props?.[PRECISION_KEYS.current], displayLookup)}
-      </label>
-
-      <label style={{ fontSize: 12, display: "block" }}>
-        Culture N-1
-        <input
-          list="cultures-card-prev1"
-          value={typedPrev1}
-          onChange={(e) =>
-            onUpdateCulture("prev1", idKey, e.target.value, prev1Col.targetKeys, PRECISION_KEYS.prev1)
-          }
-          onClick={(e) => e.stopPropagation()}
-          placeholder="Code ou nom"
-          style={{ width: "90%", padding: "6px 8px", border: "1px solid #ccc", borderRadius: 6, marginTop: 2 }}
-        />
-        {renderCultureWarningPure(typedPrev1, props?.[PRECISION_KEYS.prev1], displayLookup)}
-      </label>
-    </div>
+          ) : (
+            <input
+              value={props[col.id] ?? ""}
+              onChange={(e) => {
+                onUpdateField(idKey, (p) => ({ ...p, [col.id]: e.target.value }));
+              }}
+              onClick={(e) => e.stopPropagation()}
+              style={inputStyle}
+            />
+          )}
+        </td>
+      ))}
+    </tr>
   );
 });
+
+
 
 // ---------------------------------------------------------------------------
 // Main component
@@ -689,13 +515,53 @@ export default function ParcelleEditor({
   mapRef,
   onFillNames,
   isFillingNames = false,
-  viewMode: externalViewMode,
+  millesimeAction = null,
 }) {
   const options = useMemo(() => entriesCodebook(), []);
   const rowsRef = useRef(new Map());
   const [typed, setTyped] = useState(buildEmptyTypedState);
   const [isFillingRpg, setIsFillingRpg] = useState(false);
-  const [showAdvancedColumns, setShowAdvancedColumns] = useState(false);
+  // Colonnes masquées, mémorisées d'une session à l'autre : chacun règle une
+  // fois l'affichage qui lui convient.
+  const [hiddenColumns, setHiddenColumns] = useState(() => {
+    try {
+      const brut = window.localStorage.getItem(HIDDEN_COLUMNS_KEY);
+      if (brut) return JSON.parse(brut);
+    } catch {
+      /* stockage indisponible : on repart des colonnes par défaut */
+    }
+    return DEFAULT_HIDDEN_COLUMNS;
+  });
+  const [showColumnPicker, setShowColumnPicker] = useState(false);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(HIDDEN_COLUMNS_KEY, JSON.stringify(hiddenColumns));
+    } catch {
+      /* sans stockage, le réglage vaut pour la session */
+    }
+  }, [hiddenColumns]);
+
+  const visibleColumns = useMemo(() => {
+    const caches = new Set(hiddenColumns);
+    return new Set(ALL_COLUMNS.map((col) => col.id).filter((id) => !caches.has(id)));
+  }, [hiddenColumns]);
+
+  const visibleColumnList = useMemo(
+    () => ALL_COLUMNS.filter((col) => visibleColumns.has(col.id)),
+    [visibleColumns]
+  );
+
+  const tableMinWidth = useMemo(
+    () => visibleColumnList.reduce((total, col) => total + col.width, 0),
+    [visibleColumnList]
+  );
+
+  const toggleColumn = useCallback((id) => {
+    setHiddenColumns((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  }, []);
   const [generalInfo, setGeneralInfo] = useState({ exploitation: "", pacage: "", siret: "" });
   const [showMoveCulturesDialog, setShowMoveCulturesDialog] = useState(false);
   const [moveSrcCol, setMoveSrcCol] = useState(CULTURE_COLUMNS[0].id);
@@ -703,7 +569,6 @@ export default function ParcelleEditor({
   const [moveKeepSource, setMoveKeepSource] = useState(false);
   const [moveOverwriteDest, setMoveOverwriteDest] = useState(true);
 
-  const resolvedViewMode = externalViewMode ?? "cards";
 
   const cultureOptions = useMemo(() => {
     const list = [];
@@ -783,7 +648,7 @@ export default function ParcelleEditor({
       el.classList.add("row-selected");
       setTimeout(() => el.classList.remove("row-selected"), 700);
     }
-  }, [selectedId, resolvedViewMode]);
+  }, [selectedId]);
 
   // Only rebuild typed when ids change or values are missing — not on every feature property edit
   useEffect(() => {
@@ -1026,45 +891,6 @@ export default function ParcelleEditor({
     );
   }, [generalInfo, setFeatures]);
 
-  const renderCardView = () => (
-    <>
-      {/* Shared datalists for cards — one per column instead of one per card */}
-      <datalist id="cultures-card-current">
-        {cultureOptions.map((opt) => (
-          <option key={`${opt.code}-${opt.precision || ""}-${opt.display}`} value={opt.display}>
-            {opt.code}
-          </option>
-        ))}
-      </datalist>
-      <datalist id="cultures-card-prev1">
-        {cultureOptions.map((opt) => (
-          <option key={`${opt.code}-${opt.precision || ""}-${opt.display}`} value={opt.display}>
-            {opt.code}
-          </option>
-        ))}
-      </datalist>
-      {features.map((f, idx) => {
-        const rawId = f.id ?? idx;
-        const idKey = String(rawId);
-        return (
-          <CardItem
-            key={idKey}
-            feature={f}
-            idKey={idKey}
-            isSelected={String(selectedId) === idKey}
-            typedCurrent={typed.current?.[idKey] ?? ""}
-            typedPrev1={typed.prev1?.[idKey] ?? ""}
-            displayLookup={displayLookup}
-            onSelect={onSelect}
-            onUpdateField={updateFeatureByIdKey}
-            onUpdateCulture={updateCultureField}
-            onRegisterRef={onRegisterRef}
-          />
-        );
-      })}
-    </>
-  );
-
   const applyMoveCultures = () => {
     const srcDef = CULTURE_COLUMNS.find((c) => c.id === moveSrcCol);
     const destDef = moveDestCol ? CULTURE_COLUMNS.find((c) => c.id === moveDestCol) : null;
@@ -1233,7 +1059,7 @@ export default function ParcelleEditor({
 
     return (
       <div style={{ marginTop: 8, display: "grid", gap: 10 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <button
             type="button"
             onClick={() => {
@@ -1250,6 +1076,86 @@ export default function ParcelleEditor({
           >
             Déplacer cultures
           </button>
+
+          {/* Comparaison inter-millésimes : même famille d'actions que le
+              déplacement de cultures, donc au même endroit. */}
+          {millesimeAction}
+
+          <div style={{ position: "relative", marginLeft: "auto" }}>
+            <button
+              type="button"
+              className="fp-btn fp-btn--sm"
+              onClick={() => setShowColumnPicker((prev) => !prev)}
+              aria-expanded={showColumnPicker}
+              title="Choisir les colonnes affichées"
+            >
+              Colonnes ({visibleColumnList.length}/{ALL_COLUMNS.length})
+            </button>
+
+            {showColumnPicker && (
+              <>
+                {/* Voile transparent : un clic à côté referme le menu. */}
+                <div
+                  onClick={() => setShowColumnPicker(false)}
+                  style={{ position: "fixed", inset: 0, zIndex: 40 }}
+                />
+                <div
+                  style={{
+                    position: "absolute",
+                    right: 0,
+                    top: "calc(100% + 4px)",
+                    zIndex: 41,
+                    width: 250,
+                    maxHeight: 320,
+                    overflowY: "auto",
+                    background: "var(--c-surface)",
+                    border: "1px solid var(--c-border)",
+                    borderRadius: "var(--r-md)",
+                    boxShadow: "var(--shadow-md)",
+                    padding: 10,
+                  }}
+                >
+                  <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+                    <button
+                      type="button"
+                      className="fp-btn fp-btn--sm"
+                      onClick={() => setHiddenColumns([])}
+                    >
+                      Tout afficher
+                    </button>
+                    <button
+                      type="button"
+                      className="fp-btn fp-btn--sm"
+                      onClick={() => setHiddenColumns(DEFAULT_HIDDEN_COLUMNS)}
+                    >
+                      Par défaut
+                    </button>
+                  </div>
+                  {ALL_COLUMNS.map((col) => (
+                    <label
+                      key={col.id}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        padding: "3px 0",
+                        fontSize: "var(--fs-md)",
+                        cursor: "pointer",
+                      }}
+                      title={COLUMN_HINTS[col.id]}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={visibleColumns.has(col.id)}
+                        onChange={() => toggleColumn(col.id)}
+                      />
+                      <span>{col.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
         </div>
         <div style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: 10, background: "#fff" }}>
           <div style={{ fontWeight: 600, marginBottom: 6 }}>Informations exploitation</div>
@@ -1292,87 +1198,64 @@ export default function ParcelleEditor({
               ))}
             </datalist>
           ))}
-          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1400 }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: tableMinWidth }}>
+            <colgroup>
+              {visibleColumnList.map((col) => (
+                <col key={col.id} style={{ minWidth: col.width, width: col.width }} />
+              ))}
+            </colgroup>
             <thead>
               <tr>
-                <th style={headerStyle}>Ilot.Parcelle</th>
-                <th style={headerStyle}>
-                  <div>Nom</div>
-                  {onFillNames ? (
-                    <button
-                      type="button"
-                      onClick={() => onFillNames()}
-                      disabled={isFillingNames}
-                      style={{
-                        ...headerButtonStyle,
-                        opacity: isFillingNames ? 0.6 : 1,
-                        cursor: isFillingNames ? "not-allowed" : "pointer",
-                      }}
-                    >
-                      {isFillingNames ? "Remplissage..." : "Remplir"}
-                    </button>
-                  ) : null}
-                </th>
-                <th style={headerStyle}>Surface (ha)</th>
-                <th style={headerStyle} title="Conduite en agriculture biologique">
-                  Bio
-                </th>
-                <th style={headerStyle} title="Parcelle irrigable (colonne « Irrigabilité » du CSV Assolia)">
-                  Irrigable
-                </th>
-                {showAdvancedColumns
-                  ? ADVANCED_COLUMNS.map((col) => (
-                      <th key={col.id} style={headerStyle}>{col.label}</th>
-                    ))
-                  : null}
-                {CULTURE_COLUMNS.map((col) => (
-                  <th key={col.id} style={headerStyle}>
-                    <div
-                      onClick={
-                        col.id === "current"
-                          ? () => setShowAdvancedColumns((prev) => !prev)
-                          : undefined
-                      }
-                      title={
-                        col.id === "current"
-                          ? showAdvancedColumns
-                            ? "Masquer les options semences/fermiere/etc."
-                            : "Afficher les options semences/fermiere/etc."
-                          : undefined
-                      }
-                      style={{
-                        cursor: col.id === "current" ? "pointer" : "default",
-                        fontWeight: 600,
-                      }}
-                    >
-                      {col.label}
-                      {col.id === "current" ? (showAdvancedColumns ? " [-]" : " [+]") : ""}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        fillCultureFromRpg(col);
-                      }}
-                      disabled={isFillingRpg}
-                      style={{
-                        ...headerButtonStyle,
-                        opacity: isFillingRpg ? 0.6 : 1,
-                        cursor: isFillingRpg ? "not-allowed" : "pointer",
-                      }}
-                    >
-                      {isFillingRpg ? "Remplissage..." : "Remplir"}
-                    </button>
-                  </th>
-                ))}
-                <th style={headerStyle}>
-                  <div style={{ fontWeight: 600 }}>Type de sol</div>
-                  <div style={{ fontWeight: 400, fontSize: 11, color: "#6b7280", marginTop: 2 }}>
-                    Saisie libre
-                  </div>
-                </th>
+                {visibleColumnList.map((col) => {
+                  const cultureCol = CULTURE_COLUMNS.find((item) => item.id === col.id);
+                  return (
+                    <th key={col.id} style={headerStyle} title={COLUMN_HINTS[col.id]}>
+                      <div style={{ fontWeight: 600 }}>{col.label}</div>
+
+                      {col.id === "nom" && onFillNames ? (
+                        <button
+                          type="button"
+                          onClick={() => onFillNames()}
+                          disabled={isFillingNames}
+                          style={{
+                            ...headerButtonStyle,
+                            opacity: isFillingNames ? 0.6 : 1,
+                            cursor: isFillingNames ? "not-allowed" : "pointer",
+                          }}
+                        >
+                          {isFillingNames ? "Remplissage..." : "Remplir"}
+                        </button>
+                      ) : null}
+
+                      {cultureCol ? (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            fillCultureFromRpg(cultureCol);
+                          }}
+                          disabled={isFillingRpg}
+                          style={{
+                            ...headerButtonStyle,
+                            opacity: isFillingRpg ? 0.6 : 1,
+                            cursor: isFillingRpg ? "not-allowed" : "pointer",
+                          }}
+                        >
+                          {isFillingRpg ? "Remplissage..." : "Remplir"}
+                        </button>
+                      ) : null}
+
+                      {col.id === "type_sol" ? (
+                        <div style={{ fontWeight: 400, fontSize: 11, color: "#6b7280", marginTop: 2 }}>
+                          Saisie libre
+                        </div>
+                      ) : null}
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
+
             <tbody>
               {features.map((f, idx) => {
                 const idKey = String(f.id ?? idx);
@@ -1383,7 +1266,7 @@ export default function ParcelleEditor({
                     idKey={idKey}
                     isSelected={String(selectedId) === idKey}
                     rowParity={idx % 2}
-                    showAdvancedColumns={showAdvancedColumns}
+                    visibleColumns={visibleColumns}
                     typedNext1={typed.next1?.[idKey] ?? ""}
                     typedCurrent={typed.current?.[idKey] ?? ""}
                     typedPrev1={typed.prev1?.[idKey] ?? ""}
@@ -1408,7 +1291,7 @@ export default function ParcelleEditor({
 
   return (
     <div style={{ marginTop: 12 }}>
-      {resolvedViewMode === "cards" ? renderCardView() : renderTableView()}
+      {renderTableView()}
       {renderMoveCulturesDialog()}
     </div>
   );

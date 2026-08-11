@@ -102,6 +102,11 @@ const ensureFeaturesHaveYear = (inputFeatures) => {
 };
 const DRAW_LAYER_VARIANTS = ["", ".cold", ".hot"];
 
+// Panneau latéral redimensionnable : bornes et mémorisation de la largeur.
+const SIDE_WIDTH_KEY = "studioparcellaire.largeur-panneau";
+const SIDE_MIN = 360;
+const SIDE_MAX_RATIO = 0.8;
+
 function projectLngLatTo3857(lng, lat) {
   const rad = Math.PI / 180;
   const clampedLat = Math.max(Math.min(lat, 89.999999), -89.999999);
@@ -204,9 +209,14 @@ export default function ParcellesEditorMap({ mapMode, onMapModeChange, onOpenGui
 
   // Onglets + panneau latéral repliable
   const [sideOpen, setSideOpen] = useState(true);          // panneau latéral ouvert/fermé
-  const [sideExpanded, setSideExpanded] = useState(false); // largeur étendue pour le tableau
+  // Largeur du panneau, ajustable à la souris et mémorisée d'une session à
+  // l'autre : le tableau des parcelles compte beaucoup de colonnes.
+  const [sideWidth, setSideWidth] = useState(() => {
+    const enregistre = Number(window.localStorage.getItem(SIDE_WIDTH_KEY));
+    return Number.isFinite(enregistre) && enregistre >= SIDE_MIN ? enregistre : 460;
+  });
+  const resizingRef = useRef(false);
   const [activeTab, setActiveTab] = useState("parcelles"); // "parcelles" | "calques"
-  const [parcelleViewMode, setParcelleViewMode] = useState("cards"); // "cards" | "table"
   // Le message d'accueil n'est qu'une aide au démarrage : on peut le fermer et
   // travailler sur la carte sans avoir chargé de parcellaire.
   const [welcomeDismissed, setWelcomeDismissed] = useState(false);
@@ -303,12 +313,6 @@ export default function ParcellesEditorMap({ mapMode, onMapModeChange, onOpenGui
   }, [features]);
 
   useEffect(() => {
-    if (!sideOpen) {
-      setSideExpanded(false);
-    }
-  }, [sideOpen]);
-
-  useEffect(() => {
     const { changed, nextFeatures } = ensureFeaturesHaveYear(features);
     if (!changed) return;
     setFeatures(nextFeatures);
@@ -332,14 +336,6 @@ export default function ParcellesEditorMap({ mapMode, onMapModeChange, onOpenGui
     }
   }, [parcelleGroupFilter, groupOptions.groups]);
 
-  useEffect(() => {
-    if (parcelleViewMode === "table" && sideOpen) {
-      setSideExpanded(true);
-    } else if (parcelleViewMode !== "table") {
-      setSideExpanded(false);
-    }
-  }, [parcelleViewMode, sideOpen]);
-
   // La carte occupe désormais une cellule de grille : quand le panneau latéral
   // s'ouvre, se ferme ou s'élargit, MapLibre doit recalculer sa taille de canvas.
   useEffect(() => {
@@ -353,7 +349,7 @@ export default function ParcellesEditorMap({ mapMode, onMapModeChange, onOpenGui
       }
     }, 60);
     return () => clearTimeout(timeout);
-  }, [mapRef, sideOpen, sideExpanded, matchViewOpen, compact]);
+  }, [mapRef, sideOpen, sideWidth, matchViewOpen, compact]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1067,7 +1063,78 @@ export default function ParcellesEditorMap({ mapMode, onMapModeChange, onOpenGui
     el.scrollBy({ left: delta, behavior: "smooth" });
   };
 
-  const sideWidth = sideExpanded ? "minmax(460px, 52%)" : "420px";
+  /**
+   * Redimensionnement du panneau à la souris.
+   *
+   * Le pointeur est capturé sur la poignée : le glissement continue même si le
+   * curseur passe au-dessus du canvas de la carte, qui avalerait sinon les
+   * évènements.
+   */
+  const rememberSideWidth = useCallback((largeur) => {
+    try {
+      window.localStorage.setItem(SIDE_WIDTH_KEY, String(largeur));
+    } catch {
+      /* sans stockage, la largeur vaut pour la session */
+    }
+  }, []);
+
+  const startSideResize = useCallback((event) => {
+    event.preventDefault();
+    resizingRef.current = true;
+    try {
+      // La capture évite que le canvas de la carte n'avale le glissement. Elle
+      // échoue sur un pointeur déjà relâché : le redimensionnement doit
+      // fonctionner malgré tout, on ne laisse donc pas l'exception remonter.
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+    } catch {
+      /* capture indisponible : le suivi sur window suffit */
+    }
+
+    const onMove = (moveEvent) => {
+      if (!resizingRef.current) return;
+      const largeur = window.innerWidth - moveEvent.clientX;
+      const max = window.innerWidth * SIDE_MAX_RATIO;
+      setSideWidth(Math.round(Math.min(Math.max(largeur, SIDE_MIN), max)));
+    };
+    const onUp = () => {
+      resizingRef.current = false;
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      setSideWidth((largeur) => {
+        rememberSideWidth(largeur);
+        return largeur;
+      });
+    };
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  }, [rememberSideWidth]);
+
+  // Bouton de comparaison inter-millésimes, rendu par l'éditeur au sein de sa
+  // barre d'actions, à côté du déplacement de cultures.
+  const millesimeAction = (
+    <button
+      type="button"
+      className="fp-btn fp-btn--sm"
+      onClick={handleOpenParcelleMatch}
+      disabled={yearOptions.years.length < 2}
+      title={
+        yearOptions.years.length < 2
+          ? "Importez au moins deux années de parcellaire pour comparer des millésimes"
+          : [
+              "Associer les parcelles d'une année à celles d'une autre",
+              validatedMatches.length > 0 && validatedMatchesAt
+                ? `Dernière validation : ${validatedMatches.length} correspondance(s) à ${validatedMatchesAt.toLocaleTimeString("fr-FR")}`
+                : null,
+            ]
+              .filter(Boolean)
+              .join(" — ")
+      }
+    >
+      Comparer deux millésimes
+      {yearOptions.years.length >= 2 ? ` (${yearOptions.years.length})` : ""}
+    </button>
+  );
 
   return (
     <div
@@ -1105,10 +1172,7 @@ export default function ParcellesEditorMap({ mapMode, onMapModeChange, onOpenGui
         <button
           type="button"
           className={`fp-btn ${sideOpen ? "fp-btn--active" : ""}`}
-          onClick={() => {
-            setSideOpen((open) => !open);
-            if (sideOpen) setParcelleViewMode("cards");
-          }}
+          onClick={() => setSideOpen((open) => !open)}
           title={sideOpen ? "Masquer la liste des parcelles" : "Afficher la liste des parcelles"}
           aria-pressed={sideOpen}
         >
@@ -1121,7 +1185,8 @@ export default function ParcellesEditorMap({ mapMode, onMapModeChange, onOpenGui
           flex: 1,
           minHeight: 0,
           display: "grid",
-          gridTemplateColumns: sideOpen && !matchViewOpen ? `1fr ${sideWidth}` : "1fr",
+          gridTemplateColumns:
+            sideOpen && !matchViewOpen ? `1fr 6px ${sideWidth}px` : "1fr",
         }}
       >
         {/* Colonne carte : la carte occupe la place restante, la barre d'outils
@@ -1317,7 +1382,22 @@ export default function ParcellesEditorMap({ mapMode, onMapModeChange, onOpenGui
 
         {/* Panneau latéral : liste des parcelles et calques */}
         {sideOpen && !matchViewOpen && (
-          <aside
+          <>
+            {/* Poignée de redimensionnement du panneau */}
+            <div
+              onPointerDown={startSideResize}
+              onDoubleClick={() => { setSideWidth(460); rememberSideWidth(460); }}
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Ajuster la largeur du panneau (double-clic pour réinitialiser)"
+              title="Glisser pour élargir le tableau — double-clic pour revenir à la largeur d'origine"
+              style={{
+                cursor: "col-resize",
+                background: "var(--c-border)",
+                touchAction: "none",
+              }}
+            />
+            <aside
             style={{
               display: "flex",
               flexDirection: "column",
@@ -1367,49 +1447,17 @@ export default function ParcellesEditorMap({ mapMode, onMapModeChange, onOpenGui
                 </button>
               </div>
 
-              {activeTab === "parcelles" && (
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    flexWrap: "wrap",
-                    padding: "10px 0 4px",
-                  }}
-                >
-                  <span className="fp-hint">Affichage</span>
-                  <div className="fp-segmented">
-                    <button
-                      type="button"
-                      aria-pressed={parcelleViewMode === "cards"}
-                      onClick={() => setParcelleViewMode("cards")}
-                      title="Une fiche détaillée par parcelle"
-                    >
-                      Fiches
-                    </button>
-                    <button
-                      type="button"
-                      aria-pressed={parcelleViewMode === "table"}
-                      onClick={() => setParcelleViewMode("table")}
-                      title="Saisie en série dans un tableau"
-                    >
-                      Tableau
-                    </button>
-                  </div>
-                </div>
-              )}
+              {activeTab === "parcelles" && features.length === 0 ? (
+                <p className="fp-hint" style={{ padding: "10px 0 0" }}>
+                  Aucune parcelle pour le moment. Utilisez <strong>Importer</strong> dans la
+                  barre du haut, ou l&apos;outil <strong>Dessin</strong> en bas de la carte.
+                </p>
+              ) : null}
             </div>
 
             <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "12px 16px 20px" }}>
               {activeTab === "parcelles" && (
                 <>
-                  {features.length === 0 ? (
-                    <p className="fp-hint">
-                      Aucune parcelle pour le moment. Utilisez <strong>Importer</strong> dans la
-                      barre du haut, ou l'outil <strong>Dessin</strong> en bas de la carte.
-                    </p>
-                  ) : null}
-
                   <ParcelleEditor
                     features={features}
                     visibleFeatures={visibleFeatures}
@@ -1420,44 +1468,10 @@ export default function ParcellesEditorMap({ mapMode, onMapModeChange, onOpenGui
                     onSelect={(id) => selectFeatureOnMap(id, true)}
                     drawRef={drawRef}
                     mapRef={mapRef}
-                    viewMode={parcelleViewMode}
                     csvValues={csvValues}
                     onCsvValuesChange={setCsvValues}
+                    millesimeAction={millesimeAction}
                   />
-
-                  <div className="fp-card fp-card--muted" style={{ marginTop: 16 }}>
-                    <h3 className="fp-section-title">Comparer deux millésimes</h3>
-                    <p className="fp-hint" style={{ margin: "6px 0 10px" }}>
-                      Associez les parcelles d'une année à celles d'une autre pour reporter
-                      l'historique de cultures sur le parcellaire conservé.
-                    </p>
-                    <button
-                      type="button"
-                      className="fp-btn fp-btn--block"
-                      onClick={handleOpenParcelleMatch}
-                      disabled={yearOptions.years.length < 2}
-                      title={
-                        yearOptions.years.length < 2
-                          ? "Importez au moins deux années de parcellaire pour utiliser cet outil"
-                          : "Ouvrir la comparaison inter-années"
-                      }
-                    >
-                      {yearOptions.years.length < 2
-                        ? "Associer les parcelles (2 années minimum)"
-                        : `Associer les parcelles (${yearOptions.years.length} années détectées)`}
-                    </button>
-                    {validatedMatches.length > 0 && (
-                      <p className="fp-hint" style={{ marginTop: 8 }}>
-                        Dernière validation : {validatedMatches.length} correspondance
-                        {validatedMatches.length > 1 ? "s" : ""} enregistrée
-                        {validatedMatches.length > 1 ? "s" : ""}
-                        {validatedMatchesAt
-                          ? ` à ${validatedMatchesAt.toLocaleTimeString("fr-FR")}`
-                          : ""}
-                        .
-                      </p>
-                    )}
-                  </div>
 
                   <p className="fp-hint" style={{ marginTop: 12 }}>
                     Astuce : cliquez une parcelle dans la liste pour la surligner sur la carte,
@@ -1663,6 +1677,7 @@ export default function ParcellesEditorMap({ mapMode, onMapModeChange, onOpenGui
               )}
             </div>
           </aside>
+          </>
         )}
       </div>
 
