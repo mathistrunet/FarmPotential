@@ -52,7 +52,7 @@ const STEPS = [
 const FIRST_RUN = [
   {
     label: "Démarrer l'outil",
-    text: "Double-cliquez sur FarmPotential.exe. Le lanceur prépare l'application puis ouvre votre navigateur ; laissez sa fenêtre ouverte pendant l'utilisation, la fermer arrête l'outil.",
+    text: "Double-cliquez sur StudioParcellaire.exe. Le lanceur prépare l'application puis ouvre votre navigateur ; laissez sa fenêtre ouverte pendant l'utilisation, la fermer arrête l'outil.",
   },
   {
     label: "Aucun parcellaire au départ",

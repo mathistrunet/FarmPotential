@@ -1,10 +1,10 @@
-# Guide d'installation et d'utilisation - FarmPotential
+# Guide d'installation et d'utilisation - Studio Parcellaire
 
 ## 1. Objet du document
 
 Ce document decrit :
 
-- l'installation locale de FarmPotential
+- l'installation locale de Studio Parcellaire
 - le demarrage de l'application
 - les principaux parcours utilisateurs actuellement disponibles
 - les limites pratiques a connaitre pour l'usage courant
@@ -146,6 +146,6 @@ Persistance actuelle :
 
 ## 9. Documents lies
 
-- cahier des charges : [CAHIER_DES_CHARGES_FarmPotential.md](C:/Users/Mathis%20Trunet/Documents/GitHub/FarmPotential/docs/CAHIER_DES_CHARGES_FarmPotential.md)
+- cahier des charges : [CAHIER_DES_CHARGES_Studio Parcellaire.md](C:/Users/Mathis%20Trunet/Documents/GitHub/FarmPotential/docs/CAHIER_DES_CHARGES_Studio Parcellaire.md)
 - suivi des fonctionnalites : [SUIVI_FONCTIONNALITES.md](C:/Users/Mathis%20Trunet/Documents/GitHub/FarmPotential/docs/SUIVI_FONCTIONNALITES.md)
 - fiches fonctionnelles : [fonctionnalites/README.md](C:/Users/Mathis%20Trunet/Documents/GitHub/FarmPotential/docs/fonctionnalites/README.md)

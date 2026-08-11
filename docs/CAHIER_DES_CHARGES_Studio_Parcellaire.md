@@ -1,8 +1,8 @@
-# Cahier des charges - FarmPotential
+# Cahier des charges - Studio Parcellaire
 
 ## 1. Identite du document
 
-- Produit : `FarmPotential`
+- Produit : `Studio Parcellaire`
 - Depot : `C:\Users\Mathis Trunet\Documents\GitHub\FarmPotential`
 - Version du document : `v1 - etat actuel du depot au 21/04/2026`
 - Statut du document : `document de reference evolutif`
@@ -14,7 +14,7 @@
 
 ## 2. Resume executif
 
-FarmPotential est une application web React de cartographie agricole centree sur la gestion de parcelles. L'outil permet aujourd'hui d'importer, visualiser, modifier, enrichir et exporter des parcelles agricoles.
+Studio Parcellaire est une application web React de cartographie agricole centree sur la gestion de parcelles. L'outil permet aujourd'hui d'importer, visualiser, modifier, enrichir et exporter des parcelles agricoles.
 
 L'application est deja exploitable sur plusieurs usages metier :
 

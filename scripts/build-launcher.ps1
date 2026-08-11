@@ -1,4 +1,4 @@
-# Compile le lanceur Windows (FarmPotential.exe) à la racine du projet.
+# Compile le lanceur Windows (StudioParcellaire.exe) à la racine du projet.
 #
 # Utilise csc.exe fourni avec le .NET Framework de Windows : aucune installation
 # supplémentaire n'est nécessaire.
@@ -9,8 +9,8 @@
 $ErrorActionPreference = "Stop"
 
 $root = Split-Path -Parent $PSScriptRoot
-$source = Join-Path $root "launcher\FarmPotentialLauncher.cs"
-$output = Join-Path $root "FarmPotential.exe"
+$source = Join-Path $root "launcher\StudioParcellaireLauncher.cs"
+$output = Join-Path $root "StudioParcellaire.exe"
 
 if (-not (Test-Path $source)) {
     throw "Source du lanceur introuvable : $source"
@@ -47,4 +47,4 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host ""
-Write-Host "FarmPotential.exe généré. Double-cliquez dessus pour lancer l'application."
+Write-Host "StudioParcellaire.exe généré. Double-cliquez dessus pour lancer l'application."

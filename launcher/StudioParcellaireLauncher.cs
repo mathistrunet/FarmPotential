@@ -1,4 +1,4 @@
-// Lanceur Windows de FarmPotential.
+// Lanceur Windows de Studio Parcellaire.
 //
 // Un double-clic suffit : le lanceur retrouve le dossier de l'application,
 // installe les dépendances et construit l'interface si nécessaire, démarre le
@@ -18,7 +18,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
-namespace FarmPotential
+namespace StudioParcellaire
 {
     public class LauncherForm : Form
     {
@@ -36,7 +36,7 @@ namespace FarmPotential
 
         public LauncherForm()
         {
-            Text = "FarmPotential — Lanceur";
+            Text = "Studio Parcellaire — Lanceur";
             StartPosition = FormStartPosition.CenterScreen;
             ClientSize = new Size(680, 420);
             MinimumSize = new Size(520, 320);
@@ -45,7 +45,7 @@ namespace FarmPotential
 
             var title = new Label
             {
-                Text = "FarmPotential",
+                Text = "Studio Parcellaire",
                 Font = new Font("Segoe UI", 16F, FontStyle.Bold),
                 ForeColor = ColorTranslator.FromHtml("#1F7A4D"),
                 AutoSize = true,
@@ -137,7 +137,7 @@ namespace FarmPotential
 
         private void ShowError(string message)
         {
-            MessageBox.Show(this, message, "FarmPotential", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show(this, message, "Studio Parcellaire", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
 
         // ----------------------------------------------------------- Séquence
@@ -150,7 +150,7 @@ namespace FarmPotential
                 if (_appRoot == null)
                 {
                     Fail("Dossier de l'application introuvable.\n\n" +
-                         "Placez FarmPotential.exe dans le dossier du projet (celui qui contient package.json) " +
+                         "Placez StudioParcellaire.exe dans le dossier du projet (celui qui contient package.json) " +
                          "ou dans son sous-dossier launcher.");
                     return;
                 }
@@ -196,7 +196,7 @@ namespace FarmPotential
             if (version == null)
             {
                 Fail("Node.js est introuvable sur ce poste.\n\n" +
-                     "Installez la version LTS depuis https://nodejs.org puis relancez FarmPotential.exe.");
+                     "Installez la version LTS depuis https://nodejs.org puis relancez StudioParcellaire.exe.");
                 return false;
             }
             Log("Node.js " + version.Trim());
@@ -289,7 +289,7 @@ namespace FarmPotential
             _server.ErrorDataReceived += (s, e) => { if (e.Data != null) Log(e.Data); };
             _server.Exited += (s, e) =>
             {
-                if (_ready) SetStatus("Le serveur s'est arrêté. Fermez puis relancez FarmPotential.exe.");
+                if (_ready) SetStatus("Le serveur s'est arrêté. Fermez puis relancez StudioParcellaire.exe.");
             };
 
             try
@@ -446,13 +446,13 @@ namespace FarmPotential
 
             // Une seule instance : sinon deux serveurs se disputeraient le port.
             bool isNew;
-            using (new Mutex(true, "FarmPotentialLauncher", out isNew))
+            using (new Mutex(true, "StudioParcellaireLauncher", out isNew))
             {
                 if (!isNew)
                 {
                     MessageBox.Show(
-                        "FarmPotential est déjà en cours d'exécution.",
-                        "FarmPotential",
+                        "Studio Parcellaire est déjà en cours d'exécution.",
+                        "Studio Parcellaire",
                         MessageBoxButtons.OK,
                         MessageBoxIcon.Information);
                     return;

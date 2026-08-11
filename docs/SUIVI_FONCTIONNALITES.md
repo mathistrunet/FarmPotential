@@ -1,8 +1,8 @@
-# Suivi des fonctionnalites - FarmPotential
+# Suivi des fonctionnalites - Studio Parcellaire
 
 ## 1. Objet du document
 
-Ce document centralise le suivi de l'etat des fonctionnalites de FarmPotential.
+Ce document centralise le suivi de l'etat des fonctionnalites de Studio Parcellaire.
 
 Statuts recommandes :
 

@@ -1,4 +1,4 @@
-# FarmPotential — Parcellaire
+# Studio Parcellaire
 
 Application locale de préparation de parcellaire agricole : on importe un
 parcellaire existant, on corrige les contours sur une carte, on complète les
@@ -10,7 +10,7 @@ Internet, seules les tuiles des fonds de carte sont téléchargées.
 
 ## Démarrage rapide (Windows)
 
-Double-cliquez sur **`FarmPotential.exe`** à la racine du projet. Le lanceur
+Double-cliquez sur **`StudioParcellaire.exe`** à la racine du projet. Le lanceur
 installe les dépendances si nécessaire, construit l'interface, démarre le
 serveur local et ouvre le navigateur sur <http://localhost:4174>. Fermer la
 fenêtre du lanceur arrête le serveur.

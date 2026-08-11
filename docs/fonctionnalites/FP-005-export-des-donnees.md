@@ -6,7 +6,7 @@
 
 ## Objectif utilisateur
 
-Exporter les donnees du parcellaire dans des formats reutilisables en dehors de FarmPotential.
+Exporter les donnees du parcellaire dans des formats reutilisables en dehors de Studio Parcellaire.
 
 ## Perimetre actuel
 

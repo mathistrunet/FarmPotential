@@ -6,7 +6,7 @@
 
 ## Objectif utilisateur
 
-Importer rapidement un parcellaire existant dans FarmPotential a partir de formats de travail deja utilises.
+Importer rapidement un parcellaire existant dans Studio Parcellaire a partir de formats de travail deja utilises.
 
 ## Perimetre actuel
 
@@ -56,7 +56,7 @@ Cette distinction est necessaire car `ParcelleEditor` reconnait `code` et `code_
 ## Documentation utilisateur
 
 - utiliser `Importer fichier`
-- formats acceptes : `.xml` (Telepac), `.zip` (shapefile), `.csv` (export FarmPotential)
+- formats acceptes : `.xml` (Telepac), `.zip` (shapefile), `.csv` (export Studio Parcellaire)
 - confirmer annee et colonne culture si demandees (XML uniquement)
 
 ## Limites / dette

@@ -1,4 +1,4 @@
-# Fiches fonctionnalites - FarmPotential
+# Fiches fonctionnalites - Studio Parcellaire
 
 ## Index
 
@@ -29,4 +29,4 @@ Quand une fonctionnalite evolue, il faut mettre a jour :
 
 1. la fiche concernee
 2. le [suivi des fonctionnalites](C:/Users/Mathis%20Trunet/Documents/GitHub/FarmPotential/docs/SUIVI_FONCTIONNALITES.md)
-3. si necessaire, le [cahier des charges](C:/Users/Mathis%20Trunet/Documents/GitHub/FarmPotential/docs/CAHIER_DES_CHARGES_FarmPotential.md)
+3. si necessaire, le [cahier des charges](C:/Users/Mathis%20Trunet/Documents/GitHub/FarmPotential/docs/CAHIER_DES_CHARGES_Studio Parcellaire.md)

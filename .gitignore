@@ -33,3 +33,4 @@ dist-ssr
 .claude/settings.local.json
 data/layer-update-check.json
 data/layer-state.json
+FarmPotential.exe.obsolete

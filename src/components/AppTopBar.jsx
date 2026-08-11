@@ -13,8 +13,8 @@ export default function AppTopBar({
   return (
     <header className="fp-topbar">
       <div className="fp-topbar__brand">
-        <h1 className="fp-topbar__title">FarmPotential</h1>
-        <span className="fp-topbar__subtitle">Parcellaire</span>
+        <h1 className="fp-topbar__title">Studio Parcellaire</h1>
+        <span className="fp-topbar__subtitle">Préparation d'assolement</span>
       </div>
 
       <div className="fp-segmented" role="group" aria-label="Mode d'affichage">
