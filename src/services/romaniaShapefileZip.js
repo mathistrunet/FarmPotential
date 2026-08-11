@@ -1,0 +1,271 @@
+import JSZip from "jszip";
+import { parseShapefileZipToFeatures } from "./shapefileZip";
+import { ROMANIA_EU_CULTURES } from "../data/romaniaRoCultures";
+import { applyXmlImportContext } from "../utils/xmlImportContext";
+
+// ─── Projection ──────────────────────────────────────────────────────────────
+// Stereo70 EPSG:31700 — projection officielle du LPIS roumain APIA.
+// Le fichier .prj du ZIP APIA est toujours vide ; shpjs tente proj4("") qui
+// lève une exception. On réinjecte la définition proj4 complète avant le parse.
+//
+// ⚠️  DATUM SHIFT CRITIQUE : le paramètre +towgs84 est indispensable.
+//   Sans lui, proj4 suppose Pulkovo 1942(58) ≡ WGS84 → décalage ~100-200 m en Roumanie.
+//   Valeurs officielles EPSG (transformation EPSG:15776, valable pour la Roumanie) :
+//   tx=33.4  ty=-146.6  tz=-76.3  rx=-0.359  ry=-0.053  rz=0.844  ds=-0.84
+//
+// On injecte la chaîne proj4 directement (format +proj=…) plutôt qu'un WKT,
+// car proj4.js la parse de façon plus fiable, notamment le bloc towgs84.
+const STEREO70_PRJ =
+  "+proj=sterea +lat_0=46 +lon_0=25 +k=0.99975 +x_0=500000 +y_0=500000 " +
+  "+ellps=krass +towgs84=33.4,-146.6,-76.3,-0.359,-0.053,0.844,-0.84 +units=m +no_defs";
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+/**
+ * Parse une valeur d'année provenant du DBF roumain.
+ * Le DBF APIA encode les nombres avec virgule décimale : "2025,000000000000000".
+ * Number("2025,000000000000000") → NaN en JS ; parseInt s'arrête à la virgule → 2025.
+ */
+function parseYear(val) {
+  if (val == null || val === "") return null;
+  const n = parseInt(String(val).replace(",", "."), 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+// ─── Détection AVANT parse ────────────────────────────────────────────────────
+
+/** Détecte un ZIP LPIS roumain par le pattern de nom de fichier (ex: RO006248036_2025_0.shp). */
+export async function isRomanianZipBuffer(buffer) {
+  try {
+    const zip = await JSZip.loadAsync(buffer);
+    return Object.keys(zip.files).some((n) => /RO\d{7,9}_\d{4}/i.test(n));
+  } catch {
+    return false;
+  }
+}
+
+// ─── Patch du ZIP ────────────────────────────────────────────────────────────
+
+/**
+ * Recrée le ZIP en injectant le WKT Stereo70 dans chaque .prj vide ou absent.
+ * Cela évite que shpjs lève une exception sur proj4("") lors du parse.
+ * shpjs utilisera ensuite Double_Stereographic → inverse() pour projeter en WGS84.
+ */
+async function patchPrjInZip(buffer) {
+  const zip = await JSZip.loadAsync(buffer);
+  const newZip = new JSZip();
+
+  for (const [name, file] of Object.entries(zip.files)) {
+    if (file.dir) continue;
+
+    if (name.toLowerCase().endsWith(".prj")) {
+      // Remplace toujours le .prj par le WKT Stereo70 (même s'il était non vide)
+      newZip.file(name, STEREO70_PRJ);
+    } else {
+      newZip.file(name, await file.async("arraybuffer"));
+    }
+  }
+
+  return newZip.generateAsync({ type: "arraybuffer" });
+}
+
+// ─── Normalisation APRÈS parse ───────────────────────────────────────────────
+
+/** Détecte si des features viennent d'un shapefile LPIS roumain (farm_id / judet). */
+export function isRomanianShapefile(features) {
+  if (!features?.length) return false;
+  const props = features[0]?.properties || {};
+  const keys = Object.keys(props).map((k) => k.toLowerCase());
+  return keys.includes("farm_id") || keys.includes("judet");
+}
+
+function get(props, ...names) {
+  for (const name of names) {
+    const val = props[name] ?? props[name.toLowerCase()] ?? props[name.toUpperCase()];
+    if (val != null && val !== "") return val;
+  }
+  return null;
+}
+
+function normalizeRomanianProperties(rawProps, fileYear = null) {
+  const farmId   = get(rawProps, "farm_id");
+  // L'année peut venir du nom de fichier (prioritaire) ou du champ DBF "year".
+  // Le DBF APIA encode les numériques avec virgule : "2025,000000000000000" → parseInt requis.
+  const yearRaw  = fileYear ?? get(rawProps, "year", "an", "AN", "YEAR", "campanie", "CAMPANIE");
+  const year     = parseYear(yearRaw);
+  const judet    = get(rawProps, "judet");
+  const siruta   = get(rawProps, "siruta");
+  const commune  = get(rawProps, "commune");
+  const blocNr   = get(rawProps, "bloc_nr");
+  const parcelNr = get(rawProps, "parcel_nr");
+  const cropNr   = get(rawProps, "crop_nr");
+  const catUse   = get(rawProps, "cat_use");
+  const cropCode = get(rawProps, "crop_code");
+  const cropName = get(rawProps, "crop_name");
+  const areaDec  = get(rawProps, "area_dec");
+  const agroEnv  = get(rawProps, "agro_env");
+  const comment  = get(rawProps, "comment");
+
+  // Résolution culture : EU code numérique → metacode interne + nom roumain
+  const codeKey = cropCode != null ? String(cropCode).trim() : null;
+  const entry = codeKey ? ROMANIA_EU_CULTURES[codeKey] : null;
+  const metacode    = entry?.metacode ?? "";
+  const nomRo       = entry?.nomRo ?? (cropName ? String(cropName).trim() : "");
+  const assoliaCrop = entry?.assolia ?? null;
+  // À défaut de metacode (cultures hors structure, ex. « Arable other crop »), on
+  // conserve le nom ASSOLIA pour qu'il se retrouve tel quel dans le CSV exporté
+  // plutôt que le code LPIS numérique. Repli final sur le code brut.
+  const codeCulture = metacode || assoliaCrop || codeKey || "";
+
+  // Nom affiché : "Bloc 88 – Parc. 2a"
+  let nomAffiche = null;
+  if (blocNr != null && parcelNr != null) {
+    const suffix = cropNr ? String(cropNr).trim() : "";
+    nomAffiche = `Bloc ${blocNr} – Parc. ${parcelNr}${suffix}`;
+  }
+
+  const normalized = {
+    // Champs standard de l'app
+    code_exploitation: farmId   != null ? String(farmId)   : null,
+    annee:             year,
+    ilot:              blocNr   != null ? String(blocNr)    : null,
+    parcelleNo:        parcelNr != null ? String(parcelNr)  : null,
+    nom_parcelle:      nomAffiche,
+    nom_affiche:       nomAffiche,
+    code_culture:      codeCulture,
+    surface:           areaDec  != null ? Number(areaDec)   : null,
+    categorie_utilisation: catUse != null ? String(catUse)  : null,
+    // Champs spécifiques Roumanie conservés
+    judet:             judet    != null ? String(judet)     : null,
+    siruta:            siruta   != null ? String(siruta)    : null,
+    commune:           commune  != null ? String(commune)   : null,
+    crop_nr:           cropNr   != null ? String(cropNr)    : null,
+    nom_culture_ro:    nomRo || null,
+    assolia_culture:   assoliaCrop || null,
+    agro_env:          agroEnv  != null ? String(agroEnv)   : null,
+    comment:           comment  != null ? String(comment)   : null,
+    // Originaux pour traçabilité
+    _ro_crop_code:     codeKey,
+    _ro_farm_id:       farmId   != null ? String(farmId)    : null,
+  };
+
+  // Supprime les nulls
+  return Object.fromEntries(Object.entries(normalized).filter(([, v]) => v != null));
+}
+
+export function normalizeRomanianFeatures(features, fileYear = null) {
+  return features.map((feat) => ({
+    ...feat,
+    properties: normalizeRomanianProperties(feat.properties || {}, fileYear),
+  }));
+}
+
+// ─── Point d'entrée principal ─────────────────────────────────────────────────
+
+/**
+ * Parse un ZIP LPIS roumain :
+ * 1. Injecte le WKT Stereo70 dans le .prj (fix de l'exception shpjs sur .prj vide)
+ * 2. Passe le buffer corrigé à parseShapefileZipToFeatures (shpjs reprojette en WGS84)
+ * 3. Normalise les propriétés DBF roumaines vers le schéma interne
+ */
+/** Extrait l'année depuis le nom d'un fichier ZIP LPIS (ex: RO006248036_2025_0.zip → 2025). */
+function extractYearFromZip(zip) {
+  for (const name of Object.keys(zip.files)) {
+    const m = name.match(/RO\d+_(\d{4})_/i);
+    if (m) return Number(m[1]);
+  }
+  return null;
+}
+
+export async function parseRomanianShapefileZipToFeatures(buffer) {
+  const zip = await JSZip.loadAsync(buffer);
+  const fileYear = extractYearFromZip(zip);
+
+  const patchedBuffer = await patchPrjInZip(buffer);
+  const rawFeats = await parseShapefileZipToFeatures(patchedBuffer);
+  const normalized = normalizeRomanianFeatures(rawFeats, fileYear);
+
+  // Route la culture vers la bonne colonne selon l'écart avec l'année en cours.
+  // Ex : 2026 → offset 0 → cultureN  |  2025 → offset 1 → cultureN1
+  // Réutilise applyXmlImportContext qui gère déjà ce routage (code_culture inclus).
+  const currentYear = new Date().getFullYear();
+  return normalized.map((feat) => {
+    const annee = feat.properties?.annee;
+    if (!Number.isFinite(annee)) return feat;
+    const offset = currentYear - annee;
+    const [routed] = applyXmlImportContext([feat], { year: annee, cultureOffset: offset });
+    return routed;
+  });
+}
+
+// ─── Routeur ZIP shapefile (roumain ou générique) ─────────────────────────────
+
+/**
+ * Route un buffer ZIP de shapefile vers le bon parser :
+ * LPIS roumain (détecté par le pattern de nom de fichier) sinon shapefile générique.
+ * Point d'entrée commun aux imports ZIP et aux imports « dossier » reconstruits en ZIP.
+ */
+export async function routeShapefileBufferToFeatures(buffer) {
+  if (await isRomanianZipBuffer(buffer)) {
+    return parseRomanianShapefileZipToFeatures(buffer);
+  }
+  return parseShapefileZipToFeatures(buffer);
+}
+
+// ─── Import « dossier » / fichiers non zippés ─────────────────────────────────
+
+// Extensions composant un shapefile. .shp/.dbf/.shx sont indispensables au parse ;
+// les autres (.prj/.cpg/.qpj/.sbn…) sont repris si présents.
+const SHAPEFILE_PART_RE = /\.(shp|dbf|shx|prj|cpg|qpj|sbn|sbx|qix|fix|aih|ain|atx)$/i;
+
+/** Vrai si le nom de fichier est une composante de shapefile. */
+export function isShapefilePart(name) {
+  return SHAPEFILE_PART_RE.test(String(name || ""));
+}
+
+/**
+ * Reconstruit un buffer ZIP en mémoire à partir d'une liste de fichiers
+ * (sélection de dossier via `webkitdirectory`, ou multi-fichiers).
+ *
+ * Gère indifféremment :
+ *  - un dossier contenant directement les .shp/.dbf/.shx/.prj ;
+ *  - un dossier contenant un sous-dossier avec ces fichiers (via webkitRelativePath) ;
+ *  - un dossier contenant déjà un .zip (le ZIP est alors renvoyé tel quel).
+ *
+ * La structure relative est préservée dans le ZIP : shpjs regroupe les composantes
+ * par chemin sans extension, ce qui évite toute collision entre jeux shapefile.
+ *
+ * Renvoie null si aucune composante shapefile ni ZIP n'est trouvée.
+ */
+export async function buildShapefileZipBufferFromFiles(files) {
+  const list = Array.from(files || []);
+
+  // Cas « dossier contenant un .zip » : on renvoie le ZIP directement.
+  const zipFile = list.find((f) => /\.zip$/i.test(f?.name || ""));
+  if (zipFile) return zipFile.arrayBuffer();
+
+  const zip = new JSZip();
+  let count = 0;
+  for (const file of list) {
+    const relPath = file?.webkitRelativePath || file?.name || "";
+    if (!isShapefilePart(relPath)) continue;
+    const entryName = relPath.replace(/\\/g, "/").replace(/^\/+/, "");
+    zip.file(entryName, await file.arrayBuffer());
+    count += 1;
+  }
+
+  if (count === 0) return null;
+  return zip.generateAsync({ type: "arraybuffer" });
+}
+
+/**
+ * Parse une sélection de fichiers shapefile non zippés (dossier ou multi-fichiers)
+ * en reconstruisant un ZIP en mémoire, puis en le routant comme un import ZIP.
+ */
+export async function parseShapefileFilesToFeatures(files) {
+  const buffer = await buildShapefileZipBufferFromFiles(files);
+  if (!buffer) {
+    throw new Error("SHAPE_FOLDER: aucun fichier shapefile (.shp/.dbf/.shx) trouvé dans le dossier");
+  }
+  return routeShapefileBufferToFeatures(buffer);
+}

@@ -10,11 +10,14 @@ import {
   computeSoilIndicators,
   parseSoilGridsProperties,
 } from "../src/services/soilgrids.js";
+import { classifyParcelUpr } from "../src/services/uprClassification.js";
 import { SoilGridsClient, SoilGridsError } from "./soilgrids/SoilGridsClient.mjs";
 import { SoilGridsCacheRepository } from "./soilgrids/SoilGridsCacheRepository.mjs";
 import { SoilGridsGridService } from "./soilgrids/SoilGridsGridService.mjs";
 import { resolveParcelPoint } from "./soilgrids/geometry.mjs";
+import { soilGridsPixelKey } from "./soilgrids/homolosine.mjs";
 import { closeGeoPackageCache, queryGeoPackageByBbox } from "./geopackage-query.mjs";
+import { closeRpgRomaniaCache, queryRpgRomaniaByBbox } from "./rpg-romania-query.mjs";
 
 const PORT = Number(process.env.PORT || 4174);
 const DATA_DIR = path.resolve(process.cwd(), "data");
@@ -23,11 +26,16 @@ const SOIL_MAPPING_FILE = path.join(DATA_DIR, "soil-type-mappings.json");
 const PUBLIC_DATA_DIR = path.resolve(process.cwd(), "public", "data");
 const SOILMAP_DEP_DIR = path.join(PUBLIC_DATA_DIR, "soilmap_dep");
 const TOPONYMIE_DIR = path.join(PUBLIC_DATA_DIR, "TOPONYMIE");
+const RPG_ROMANIA_DIR = path.join(PUBLIC_DATA_DIR, "RPG Rom");
 const POINT_STRATEGY = process.env.SOILGRIDS_POINT_STRATEGY || "centroid";
-const CALC_VERSION = "v1.0.0";
+const CALC_VERSION = "v1.6.0-upr";
+const WRB_CALC_VERSION = "wrb-v1";
 
 const soilClient = new SoilGridsClient({ timeoutMs: 15_000, retries: 2 });
 const soilCacheRepository = new SoilGridsCacheRepository({ dataDir: DATA_DIR, ttlDays: 30 });
+// Cache léger dédié à la remontée WRB-seule (nom de classe par pixel), séparé du cache SoilGrids
+// complet pour éviter toute collision par parcel_id entre les deux modes.
+const wrbCacheRepository = new SoilGridsCacheRepository({ dataDir: DATA_DIR, ttlDays: 30, fileName: "parcel-wrb-cache.json" });
 const soilGridService = new SoilGridsGridService({ dataDir: DATA_DIR });
 const inflightSoilRequests = new Map();
 const rateLimitWindow = [];
@@ -176,6 +184,44 @@ function parseIntegerParam(raw, fallback, min = 1, max = 20_000) {
   return Math.min(max, Math.max(min, Math.round(value)));
 }
 
+// Construit la réponse normalisée propre à une parcelle à partir des payloads bruts ISRIC.
+// Pur (aucun appel réseau) : permet de réutiliser un même pixel SoilGrids pour plusieurs
+// parcelles tout en gardant une réponse spécifique à chaque parcelle.
+function buildNormalizedForParcel({ parcelId, pointInfo, fetchedAt, depthProfile, raw, wrbClassName, probability }) {
+  const profile = parseSoilGridsProperties(raw, { depths: depthProfile });
+  const summary = computeSoilIndicators(profile, { wrbClass: wrbClassName });
+  if (pointInfo.warning) summary.warnings.push(pointInfo.warning);
+  const upr = classifyParcelUpr(profile, summary, wrbClassName);
+  const wrb = { className: wrbClassName, probability: probability ?? null };
+  return buildSoilGridsResponse({
+    parcelId: String(parcelId),
+    lat: pointInfo.lat,
+    lon: pointInfo.lon,
+    pointStrategy: pointInfo.pointStrategy,
+    fetchedAt,
+    calcVersion: CALC_VERSION,
+    profile,
+    summary,
+    wrb,
+    upr,
+  });
+}
+
+async function persistParcelEntry({ parcelId, pointInfo, fetchedAt, cacheKey, raw, classificationRaw, normalized }) {
+  await soilCacheRepository.upsert({
+    parcel_id: String(parcelId),
+    lat: pointInfo.lat,
+    lon: pointInfo.lon,
+    response_raw_json: raw,
+    classification_raw_json: classificationRaw ?? null,
+    normalized_json: normalized,
+    fetched_at: fetchedAt,
+    source: "SoilGrids v2",
+    cache_key: cacheKey,
+    calc_version: CALC_VERSION,
+  });
+}
+
 async function loadSoilGridsForParcel({ parcelId, refresh, depthProfile }) {
   const collection = await readCollection();
   const feature = (collection.features || []).find(
@@ -185,70 +231,175 @@ async function loadSoilGridsForParcel({ parcelId, refresh, depthProfile }) {
 
   const pointInfo = resolveParcelPoint(feature, POINT_STRATEGY);
   const fetchedAt = new Date().toISOString();
-  const cacheKey = `${round4(pointInfo.lat)}:${round4(pointInfo.lon)}:${(depthProfile || []).join("|")}`;
+  // Clé de cache = pixel natif SoilGrids (250 m) quand le point est dans le domaine validé,
+  // afin que toutes les parcelles d'un même pixel partagent un seul appel ISRIC. Repli sur le
+  // point arrondi (~11 m) sinon.
+  const depthKey = (depthProfile || []).join("|");
+  const pixelKey = soilGridsPixelKey(pointInfo.lon, pointInfo.lat);
+  const cacheKey = `${pixelKey || `${round4(pointInfo.lat)}:${round4(pointInfo.lon)}`}:${depthKey}`;
+
+  const isFresh = (entry) => entry && entry.calc_version === CALC_VERSION;
 
   if (!refresh) {
+    // On ignore les entrées d'une version de calcul antérieure (ex. sans UPR) ou d'une autre
+    // localisation (parcelle déplacée) pour forcer un recalcul plutôt que de resservir un obsolète.
     const parcelCache = await soilCacheRepository.getByParcel(String(parcelId));
-    if (parcelCache) return { payload: parcelCache.normalized_json, cache: true };
+    if (isFresh(parcelCache) && parcelCache.cache_key === cacheKey) {
+      return { payload: parcelCache.normalized_json, cache: true };
+    }
     const shared = await soilCacheRepository.getByCacheKey(cacheKey);
-    if (shared) return { payload: shared.normalized_json, cache: true };
+    if (isFresh(shared)) {
+      // Même pixel déjà résolu par une autre parcelle : on réutilise les payloads bruts et on
+      // reconstruit la réponse pour CETTE parcelle (n'engage aucun appel ISRIC).
+      if (shared.response_raw_json) {
+        const normalized = buildNormalizedForParcel({
+          parcelId, pointInfo, fetchedAt, depthProfile,
+          raw: shared.response_raw_json,
+          wrbClassName: shared.classification_raw_json?.wrb_class_name ?? null,
+          probability: shared.classification_raw_json?.wrb_class_probability ?? null,
+        });
+        await persistParcelEntry({
+          parcelId, pointInfo, fetchedAt, cacheKey,
+          raw: shared.response_raw_json, classificationRaw: shared.classification_raw_json, normalized,
+        });
+        return { payload: normalized, cache: true };
+      }
+      return { payload: shared.normalized_json, cache: true };
+    }
   }
 
-  const inflightKey = `${parcelId}:${cacheKey}`;
-  if (inflightSoilRequests.has(inflightKey)) return inflightSoilRequests.get(inflightKey);
+  // Cache miss : un seul appel ISRIC par pixel, mutualisé entre les parcelles concurrentes.
+  // Le rate-limit (60 req/min) ne s'applique qu'ici, sur les vrais appels amont.
+  let upstream;
+  if (inflightSoilRequests.has(cacheKey)) {
+    upstream = await inflightSoilRequests.get(cacheKey);
+  } else {
+    if (rateLimited()) {
+      throw new SoilGridsError("Rate limit exceeded.", { statusCode: 429, code: "SOILGRIDS_RATE_LIMIT" });
+    }
+    const promise = (async () => {
+      const [{ payload: raw, meta }, classification] = await Promise.all([
+        soilClient.query({ lat: pointInfo.lat, lon: pointInfo.lon, depths: depthProfile }),
+        soilClient.classify({ lat: pointInfo.lat, lon: pointInfo.lon }),
+      ]);
+      return { raw, meta, classification };
+    })();
+    inflightSoilRequests.set(cacheKey, promise);
+    try {
+      upstream = await promise;
+    } finally {
+      inflightSoilRequests.delete(cacheKey);
+    }
+    log("SOILGRIDS_FETCH", { parcelId, ...upstream.meta, cacheKey });
+  }
 
-  const promise = (async () => {
-    const { payload: raw, meta } = await soilClient.query({
-      lat: pointInfo.lat,
-      lon: pointInfo.lon,
-      depths: depthProfile,
-    });
-    const profile = parseSoilGridsProperties(raw, { depths: depthProfile });
-    const summary = computeSoilIndicators(profile);
-    if (pointInfo.warning) summary.warnings.push(pointInfo.warning);
+  const normalized = buildNormalizedForParcel({
+    parcelId, pointInfo, fetchedAt, depthProfile,
+    raw: upstream.raw,
+    wrbClassName: upstream.classification?.wrbClassName ?? null,
+    probability: upstream.classification?.probability ?? null,
+  });
 
-    const normalized = buildSoilGridsResponse({
-      parcelId: String(parcelId),
+  // Le point d'échantillonnage (lat/lon/stratégie/timestamp) est conservé dans le cache et dans
+  // la réponse normalisée ; on ne réécrit donc plus parcelles.geojson à chaque fetch (évite de
+  // muter le fichier de l'utilisateur et tout risque de concurrence lors d'un remplissage parallèle).
+  await persistParcelEntry({
+    parcelId, pointInfo, fetchedAt, cacheKey,
+    raw: upstream.raw, classificationRaw: upstream.classification?.raw ?? null, normalized,
+  });
+
+  return { payload: normalized, cache: false };
+}
+
+async function persistWrbEntry({ parcelId, pointInfo, fetchedAt, cacheKey, wrbClassName, probability }) {
+  await wrbCacheRepository.upsert({
+    parcel_id: String(parcelId),
+    lat: pointInfo.lat,
+    lon: pointInfo.lon,
+    wrb_class_name: wrbClassName ?? null,
+    probability: probability ?? null,
+    fetched_at: fetchedAt,
+    cache_key: cacheKey,
+    calc_version: WRB_CALC_VERSION,
+  });
+}
+
+/**
+ * Remontée allégée : uniquement le nom de classe WRB par parcelle, en gardant la déduplication
+ * par pixel SoilGrids. N'appelle QUE `classification/query` (pas de `properties/query` ni de
+ * calcul UPR) -> moitié moins de requêtes ISRIC. `soilClient.classify` est best-effort et ne lève
+ * jamais : un échec amont renvoie `wrbClassName: null` (donc ni 504 ni 500 propagés).
+ */
+async function loadWrbForParcel({ parcelId, refresh }) {
+  const collection = await readCollection();
+  const feature = (collection.features || []).find(
+    (item) => String(item?.id ?? item?.properties?.id ?? item?.properties?.parcelleNo) === String(parcelId)
+  );
+  if (!feature) throw new Error("[PARCEL_NOT_FOUND] Parcelle introuvable.");
+
+  const pointInfo = resolveParcelPoint(feature, POINT_STRATEGY);
+  const fetchedAt = new Date().toISOString();
+  const pixelKey = soilGridsPixelKey(pointInfo.lon, pointInfo.lat);
+  // Préfixe `wrb:` pour ne pas entrer en collision avec les clés du cache SoilGrids complet.
+  const cacheKey = `wrb:${pixelKey || `${round4(pointInfo.lat)}:${round4(pointInfo.lon)}`}`;
+
+  const buildPayload = (wrbClassName, probability, cache) => ({
+    parcelId: String(parcelId),
+    wrbClassName: wrbClassName ?? null,
+    probability: probability ?? null,
+    source: {
+      name: "SoilGrids",
+      endpoint: "classification/query",
+      resolution: "250m",
       lat: pointInfo.lat,
       lon: pointInfo.lon,
       pointStrategy: pointInfo.pointStrategy,
+      pixelKey: pixelKey || null,
       fetchedAt,
-      calcVersion: CALC_VERSION,
-      profile,
-      summary,
-    });
+    },
+    cacheHit: cache,
+  });
 
-    feature.properties = feature.properties || {};
-    feature.properties.soilgridsPoint = {
-      lat: pointInfo.lat,
-      lon: pointInfo.lon,
-      strategy: pointInfo.pointStrategy,
-      timestamp: fetchedAt,
-    };
-    await writeCollection(collection);
+  const isFresh = (entry) => entry && entry.calc_version === WRB_CALC_VERSION;
 
-    await soilCacheRepository.upsert({
-      parcel_id: String(parcelId),
-      lat: pointInfo.lat,
-      lon: pointInfo.lon,
-      response_raw_json: raw,
-      normalized_json: normalized,
-      fetched_at: fetchedAt,
-      source: "SoilGrids v2",
-      cache_key: cacheKey,
-      calc_version: CALC_VERSION,
-    });
-
-    log("SOILGRIDS_FETCH", { parcelId, ...meta, cacheKey });
-    return { payload: normalized, cache: false };
-  })();
-
-  inflightSoilRequests.set(inflightKey, promise);
-  try {
-    return await promise;
-  } finally {
-    inflightSoilRequests.delete(inflightKey);
+  if (!refresh) {
+    const parcelCache = await wrbCacheRepository.getByParcel(String(parcelId));
+    if (isFresh(parcelCache) && parcelCache.cache_key === cacheKey) {
+      return buildPayload(parcelCache.wrb_class_name, parcelCache.probability, true);
+    }
+    const shared = await wrbCacheRepository.getByCacheKey(cacheKey);
+    if (isFresh(shared)) {
+      // Même pixel déjà résolu par une autre parcelle : on réutilise sans appel ISRIC.
+      await persistWrbEntry({
+        parcelId, pointInfo, fetchedAt, cacheKey,
+        wrbClassName: shared.wrb_class_name, probability: shared.probability,
+      });
+      return buildPayload(shared.wrb_class_name, shared.probability, true);
+    }
   }
+
+  // Cache miss : un seul appel `classify` par pixel, mutualisé entre parcelles concurrentes.
+  let classification;
+  if (inflightSoilRequests.has(cacheKey)) {
+    classification = await inflightSoilRequests.get(cacheKey);
+  } else {
+    if (rateLimited()) {
+      throw new SoilGridsError("Rate limit exceeded.", { statusCode: 429, code: "SOILGRIDS_RATE_LIMIT" });
+    }
+    const promise = soilClient.classify({ lat: pointInfo.lat, lon: pointInfo.lon });
+    inflightSoilRequests.set(cacheKey, promise);
+    try {
+      classification = await promise;
+    } finally {
+      inflightSoilRequests.delete(cacheKey);
+    }
+    log("WRB_FETCH", { parcelId, cacheKey, wrb: classification?.wrbClassName ?? null });
+  }
+
+  const wrbClassName = classification?.wrbClassName ?? null;
+  const probability = classification?.probability ?? null;
+  await persistWrbEntry({ parcelId, pointInfo, fetchedAt, cacheKey, wrbClassName, probability });
+  return buildPayload(wrbClassName, probability, false);
 }
 
 const server = http.createServer(async (req, res) => {
@@ -262,7 +413,8 @@ const server = http.createServer(async (req, res) => {
     res.setHeader("Access-Control-Allow-Headers", "Content-Type");
     if (req.method === "OPTIONS") return void res.writeHead(204).end();
     if (req.method !== "GET") return void res.writeHead(405).end(JSON.stringify({ error: "Method not allowed." }));
-    if (rateLimited()) return void res.writeHead(429).end(JSON.stringify({ error: "Rate limit exceeded." }));
+    // Le rate-limit est appliqué plus bas, uniquement sur les vrais appels ISRIC : un cache-hit
+    // ou une requête mutualisée par pixel ne consomme pas le budget (cf. loadSoilGridsForParcel).
 
     const match = requestUrl.pathname.match(/^\/api\/parcels\/([^/]+)\/soilgrids$/);
     const parcelId = match?.[1];
@@ -283,6 +435,32 @@ const server = http.createServer(async (req, res) => {
       });
       res.writeHead(statusCode);
       res.end(JSON.stringify({ error: error?.message || "SoilGrids unavailable." }));
+    }
+    return;
+  }
+
+  // Remontée WRB-seule (nom de classe par parcelle), dédup par pixel, un seul appel ISRIC.
+  if (requestUrl.pathname.startsWith("/api/parcels/") && requestUrl.pathname.endsWith("/wrb")) {
+    res.setHeader("Content-Type", "application/json");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET,OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    if (req.method === "OPTIONS") return void res.writeHead(204).end();
+    if (req.method !== "GET") return void res.writeHead(405).end(JSON.stringify({ error: "Method not allowed." }));
+
+    const match = requestUrl.pathname.match(/^\/api\/parcels\/([^/]+)\/wrb$/);
+    const parcelId = match?.[1];
+    const refresh = requestUrl.searchParams.get("refresh") === "true";
+
+    try {
+      const payload = await loadWrbForParcel({ parcelId, refresh });
+      res.writeHead(200);
+      res.end(JSON.stringify(payload));
+    } catch (error) {
+      const statusCode = error instanceof SoilGridsError ? error.statusCode : 500;
+      log("WRB_ERROR", { parcelId, statusCode, code: error?.code, message: error?.message || String(error) });
+      res.writeHead(statusCode);
+      res.end(JSON.stringify({ error: error?.message || "WRB unavailable." }));
     }
     return;
   }
@@ -402,6 +580,45 @@ const server = http.createServer(async (req, res) => {
       );
     } catch (error) {
       const message = error?.message || "Toponymy query failed.";
+      res.writeHead(500);
+      res.end(JSON.stringify({ error: message }));
+    }
+    return;
+  }
+
+  if (requestUrl.pathname === "/api/rpg-romania") {
+    res.setHeader("Content-Type", "application/json");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET,OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    if (req.method === "OPTIONS") return void res.writeHead(204).end();
+    if (req.method !== "GET") return void res.writeHead(405).end(JSON.stringify({ error: "Method not allowed." }));
+
+    const bbox = parseBboxParam(requestUrl.searchParams.get("bbox"));
+    const limit = parseIntegerParam(requestUrl.searchParams.get("limit"), 1000, 1, 1000);
+    if (!bbox) {
+      res.writeHead(400);
+      res.end(JSON.stringify({ error: "Missing or invalid bbox query parameter." }));
+      return;
+    }
+
+    try {
+      const collection = queryRpgRomaniaByBbox({
+        dirPath: RPG_ROMANIA_DIR,
+        bbox,
+        maxFeatures: limit,
+      });
+      res.writeHead(200);
+      res.end(
+        JSON.stringify({
+          bounds: bbox,
+          featureCount: collection.features.length,
+          collection,
+        })
+      );
+    } catch (error) {
+      const message = error?.message || "RPG Romania query failed.";
+      log("RPG_ROMANIA_ERROR", { message, bbox, limit });
       res.writeHead(500);
       res.end(JSON.stringify({ error: message }));
     }
@@ -552,5 +769,6 @@ server.listen(PORT, () => {
 
 process.on("exit", () => {
   closeGeoPackageCache();
+  closeRpgRomaniaCache();
 });
 

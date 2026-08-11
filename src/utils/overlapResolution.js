@@ -111,6 +111,7 @@ function applyOverlapOps(draw, allFeatures, { warnings, updates, deletes }) {
   const updateMap = new Map(updates.map(({ id, geometry }) => [id, geometry]));
   const deleteSet = new Set(deletes);
 
+  // 1. Suppressions et mises à jour de géométrie (nécessitent delete + add)
   allFeatures.forEach((feature) => {
     const id = feature.id;
     if (!id) return;
@@ -124,11 +125,25 @@ function applyOverlapOps(draw, allFeatures, { warnings, updates, deletes }) {
     }
   });
 
-  allFeatures.forEach((feature) => {
-    const id = feature.id;
-    if (!id || deleteSet.has(id)) return;
-    updateDrawFeatureProperties(draw, feature, { overlap_warning: warningSet.has(id) });
+  // 2. Mise à jour de overlap_warning via un draw.set() atomique.
+  // On évite volontairement updateDrawFeatureProperties (chemin draw.delete + draw.add)
+  // qui déclencherait des events "draw.delete" lus par refreshFromDraw avant le re-add,
+  // corrompant l'état React avec une liste incomplète de features.
+  const current = draw.getAll()?.features ?? [];
+  const withWarnings = current.map((feature) => ({
+    ...feature,
+    properties: {
+      ...(feature.properties || {}),
+      overlap_warning: warningSet.has(feature.id) ? true : undefined,
+    },
+  }));
+  // Nettoyer les undefined pour ne pas polluer les propriétés
+  withWarnings.forEach((f) => {
+    if (f.properties.overlap_warning === undefined) {
+      delete f.properties.overlap_warning;
+    }
   });
+  draw.set({ type: "FeatureCollection", features: withWarnings });
 }
 
 /**
@@ -237,10 +252,16 @@ export function resolveOverlappingParcels(draw, { mode = "clip" } = {}) {
     }
   });
 
-  entries.forEach((entry) => {
-    if (!entry.id || entry.deleted) return;
-    updateDrawFeatureProperties(draw, entry.feature, {
-      overlap_warning: warnings.has(entry.id),
-    });
+  // Mise à jour de overlap_warning via un draw.set() atomique (même raison que applyOverlapOps).
+  const current = draw.getAll()?.features ?? [];
+  const withWarnings = current.map((feature) => {
+    const props = { ...(feature.properties || {}) };
+    if (warnings.has(feature.id)) {
+      props.overlap_warning = true;
+    } else {
+      delete props.overlap_warning;
+    }
+    return { ...feature, properties: props };
   });
+  draw.set({ type: "FeatureCollection", features: withWarnings });
 }

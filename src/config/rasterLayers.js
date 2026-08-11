@@ -90,14 +90,29 @@ export const RASTER_LAYERS = [
     defaultOpacity: 0.8,
   },
   {
+    id: "esri_satellite",
+    label: "Satellite mondial (ESRI)",
+    // ESRI World Imagery — couverture mondiale, géoréférencement précis.
+    // L'URL utilise {z}/{y}/{x} (MapLibre remplace y=row, x=col) — correct pour l'API ArcGIS.
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    subdomains: null,
+    tileSize: 256,
+    attribution: "© Esri, Maxar, Earthstar Geographics",
+    defaultVisible: false,
+    defaultOpacity: 1.0,
+  },
+  {
     id: "ign_satellite",
-    label: "IGN Satellite",
+    label: "IGN Satellite (France)",
+    // Service GeoPlateforme IGN — orthophotos haute résolution couverture France uniquement.
+    // bounds limité à la France métropolitaine + DOM pour éviter les tuiles vides/décalées à l'étranger.
     url: withOptionalKey(
       "https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&FORMAT=image/jpeg",
     ),
     subdomains: null,
     tileSize: 256,
     attribution: "© IGN",
+    bounds: [-5.5, 41.2, 10.0, 51.5],
     defaultVisible: false,
     defaultOpacity: 1.0,
   },
