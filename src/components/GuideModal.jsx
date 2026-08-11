@@ -48,6 +48,45 @@ const STEPS = [
   },
 ];
 
+// Première utilisation : ce qu'il faut savoir avant de commencer.
+const FIRST_RUN = [
+  {
+    label: "Démarrer l'outil",
+    text: "Double-cliquez sur FarmPotential.exe. Le lanceur prépare l'application puis ouvre votre navigateur ; laissez sa fenêtre ouverte pendant l'utilisation, la fermer arrête l'outil.",
+  },
+  {
+    label: "Aucun parcellaire au départ",
+    text: "L'outil démarre vide, c'est normal. Importez votre fichier ou dessinez vos premières parcelles ; le travail en cours est ensuite enregistré automatiquement sur votre poste.",
+  },
+  {
+    label: "Fonds de carte",
+    text: "Le fond satellite et les couches d'aide au repérage s'activent dans l'onglet Calques. Certaines cartes (sols, toponymie) se téléchargent toutes seules la première fois que vous les affichez sur un secteur.",
+  },
+  {
+    label: "Confidentialité",
+    text: "Votre parcellaire ne quitte jamais votre poste : seules les tuiles des fonds de carte et les couches publiques sont téléchargées depuis Internet.",
+  },
+];
+
+// Sorties proposées par le bouton Exporter.
+const EXPORT_FORMATS = [
+  {
+    label: "CSV Assolia",
+    extension: ".csv",
+    text: "Assolement complet, une ligne par parcelle : identification de l'exploitation, surface, conduite AB, irrigabilité, type de sol, cultures N à N-4 et contour. C'est la sortie à utiliser pour alimenter Assolia.",
+  },
+  {
+    label: "XML Télépac",
+    extension: ".xml",
+    text: "Fichier de déclaration au format Télépac : îlots, parcelles et code culture. Une fenêtre demande quelle colonne de culture alimente le code, puisqu'un fichier Télépac n'en porte qu'une seule.",
+  },
+  {
+    label: "Shapefile",
+    extension: ".zip",
+    text: "Archive contenant .shp, .dbf, .shx et .prj, pour un SIG (QGIS, ArcGIS) ou un outil tiers. Demande le nom de l'exploitation et la campagne, écrits dans les attributs RAIS_SOCIA et CAMPAGNE.",
+  },
+];
+
 // Colonnes du CSV Assolia, dans l'ordre du fichier généré.
 const CSV_COLUMNS = [
   ["Secteur", "Saisi dans la fenêtre d'export, identique pour toutes les parcelles."],
@@ -102,7 +141,26 @@ const TIPS = [
     label: "Aller-retour CSV",
     text: "Un CSV exporté peut être réimporté dans l'outil : nom, surface, bio, irrigabilité, type de sol, cultures et contours sont relus tels quels.",
   },
+  {
+    label: "Mise à jour des cartes",
+    text: "Les cartes des sols et de toponymie sont téléchargées à la demande. Si une carte est corrigée par la suite, un encart le signale dans l'onglet Calques : « Mettre à jour » suffit, la nouvelle version est reprise au prochain affichage.",
+  },
 ];
+
+const guideCellHeadStyle = {
+  textAlign: "left",
+  verticalAlign: "top",
+  padding: "7px 10px",
+  width: "32%",
+  fontWeight: 600,
+  wordBreak: "break-word",
+};
+
+const guideCellStyle = {
+  padding: "7px 10px",
+  color: "var(--c-text-soft)",
+  lineHeight: 1.5,
+};
 
 export default function GuideModal({ open, onClose }) {
   return (
@@ -141,19 +199,101 @@ export default function GuideModal({ open, onClose }) {
         ))}
       </ol>
 
-      <div className="fp-card fp-card--muted" style={{ marginTop: 20 }}>
-        <h3 className="fp-section-title">Formats de parcellaire acceptés</h3>
-        <div className="fp-format-list" style={{ justifyContent: "flex-start" }}>
-          {IMPORT_FORMATS.map((format) => (
-            <span key={format.label} className="fp-badge" title={format.description}>
-              {format.label}
-            </span>
+      <div style={{ marginTop: 20 }}>
+        <h3 className="fp-section-title">Première utilisation</h3>
+        <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+          {FIRST_RUN.map((item) => (
+            <div key={item.label} className="fp-card fp-card--muted" style={{ padding: 12 }}>
+              <div style={{ fontSize: "var(--fs-md)", fontWeight: 700, marginBottom: 3 }}>
+                {item.label}
+              </div>
+              <p className="fp-hint">{item.text}</p>
+            </div>
           ))}
         </div>
-        <p className="fp-hint" style={{ marginTop: 10 }}>
-          Un shapefile peut être fourni zippé ou sous forme de dossier contenant les
-          fichiers .shp, .dbf, .shx et .prj.
+      </div>
+
+      <div style={{ marginTop: 20 }}>
+        <h3 className="fp-section-title">Formats de parcellaire acceptés à l'import</h3>
+        <div
+          style={{
+            border: "1px solid var(--c-border)",
+            borderRadius: "var(--r-md)",
+            overflow: "hidden",
+            marginTop: 8,
+          }}
+        >
+          <table
+            style={{
+              width: "100%",
+              borderCollapse: "collapse",
+              fontSize: "var(--fs-sm)",
+              tableLayout: "fixed",
+            }}
+          >
+            <tbody>
+              {IMPORT_FORMATS.map((format, index) => (
+                <tr
+                  key={format.id}
+                  style={{ background: index % 2 ? "var(--c-surface-muted)" : "transparent" }}
+                >
+                  <th style={guideCellHeadStyle}>
+                    {format.label}
+                    <div style={{ fontWeight: 400, color: "var(--c-text-faint)", marginTop: 2 }}>
+                      {format.extensions.join(", ")}
+                    </div>
+                  </th>
+                  <td style={guideCellStyle}>{format.description}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="fp-hint" style={{ marginTop: 8 }}>
+          Le format est reconnu automatiquement, y compris si le fichier a été renommé. Les
+          coordonnées sont ramenées en WGS84 depuis le Lambert-93, le Web Mercator ou le
+          Stereo 70 roumain. Seules les surfaces deviennent des parcelles : les points et les
+          lignes présents dans un fichier sont ignorés. Un nouvel import s'ajoute au
+          parcellaire existant.
         </p>
+      </div>
+
+      <div style={{ marginTop: 20 }}>
+        <h3 className="fp-section-title">Formats produits à l'export</h3>
+        <div
+          style={{
+            border: "1px solid var(--c-border)",
+            borderRadius: "var(--r-md)",
+            overflow: "hidden",
+            marginTop: 8,
+          }}
+        >
+          <table
+            style={{
+              width: "100%",
+              borderCollapse: "collapse",
+              fontSize: "var(--fs-sm)",
+              tableLayout: "fixed",
+            }}
+          >
+            <tbody>
+              {EXPORT_FORMATS.map((format, index) => (
+                <tr
+                  key={format.label}
+                  style={{ background: index % 2 ? "var(--c-surface-muted)" : "transparent" }}
+                >
+                  <th style={guideCellHeadStyle}>
+                    {format.label}
+                    <div style={{ fontWeight: 400, color: "var(--c-text-faint)", marginTop: 2 }}>
+                      {format.extension}
+                    </div>
+                  </th>
+                  <td style={guideCellStyle}>{format.text}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <div style={{ marginTop: 20 }}>

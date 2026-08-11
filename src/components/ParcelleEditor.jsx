@@ -55,6 +55,34 @@ function parseBioFlag(value) {
   return false;
 }
 
+// Conduite bio : la clé varie selon la provenance de la parcelle — `parcelle_bio`
+// pour un CSV Assolia, `isOrganic` pour un import Télépac, `conduite_bio` pour une
+// saisie dans l'outil. On lit donc toutes ces clés, et on les réécrit ensemble
+// pour que la case cochée ici ressorte bien dans la colonne « Parcelle Bio ».
+const BIO_KEYS = ["isOrganic", "conduite_bio", "bio", "BIO", "parcelle_bio"];
+
+function readBioFlag(props = {}) {
+  for (const key of BIO_KEYS) {
+    const value = props[key];
+    if (value != null && String(value).trim() !== "") return parseBioFlag(value);
+  }
+  return false;
+}
+
+function setBioProps(props, bio) {
+  const next = { ...props };
+  if (bio) {
+    next.conduite_bio = true;
+    next.isOrganic = true;
+    next.parcelle_bio = "Oui";
+    if (!next.organicType) next.organicType = "AB";
+  } else {
+    BIO_KEYS.forEach((key) => delete next[key]);
+    delete next.organicType;
+  }
+  return next;
+}
+
 // Irrigabilité : exportée dans la colonne « Irrigabilité » du CSV Assolia.
 // La valeur est stockée en doublon minuscules/majuscules pour rester lisible
 // après un aller-retour par shapefile (attributs en majuscules).
@@ -331,7 +359,7 @@ const TableRow = React.memo(function TableRow({
   const props = feature.properties || {};
   const featureArea = featureAreaM2(feature);
   const surfaceHa = typeof featureArea === "number" ? featureArea / 10000 : null;
-  const isBio = parseBioFlag(props.isOrganic ?? props.conduite_bio ?? props.bio ?? props.BIO);
+  const isBio = readBioFlag(props);
   const isIrrigable = readIrrigableFlag(props);
 
   const typedByColId = {
@@ -390,21 +418,7 @@ const TableRow = React.memo(function TableRow({
         checked={isBio}
         label="AB"
         title="Parcelle conduite en agriculture biologique"
-        onToggle={(next) =>
-          onUpdateField(idKey, (p) => {
-            const updated = { ...p };
-            if (next) {
-              updated.conduite_bio = true;
-              updated.isOrganic = true;
-              if (!updated.organicType) updated.organicType = "AB";
-            } else {
-              delete updated.conduite_bio;
-              delete updated.isOrganic;
-              delete updated.organicType;
-            }
-            return updated;
-          })
-        }
+        onToggle={(next) => onUpdateField(idKey, (p) => setBioProps(p, next))}
       />
       <FlagCell
         cellStyle={cellStyle}

@@ -5,7 +5,7 @@
 // conservées dans public/data. Une installation neuve pèse donc quelques
 // mégaoctets et ne récupère que les secteurs réellement consultés.
 
-import { mkdir, readFile, rename, rm, stat } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { createWriteStream } from "node:fs";
 import { pipeline } from "node:stream/promises";
 import path from "node:path";
@@ -14,6 +14,14 @@ import { Readable } from "node:stream";
 import { MANIFEST_PATH, PUBLIC_DATA_DIR } from "./layers-config.mjs";
 
 const log = (type, payload) => console.info(`[${type}]`, JSON.stringify(payload));
+
+// Registre local : quelle version de chaque couche ce poste détient réellement.
+//
+// Le manifeste livré avec l'application ne peut pas jouer ce rôle : il est figé
+// à la version installée et ne bouge plus. Sans ce registre, une couche
+// republiée resterait signalée « à mettre à jour » indéfiniment, même après
+// avoir été récupérée.
+const LEDGER_PATH = path.resolve(process.cwd(), "data", "layer-state.json");
 
 let manifestPromise = null;
 
@@ -36,6 +44,41 @@ export async function loadManifest() {
 
 const layerLocalPath = (layer) =>
   path.join(PUBLIC_DATA_DIR, layer.directory === "." ? "" : layer.directory, layer.name);
+
+export const layerKey = (directory, name) => `${directory === "." ? "" : `${directory}/`}${name}`;
+
+/** Versions de couches détenues par ce poste. */
+export async function readLayerVersions() {
+  try {
+    const parsed = JSON.parse(await readFile(LEDGER_PATH, "utf-8"));
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Mémorise la version détenue.
+ *
+ * `overwrite` est faux lors d'un simple téléchargement : si l'utilisateur vient
+ * d'accepter une mise à jour, l'entrée porte déjà la date publiée la plus
+ * récente et le retéléchargement ne doit pas la faire régresser vers celle,
+ * plus ancienne, du manifeste embarqué.
+ */
+export async function recordLayerVersion(directory, name, version, { overwrite = false } = {}) {
+  try {
+    const versions = await readLayerVersions();
+    const key = layerKey(directory, name);
+    if (!overwrite && versions[key]) return;
+    versions[key] = { ...version, recordedAt: new Date().toISOString() };
+    await mkdir(path.dirname(LEDGER_PATH), { recursive: true });
+    await writeFile(LEDGER_PATH, `${JSON.stringify(versions, null, 2)}\n`);
+  } catch (error) {
+    // Non bloquant — on retombe sur la comparaison de taille — mais signalé :
+    // un registre muet ferait réapparaître l'alerte de mise à jour sans fin.
+    log("LAYER_VERSION_RECORD_FAILED", { name, message: error?.message || String(error) });
+  }
+}
 
 async function fileExists(filePath, expectedSize) {
   try {
@@ -95,8 +138,12 @@ export async function ensureLayer(directory, name) {
     const started = Date.now();
     log("LAYER_DOWNLOAD_START", { name: layer.name, mo: +(layer.size / 1048576).toFixed(1) });
     const promise = download(layer, destination)
-      .then(() => {
+      .then(async () => {
         log("LAYER_DOWNLOAD_DONE", { name: layer.name, seconds: Math.round((Date.now() - started) / 1000) });
+        await recordLayerVersion(layer.directory, layer.name, {
+          size: layer.size,
+          updatedAt: layer.updatedAt ?? null,
+        });
         return destination;
       })
       .catch((error) => {

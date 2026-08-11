@@ -346,11 +346,19 @@ export async function buildParcellesCsv(
       parseSurfaceValue(props.surface_parcelle) ??
       parseSurfaceValue(props.surface) ??
       featureAreaHa(feature);
-    const parcelleBio =
-      props.parcelle_bio ??
-      props.bio ??
-      props.parcelleBio ??
-      props.parcelle_bio_label;
+    // La conduite bio est portée par des clés différentes selon la provenance :
+    // `parcelle_bio` (CSV Assolia), `isOrganic` (Télépac), `conduite_bio`
+    // (saisie dans l'outil). Les omettre faisait sortir « Non » pour une
+    // parcelle pourtant cochée AB.
+    const parcelleBio = firstNonEmptyProp(props, [
+      "parcelle_bio",
+      "bio",
+      "parcelleBio",
+      "parcelle_bio_label",
+      "conduite_bio",
+      "isOrganic",
+      "BIO",
+    ]);
     const typeSol =
       props.type_sol ?? props.typeSol ?? props.type_de_sol ?? props.sol ?? "";
     const irrigable = firstNonEmptyProp(props, IRRIGABLE_KEYS);

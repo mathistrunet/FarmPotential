@@ -16,7 +16,7 @@ import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { DATASETS, PUBLIC_DATA_DIR, REPO } from "./layers-config.mjs";
-import { loadManifest } from "./layer-store.mjs";
+import { layerKey, loadManifest, readLayerVersions, recordLayerVersion } from "./layer-store.mjs";
 
 const CACHE_PATH = path.resolve(process.cwd(), "data", "layer-update-check.json");
 // L'API GitHub non authentifiée autorise 60 requêtes par heure : une
@@ -26,17 +26,30 @@ const REQUEST_TIMEOUT_MS = 8000;
 
 const log = (type, payload) => console.info(`[${type}]`, JSON.stringify(payload));
 
-async function fetchReleaseAssets(tag) {
+/**
+ * Récupère toutes les releases en un seul appel.
+ *
+ * L'API GitHub anonyme n'autorise que 60 requêtes par heure et par adresse IP.
+ * Interroger chaque tag séparément coûtait quatre requêtes par vérification, ce
+ * qui devient sensible derrière une sortie internet partagée ; un seul appel
+ * ramène le coût à une requête par jour et par poste.
+ *
+ * @returns {Promise<Map<string, Array>>} assets indexés par tag.
+ */
+export async function fetchReleasesByTag() {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
-    const response = await fetch(`https://api.github.com/repos/${REPO}/releases/tags/${tag}`, {
-      headers: { Accept: "application/vnd.github+json" },
-      signal: controller.signal,
-    });
+    const response = await fetch(
+      `https://api.github.com/repos/${REPO}/releases?per_page=100`,
+      { headers: { Accept: "application/vnd.github+json" }, signal: controller.signal }
+    );
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const payload = await response.json();
-    return Array.isArray(payload?.assets) ? payload.assets : [];
+    const releases = await response.json();
+    if (!Array.isArray(releases)) throw new Error("Réponse inattendue");
+    return new Map(
+      releases.map((release) => [release.tag_name, Array.isArray(release.assets) ? release.assets : []])
+    );
   } finally {
     clearTimeout(timer);
   }
@@ -60,26 +73,31 @@ async function localSize(directory, name) {
  * @returns {Promise<object>} rapport : couches à mettre à jour, nouveautés,
  *   et indication d'une éventuelle indisponibilité du réseau.
  */
-export async function checkLayerUpdates() {
+export async function checkLayerUpdates({ fetchReleases = fetchReleasesByTag } = {}) {
   const manifest = await loadManifest();
   const manifestByKey = new Map(
     manifest.map((layer) => [`${layer.dataset}/${layer.name}`, layer])
   );
+  // Ce que ce poste détient réellement ; à défaut, le manifeste livré sert de
+  // point de départ (couche installée à la main, ou jamais retéléchargée).
+  const versions = await readLayerVersions();
 
   const outdated = [];
   const added = [];
-  let unreachable = 0;
+
+  let releasesByTag;
+  try {
+    releasesByTag = await fetchReleases();
+  } catch {
+    // Hors ligne, quota atteint ou dépôt injoignable : on ne signale rien
+    // plutôt que d'inventer une alerte, et l'état est déclaré inconnu.
+    return { checkedAt: new Date().toISOString(), outdated: [], added: [], offline: true };
+  }
 
   for (const dataset of DATASETS) {
-    let assets;
-    try {
-      assets = await fetchReleaseAssets(dataset.tag);
-    } catch {
-      // Hors ligne, release absente ou quota atteint : on ne signale rien pour
-      // ce jeu de données plutôt que d'inventer une alerte.
-      unreachable += 1;
-      continue;
-    }
+    const assets = releasesByTag.get(dataset.tag);
+    // Release absente : rien à comparer pour ce jeu de données.
+    if (!assets) continue;
 
     for (const asset of assets) {
       const key = `${dataset.id}/${asset.name}`;
@@ -95,7 +113,9 @@ export async function checkLayerUpdates() {
       const presentSize = await localSize(known.directory, asset.name);
       if (presentSize == null) continue;
 
-      const republished = known.updatedAt && asset.updated_at && asset.updated_at !== known.updatedAt;
+      const held = versions[layerKey(known.directory, asset.name)];
+      const heldUpdatedAt = held?.updatedAt ?? known.updatedAt;
+      const republished = heldUpdatedAt && asset.updated_at && asset.updated_at !== heldUpdatedAt;
       const sizeChanged = presentSize !== asset.size;
       if (republished || sizeChanged) {
         outdated.push({
@@ -109,14 +129,7 @@ export async function checkLayerUpdates() {
     }
   }
 
-  return {
-    checkedAt: new Date().toISOString(),
-    outdated,
-    added,
-    // Vrai lorsqu'aucune release n'a pu être interrogée : l'état est inconnu,
-    // pas « à jour ».
-    offline: unreachable === DATASETS.length,
-  };
+  return { checkedAt: new Date().toISOString(), outdated, added, offline: false };
 }
 
 async function readCache() {
@@ -167,6 +180,14 @@ export async function applyLayerUpdates(report) {
   for (const layer of report?.outdated || []) {
     try {
       await rm(localPathOf(layer.directory, layer.name), { force: true });
+      // On acte la version publiée : c'est elle qui sera récupérée au prochain
+      // affichage, et l'alerte ne doit pas réapparaître entre-temps.
+      await recordLayerVersion(
+        layer.directory,
+        layer.name,
+        { size: layer.size, updatedAt: layer.publishedAt ?? null },
+        { overwrite: true }
+      );
       removed.push(layer.name);
     } catch {
       // Fichier verrouillé ou déjà absent : on passe au suivant.

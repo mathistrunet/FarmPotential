@@ -155,6 +155,27 @@ describe("ParcelleEditor — vue Tableau, cases Bio et Irrigable", () => {
     expect(onSelect).toHaveBeenCalled();
   });
 
+  it("relit la conduite bio d'un CSV importé et la réécrit pour l'export", () => {
+    // L'import CSV pose « parcelle_bio », l'export CSV relit cette même clé :
+    // la case doit refléter l'une et alimenter l'autre, sans quoi la conduite
+    // bio se perd à chaque aller-retour.
+    cleanup = renderTable([feature({ parcelle_bio: "oui" })]);
+    expect(checkboxLabelled(cleanup.container, "AB").checked).toBe(true);
+
+    act(() => {
+      checkboxLabelled(cleanup.container, "AB").click();
+    });
+    expect(checkboxLabelled(cleanup.container, "AB").checked).toBe(false);
+    expect(cleanup.state.features[0].properties.parcelle_bio).toBeUndefined();
+
+    act(() => {
+      checkboxLabelled(cleanup.container, "AB").click();
+    });
+    const props = cleanup.state.features[0].properties;
+    expect(props.conduite_bio).toBe(true);
+    expect(props.parcelle_bio).toBeTruthy();
+  });
+
   it("garde Bio et Irrigable indépendants", () => {
     cleanup = renderTable([feature()]);
 

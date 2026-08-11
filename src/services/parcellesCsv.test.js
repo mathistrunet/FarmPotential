@@ -161,6 +161,28 @@ describe("buildParcellesCsv — round-trip", () => {
     expect(irrigabilite).toEqual(["Oui", "Oui", "Non", "Non"]);
   });
 
+  it("exporte la conduite bio quelle que soit sa provenance", async () => {
+    const geometry = {
+      type: "Polygon",
+      coordinates: [[[1.35, 44.01], [1.36, 44.01], [1.36, 44.02], [1.35, 44.01]]],
+    };
+    const features = [
+      // Coché dans l'outil (vue Tableau)
+      { type: "Feature", properties: { nom: "Case AB", conduite_bio: true, isOrganic: true }, geometry },
+      // Relu d'un CSV Assolia
+      { type: "Feature", properties: { nom: "Depuis CSV", parcelle_bio: "oui" }, geometry },
+      // Import Télépac
+      { type: "Feature", properties: { nom: "Telepac", isOrganic: true }, geometry },
+      { type: "Feature", properties: { nom: "Non bio" }, geometry },
+    ];
+    const csv = await buildParcellesCsv(features, "", "", "");
+    const colonneBio = csv
+      .split(/\r?\n/)
+      .slice(1)
+      .map((line) => line.split(";")[5]);
+    expect(colonneBio).toEqual(["Oui", "Oui", "Oui", "Non"]);
+  });
+
   it("relit l'irrigabilité d'un CSV importé", async () => {
     const csv = `Secteur;Exploitation;Numero pacage;Parcelles;Surface parcelle;Parcelle Bio;Type de sol;Irrigabilité;CultureN;CultureN1;CultureN2;CultureN3;CultureN4;Geometrie
 TEST;Expl;000111;P1;1.5;non;Limon;oui;Blé tendre;;;;;1.35,44.01 1.36,44.01 1.36,44.02 1.35,44.01`;
