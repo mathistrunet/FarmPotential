@@ -1,0 +1,1517 @@
+{
+  "repo": "mathistrunet/FarmPotential",
+  "generatedFrom": "scripts/publish-layers.mjs",
+  "layers": [
+    {
+      "dataset": "referentiels",
+      "directory": ".",
+      "name": "assolia_cultures_export.csv",
+      "size": 67577,
+      "bbox": null,
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-referentiels-v1/assolia_cultures_export.csv"
+    },
+    {
+      "dataset": "referentiels",
+      "directory": ".",
+      "name": "Soil_type_RRP.csv",
+      "size": 1963876,
+      "bbox": null,
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-referentiels-v1/Soil_type_RRP.csv"
+    },
+    {
+      "dataset": "rpg-romania",
+      "directory": "RPG Rom",
+      "name": "region_Bucuresti-Ilfov.gpkg",
+      "size": 9138176,
+      "bbox": [
+        25.825563868171503,
+        44.23269408053552,
+        26.460071085545522,
+        44.77477545503731
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-rpg-romania-v1/region_Bucuresti-Ilfov.gpkg"
+    },
+    {
+      "dataset": "rpg-romania",
+      "directory": "RPG Rom",
+      "name": "region_Centru.gpkg",
+      "size": 372310016,
+      "bbox": [
+        22.637203823398895,
+        45.37089319633262,
+        26.476456288463435,
+        47.172214207198394
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-rpg-romania-v1/region_Centru.gpkg"
+    },
+    {
+      "dataset": "rpg-romania",
+      "directory": "RPG Rom",
+      "name": "region_Nord-Est.gpkg",
+      "size": 388227072,
+      "bbox": [
+        24.960949277077113,
+        45.985863346872975,
+        28.371459371832696,
+        48.27533868452871
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-rpg-romania-v1/region_Nord-Est.gpkg"
+    },
+    {
+      "dataset": "rpg-romania",
+      "directory": "RPG Rom",
+      "name": "region_Nord-Vest.gpkg",
+      "size": 514883584,
+      "bbox": [
+        21.334975095407433,
+        46.34958379209869,
+        25.095391080705596,
+        48.13352750585879
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-rpg-romania-v1/region_Nord-Vest.gpkg"
+    },
+    {
+      "dataset": "rpg-romania",
+      "directory": "RPG Rom",
+      "name": "region_Sud-Est.gpkg",
+      "size": 226484224,
+      "bbox": [
+        26.041600873778414,
+        43.693619262268825,
+        29.76989613790012,
+        46.22424383870537
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-rpg-romania-v1/region_Sud-Est.gpkg"
+    },
+    {
+      "dataset": "rpg-romania",
+      "directory": "RPG Rom",
+      "name": "region_Sud-Muntenia.gpkg",
+      "size": 259457024,
+      "bbox": [
+        24.414765005580456,
+        43.583779230791336,
+        28.154804129896934,
+        45.60995563282401
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-rpg-romania-v1/region_Sud-Muntenia.gpkg"
+    },
+    {
+      "dataset": "rpg-romania",
+      "directory": "RPG Rom",
+      "name": "region_Sud-Vest-Oltenia.gpkg",
+      "size": 308625408,
+      "bbox": [
+        21.97503694334164,
+        43.657090565687305,
+        24.887929578154157,
+        45.59410815837747
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-rpg-romania-v1/region_Sud-Vest-Oltenia.gpkg"
+    },
+    {
+      "dataset": "rpg-romania",
+      "directory": "RPG Rom",
+      "name": "region_Vest.gpkg",
+      "size": 288059392,
+      "bbox": [
+        20.219192259154223,
+        44.5291560480136,
+        23.61879623705992,
+        46.7145522627392
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-rpg-romania-v1/region_Vest.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_01.gpkg",
+      "size": 10280960,
+      "bbox": [
+        4.744462760615511,
+        45.59998503893289,
+        6.170198423395058,
+        46.51211250422806
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_01.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_02.gpkg",
+      "size": 3289088,
+      "bbox": [
+        2.51804076601043,
+        48.90780951260474,
+        4.524837529336703,
+        50.04798250833952
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_02.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_03.gpkg",
+      "size": 19947520,
+      "bbox": [
+        2.06223936323666,
+        45.97202692692039,
+        3.999401568872273,
+        46.94017844598845
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_03.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_04.gpkg",
+      "size": 3301376,
+      "bbox": [
+        5.341843057941892,
+        43.57878972952251,
+        7.54089156034516,
+        44.74734717421819
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_04.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_05.gpkg",
+      "size": 2510848,
+      "bbox": [
+        5.343034879251841,
+        44.19297608989223,
+        7.077146944385974,
+        45.18027212647972
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_05.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_06.gpkg",
+      "size": 1232896,
+      "bbox": [
+        6.648701980876051,
+        43.52153510362529,
+        7.718983685520391,
+        44.35597565214083
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_06.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_07.gpkg",
+      "size": 15900672,
+      "bbox": [
+        3.746615291338228,
+        44.15381399351933,
+        4.884305686977361,
+        45.41728499549887
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_07.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_08.gpkg",
+      "size": 12132352,
+      "bbox": [
+        4.03672862880313,
+        49.22703474303733,
+        5.392208037826777,
+        50.16914777696518
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_08.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_09.gpkg",
+      "size": 2760704,
+      "bbox": [
+        0.7358732837645323,
+        42.5337040144274,
+        2.149162506603666,
+        43.52292240986705
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_09.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_10.gpkg",
+      "size": 4673536,
+      "bbox": [
+        3.400170902293769,
+        47.92859258778162,
+        4.849728955590105,
+        48.69931525142876
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_10.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_11.gpkg",
+      "size": 2650112,
+      "bbox": [
+        1.325686031633979,
+        42.62246676750473,
+        3.301493747539063,
+        43.77678323282298
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_11.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_12.gpkg",
+      "size": 18583552,
+      "bbox": [
+        1.704207805586559,
+        43.6911446247717,
+        3.546591193877311,
+        45.04984593685883
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_12.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_13.gpkg",
+      "size": 1609728,
+      "bbox": [
+        4.230934811884034,
+        43.10508802591888,
+        6.03067196646998,
+        43.93328263605773
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_13.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_14.gpkg",
+      "size": 1929216,
+      "bbox": [
+        -1.130643019169586,
+        48.76906572040412,
+        0.4435369856485371,
+        49.42407952331915
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_14.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_15.gpkg",
+      "size": 8998912,
+      "bbox": [
+        2.068621740528545,
+        44.61711659388836,
+        3.403633502526547,
+        45.4803787635231
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_15.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_16.gpkg",
+      "size": 9084928,
+      "bbox": [
+        -0.3975230893792799,
+        45.20734334910536,
+        1.040020430848813,
+        46.26409556821418
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_16.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_17.gpkg",
+      "size": 8318976,
+      "bbox": [
+        -1.562691247600662,
+        44.92838533488639,
+        0.3178777025652569,
+        46.46258123443192
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_17.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_18.gpkg",
+      "size": 8130560,
+      "bbox": [
+        1.513430023591542,
+        46.31788295356482,
+        3.318181348030694,
+        47.62740368922243
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_18.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_19.gpkg",
+      "size": 4370432,
+      "bbox": [
+        1.239119981961051,
+        44.9327859874889,
+        2.671165162662052,
+        45.8467484904747
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_19.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_21.gpkg",
+      "size": 5648384,
+      "bbox": [
+        4.082836106193118,
+        46.92136045324053,
+        6.082664820086249,
+        48.21376066822853
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_21.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_22.gpkg",
+      "size": 4120576,
+      "bbox": [
+        -3.664017952267689,
+        48.07983929747964,
+        -1.926693444197477,
+        48.87084451107263
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_22.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_23.gpkg",
+      "size": 3211264,
+      "bbox": [
+        1.385633473491552,
+        45.71087811640476,
+        2.576102511891784,
+        46.43597728340828
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_23.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_24.gpkg",
+      "size": 25030656,
+      "bbox": [
+        -0.1343375447286426,
+        44.61565653290359,
+        1.527331208204614,
+        46.08327570621319
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_24.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_25.gpkg",
+      "size": 7516160,
+      "bbox": [
+        5.479758918748168,
+        46.48897486634912,
+        7.062213616853496,
+        47.68625786865365
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_25.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_26.gpkg",
+      "size": 10764288,
+      "bbox": [
+        4.649097281648505,
+        44.05627039066779,
+        5.829805183565324,
+        45.31852255320792
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_26.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_27.gpkg",
+      "size": 11325440,
+      "bbox": [
+        0.0913102896399515,
+        48.65422595072222,
+        1.975067428291688,
+        49.54787475921655
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_27.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_28.gpkg",
+      "size": 7094272,
+      "bbox": [
+        0.7579596653575501,
+        47.85513277193726,
+        2.151635880649783,
+        48.86283078502066
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_28.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_29.gpkg",
+      "size": 8888320,
+      "bbox": [
+        -5.141251441183559,
+        47.77555540120871,
+        -3.330300279778923,
+        48.75351961168145
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_29.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_2A.gpkg",
+      "size": 3579904,
+      "bbox": [
+        8.534676184582127,
+        41.33355568615941,
+        9.560093606942253,
+        43.02769339392126
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_2A.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_30.gpkg",
+      "size": 2072576,
+      "bbox": [
+        2.995406086067962,
+        43.40324501813247,
+        5.045608744921524,
+        44.44950594570984
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_30.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_31.gpkg",
+      "size": 8458240,
+      "bbox": [
+        0.3112346562383296,
+        42.68930627464535,
+        2.166407186733787,
+        44.12274403823123
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_31.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_32.gpkg",
+      "size": 21159936,
+      "bbox": [
+        -0.8467587456629048,
+        43.02635528618881,
+        1.17343394368735,
+        44.1518360995041
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_32.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_33.gpkg",
+      "size": 6672384,
+      "bbox": [
+        -1.382920571681616,
+        43.88763521033518,
+        0.2909599972443807,
+        45.57362968092742
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_33.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_34.gpkg",
+      "size": 2437120,
+      "bbox": [
+        2.475224772975687,
+        43.21913272672871,
+        4.161794127912735,
+        43.98837870111558
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_34.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_35.gpkg",
+      "size": 15294464,
+      "bbox": [
+        -2.506724626243233,
+        47.52188927256591,
+        -0.8903836653153483,
+        48.71269810469474
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_35.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_36.gpkg",
+      "size": 9355264,
+      "bbox": [
+        0.3189823266083083,
+        46.27956445899245,
+        2.372513936883061,
+        47.34319891298033
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_36.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_37.gpkg",
+      "size": 3399680,
+      "bbox": [
+        0.0645196985697961,
+        46.75549312291088,
+        1.330946677293177,
+        47.69781015346623
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_37.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_38.gpkg",
+      "size": 4345856,
+      "bbox": [
+        4.74584940099206,
+        44.68544358073687,
+        6.326069681573519,
+        45.87236702062019
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_38.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_39.gpkg",
+      "size": 4104192,
+      "bbox": [
+        5.302234780278246,
+        46.26324848466052,
+        6.156604715716866,
+        47.30638577581087
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_39.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_40.gpkg",
+      "size": 2662400,
+      "bbox": [
+        -1.523314406601858,
+        43.50435960389254,
+        0.06188347206020425,
+        44.48710296130822
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_40.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_41.gpkg",
+      "size": 11190272,
+      "bbox": [
+        0.5894745307971656,
+        47.13832130071458,
+        2.246489466603023,
+        48.11775628250052
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_41.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_42.gpkg",
+      "size": 4567040,
+      "bbox": [
+        3.62837443579635,
+        45.24942666497709,
+        4.755162423371519,
+        46.32109716363412
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_42.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_43.gpkg",
+      "size": 487424,
+      "bbox": [
+        3.098197482131789,
+        44.57405957077555,
+        4.560582320968296,
+        45.47919510355232
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_43.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_44.gpkg",
+      "size": 8781824,
+      "bbox": [
+        -2.5596337168051,
+        46.76456809688128,
+        -0.9542034774518444,
+        47.82801650857251
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_44.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_45.gpkg",
+      "size": 3379200,
+      "bbox": [
+        1.251692724442508,
+        46.77126836212032,
+        3.140682295660073,
+        48.32002091127275
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_45.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_46.gpkg",
+      "size": 19013632,
+      "bbox": [
+        0.7381078134301865,
+        44.06828082900989,
+        2.243817821351275,
+        45.10160551403639
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_46.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_47.gpkg",
+      "size": 25849856,
+      "bbox": [
+        -1.233576670040901,
+        43.39899109339242,
+        1.288377541140122,
+        44.83649461041055
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_47.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_48.gpkg",
+      "size": 1015808,
+      "bbox": [
+        2.982311025962769,
+        44.1319234210894,
+        3.983353726694214,
+        44.95023329272409
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_48.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_49.gpkg",
+      "size": 9576448,
+      "bbox": [
+        -1.754321723874088,
+        46.80263064365722,
+        0.3794884283769454,
+        47.94894283147993
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_49.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_50.gpkg",
+      "size": 7557120,
+      "bbox": [
+        -1.948506009032808,
+        48.35578475550159,
+        -0.4724463695457172,
+        49.72777202836348
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_50.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_51.gpkg",
+      "size": 12537856,
+      "bbox": [
+        2.814425392562598,
+        48.30546733106416,
+        5.239036395685501,
+        49.53512170261942
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_51.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_52.gpkg",
+      "size": 5734400,
+      "bbox": [
+        4.501001314875239,
+        47.58457186278513,
+        6.231687452306788,
+        48.67439705602018
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_52.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_53.gpkg",
+      "size": 10539008,
+      "bbox": [
+        -1.22352934071385,
+        47.73538464178343,
+        0.03624474949436501,
+        48.55520534541512
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_53.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_54.gpkg",
+      "size": 12754944,
+      "bbox": [
+        5.220768856782076,
+        48.11447868550253,
+        7.32405936110869,
+        49.56962539323387
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_54.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_55.gpkg",
+      "size": 11993088,
+      "bbox": [
+        4.621065540545702,
+        48.33763879848977,
+        5.816747951995414,
+        50.16914777696518
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_55.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_56.gpkg",
+      "size": 13778944,
+      "bbox": [
+        -4.015553823815841,
+        47.27795791055561,
+        -2.04722374684621,
+        48.30744114606615
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_56.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_57.gpkg",
+      "size": 15888384,
+      "bbox": [
+        5.910875114885828,
+        48.50249801501588,
+        7.86906512832563,
+        49.51509240150853
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_57.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_58.gpkg",
+      "size": 3735552,
+      "bbox": [
+        2.861776537434046,
+        46.69350366836242,
+        4.225888966484838,
+        47.56039027040137
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_58.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_59.gpkg",
+      "size": 1859584,
+      "bbox": [
+        1.885769773999656,
+        49.92181510486521,
+        4.231586342058524,
+        51.08892999950575
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_59.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_60.gpkg",
+      "size": 4960256,
+      "bbox": [
+        1.54830271595727,
+        49.04189617149122,
+        3.126521742995103,
+        49.95085423456523
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_60.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_61.gpkg",
+      "size": 12566528,
+      "bbox": [
+        -0.954466203806419,
+        48.04573363858173,
+        1.492491626070334,
+        49.35579793237569
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_61.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_62.gpkg",
+      "size": 2838528,
+      "bbox": [
+        1.559558439025624,
+        49.90974125596507,
+        3.121195774890575,
+        50.99186851669505
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_62.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_63.gpkg",
+      "size": 11194368,
+      "bbox": [
+        2.262947172857197,
+        44.74387243714868,
+        4.488917967832163,
+        46.56156790985811
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_63.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_64.gpkg",
+      "size": 20774912,
+      "bbox": [
+        -1.792350536500832,
+        42.77750451639122,
+        0.083537146565182,
+        43.7686322230272
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_64.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_65.gpkg",
+      "size": 9490432,
+      "bbox": [
+        -0.3238650513599954,
+        42.67327964216173,
+        0.6296513087690628,
+        43.59986325680647
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_65.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_66.gpkg",
+      "size": 1200128,
+      "bbox": [
+        1.721651067094488,
+        42.33300747772574,
+        3.177845807112419,
+        42.88664539699862
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_66.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_67.gpkg",
+      "size": 5529600,
+      "bbox": [
+        6.959925994431335,
+        47.5755055697071,
+        8.233519154422854,
+        49.06555627231071
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_67.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_68.gpkg",
+      "size": 2326528,
+      "bbox": [
+        6.869464394968912,
+        47.42025189702153,
+        7.621065157376953,
+        48.2871892925527
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_68.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_69.gpkg",
+      "size": 8196096,
+      "bbox": [
+        4.116042456248198,
+        45.36611492617196,
+        5.207410709065071,
+        46.54251428203527
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_69.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_70.gpkg",
+      "size": 13664256,
+      "bbox": [
+        5.400961498258865,
+        47.26239965576256,
+        6.805034777925941,
+        48.01326157501374
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_70.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_71.gpkg",
+      "size": 8155136,
+      "bbox": [
+        3.476938154107484,
+        46.02994684267146,
+        5.799660095330061,
+        47.27011055050689
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_71.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_72.gpkg",
+      "size": 8073216,
+      "bbox": [
+        -0.4440659502786524,
+        47.54018175112913,
+        1.261075758895923,
+        48.47931185702132
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_72.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_73.gpkg",
+      "size": 33734656,
+      "bbox": [
+        5.640413059659064,
+        45.05210810586133,
+        7.185561311647538,
+        45.93303195724147
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_73.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_74.gpkg",
+      "size": 20942848,
+      "bbox": [
+        5.805972269551352,
+        45.57772351084671,
+        7.0450650168028,
+        46.40823623434825
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_74.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_76.gpkg",
+      "size": 20226048,
+      "bbox": [
+        0.06558140933523711,
+        49.27101075725606,
+        1.771299327256955,
+        50.06473385228407
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_76.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_77.gpkg",
+      "size": 2166784,
+      "bbox": [
+        2.244499205892971,
+        47.99252100704246,
+        3.676070200193343,
+        49.23908080453422
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_77.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_78.gpkg",
+      "size": 1728512,
+      "bbox": [
+        1.338267866346426,
+        48.30693001507375,
+        2.898238357532643,
+        49.24787904826562
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_78.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_79.gpkg",
+      "size": 4927488,
+      "bbox": [
+        -0.9180255427866817,
+        46.03751383931278,
+        0.1897621143687688,
+        47.09879667545174
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_79.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_80.gpkg",
+      "size": 3465216,
+      "bbox": [
+        1.370264519931454,
+        49.60699046331999,
+        3.170577981890459,
+        50.3657906140922
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_80.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_81.gpkg",
+      "size": 5255168,
+      "bbox": [
+        1.546446298008686,
+        43.40145892368527,
+        2.921545535497174,
+        44.19848748294058
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_81.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_82.gpkg",
+      "size": 5992448,
+      "bbox": [
+        0.741148899956995,
+        43.77339658875106,
+        1.982295395469952,
+        44.39340196604356
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_82.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_83.gpkg",
+      "size": 2256896,
+      "bbox": [
+        5.682332673214136,
+        42.9821351855749,
+        7.017951008929475,
+        43.8088399232362
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_83.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_84.gpkg",
+      "size": 1220608,
+      "bbox": [
+        4.712814005498509,
+        43.66621688688464,
+        5.738219460215716,
+        44.42251746936476
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_84.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_85.gpkg",
+      "size": 6221824,
+      "bbox": [
+        -2.400377846392374,
+        46.26653428705449,
+        -0.5975451531726684,
+        47.070367841271
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_85.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_86.gpkg",
+      "size": 6111232,
+      "bbox": [
+        -0.1929785007810718,
+        45.82339960390134,
+        1.31466093418974,
+        47.16975499832282
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_86.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_87.gpkg",
+      "size": 3682304,
+      "bbox": [
+        0.6400349357966728,
+        45.48652891413689,
+        1.969807195185352,
+        46.37510865218143
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_87.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_88.gpkg",
+      "size": 12558336,
+      "bbox": [
+        5.166828865736621,
+        47.78383875351582,
+        7.370118336527457,
+        48.89149567968057
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_88.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_89.gpkg",
+      "size": 4853760,
+      "bbox": [
+        2.667773369016823,
+        47.14244353178204,
+        4.39414192783445,
+        48.51958283544022
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_89.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_90.gpkg",
+      "size": 1392640,
+      "bbox": [
+        6.664116828977937,
+        47.44341712465546,
+        7.188823450535173,
+        47.81711488750347
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_90.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_91.gpkg",
+      "size": 798720,
+      "bbox": [
+        1.705496146912661,
+        48.15728862744916,
+        2.901832849698906,
+        48.73451377015698
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_91.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_92.gpkg",
+      "size": 110592,
+      "bbox": [
+        2.15891026697038,
+        48.72722307516549,
+        2.328757165403502,
+        48.9499982509949
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_92.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_93.gpkg",
+      "size": 110592,
+      "bbox": [
+        2.396299508490565,
+        48.84046469827319,
+        2.575795787711448,
+        48.99534832911198
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_93.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_94.gpkg",
+      "size": 188416,
+      "bbox": [
+        2.254883218290143,
+        48.57656934876858,
+        3.129882289941512,
+        48.85646774663886
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_94.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_95.gpkg",
+      "size": 462848,
+      "bbox": [
+        1.632431573673975,
+        48.94048941108954,
+        2.57336119121976,
+        49.22835186806118
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_95.gpkg"
+    },
+    {
+      "dataset": "soilmap",
+      "directory": "soilmap_dep",
+      "name": "code_insee_NULL.gpkg",
+      "size": 393216,
+      "bbox": [
+        -4.852967260914003,
+        42.53380674584673,
+        7.972210504223397,
+        50.09759729212643
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-soilmap-v1/code_insee_NULL.gpkg"
+    },
+    {
+      "dataset": "toponymie",
+      "directory": "TOPONYMIE",
+      "name": "TOPONYMIE_ARA.gpkg",
+      "size": 59314176,
+      "bbox": [
+        1.9728014149414377,
+        44.02554288696135,
+        7.290023725450871,
+        46.84262036237103
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-toponymie-v1/TOPONYMIE_ARA.gpkg"
+    },
+    {
+      "dataset": "toponymie",
+      "directory": "TOPONYMIE",
+      "name": "TOPONYMIE_BFC.gpkg",
+      "size": 34226176,
+      "bbox": [
+        2.7775133121103077,
+        46.04650521595018,
+        7.276002900680293,
+        48.443381797638764
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-toponymie-v1/TOPONYMIE_BFC.gpkg"
+    },
+    {
+      "dataset": "toponymie",
+      "directory": "TOPONYMIE",
+      "name": "TOPONYMIE_Bratagne.gpkg",
+      "size": 26578944,
+      "bbox": [
+        -5.205904252427548,
+        47.16531300101426,
+        -0.9030634130800862,
+        49.01028006900242
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-toponymie-v1/TOPONYMIE_Bratagne.gpkg"
+    },
+    {
+      "dataset": "toponymie",
+      "directory": "TOPONYMIE",
+      "name": "TOPONYMIE_Centre.gpkg",
+      "size": 28307456,
+      "bbox": [
+        -0.11300043562522541,
+        46.27537822466581,
+        3.19887867163203,
+        48.994593727261915
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-toponymie-v1/TOPONYMIE_Centre.gpkg"
+    },
+    {
+      "dataset": "toponymie",
+      "directory": "TOPONYMIE",
+      "name": "TOPONYMIE_GEst.gpkg",
+      "size": 41885696,
+      "bbox": [
+        3.3107361925170316,
+        47.38766183885797,
+        8.338143165952445,
+        50.18165221932358
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-toponymie-v1/TOPONYMIE_GEst.gpkg"
+    },
+    {
+      "dataset": "toponymie",
+      "directory": "TOPONYMIE",
+      "name": "TOPONYMIE_HDF.gpkg",
+      "size": 23494656,
+      "bbox": [
+        1.2862449608901745,
+        48.78418609025124,
+        4.355407745479825,
+        51.088732376420566
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-toponymie-v1/TOPONYMIE_HDF.gpkg"
+    },
+    {
+      "dataset": "toponymie",
+      "directory": "TOPONYMIE",
+      "name": "TOPONYMIE_IDF.gpkg",
+      "size": 16101376,
+      "bbox": [
+        1.371715714686824,
+        48.06571324343809,
+        3.6342521105774437,
+        49.288525325053534
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-toponymie-v1/TOPONYMIE_IDF.gpkg"
+    },
+    {
+      "dataset": "toponymie",
+      "directory": "TOPONYMIE",
+      "name": "TOPONYMIE_NAquitaine.gpkg",
+      "size": 64081920,
+      "bbox": [
+        -2.1425254712936868,
+        42.731281622649426,
+        2.6894355995902157,
+        47.25856434968335
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-toponymie-v1/TOPONYMIE_NAquitaine.gpkg"
+    },
+    {
+      "dataset": "toponymie",
+      "directory": "TOPONYMIE",
+      "name": "TOPONYMIE_Normandie.gpkg",
+      "size": 27279360,
+      "bbox": [
+        -2.004088427247662,
+        48.05874160733183,
+        1.8922738796770155,
+        50.11609240795363
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-toponymie-v1/TOPONYMIE_Normandie.gpkg"
+    },
+    {
+      "dataset": "toponymie",
+      "directory": "TOPONYMIE",
+      "name": "TOPONYMIE_Occitanie.gpkg",
+      "size": 62332928,
+      "bbox": [
+        -0.5145514652183767,
+        42.28174197556477,
+        4.94420207751948,
+        45.08292763176183
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-toponymie-v1/TOPONYMIE_Occitanie.gpkg"
+    },
+    {
+      "dataset": "toponymie",
+      "directory": "TOPONYMIE",
+      "name": "TOPONYMIE_PACA.gpkg",
+      "size": 26066944,
+      "bbox": [
+        4.167965964137606,
+        42.93029046233941,
+        7.80797919011198,
+        45.217168551046214
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-toponymie-v1/TOPONYMIE_PACA.gpkg"
+    },
+    {
+      "dataset": "toponymie",
+      "directory": "TOPONYMIE",
+      "name": "TOPONYMIE_PDL.gpkg",
+      "size": 33587200,
+      "bbox": [
+        -2.743252932106838,
+        46.17620980829553,
+        1.0510202972469376,
+        48.639037948862125
+      ],
+      "url": "https://github.com/mathistrunet/FarmPotential/releases/download/layers-toponymie-v1/TOPONYMIE_PDL.gpkg"
+    }
+  ]
+}

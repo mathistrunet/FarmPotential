@@ -12,6 +12,11 @@ dist
 dist-ssr
 *.local
 
+# Couches cartographiques (plusieurs Go) : publiées dans les Releases GitHub via
+# `npm run publish:layers`, décrites par data-layers.json, et téléchargées à la
+# demande par le serveur local. Elles n'ont donc plus à être versionnées.
+/public/data/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

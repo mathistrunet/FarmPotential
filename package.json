@@ -12,6 +12,7 @@
     "test": "vitest",
     "build:rrp": "node scripts/build-rrp-lookup.mjs",
     "build:exe": "powershell -ExecutionPolicy Bypass -File scripts/build-launcher.ps1",
+    "publish:layers": "node scripts/publish-layers.mjs",
     "start": "npm run build && node scripts/geojson-server.mjs"
   },
   "dependencies": {

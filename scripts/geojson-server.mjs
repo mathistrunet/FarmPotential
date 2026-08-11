@@ -18,6 +18,7 @@ import { resolveParcelPoint } from "./soilgrids/geometry.mjs";
 import { soilGridsPixelKey } from "./soilgrids/homolosine.mjs";
 import { closeGeoPackageCache, queryGeoPackageByBbox } from "./geopackage-query.mjs";
 import { closeRpgRomaniaCache, queryRpgRomaniaByBbox } from "./rpg-romania-query.mjs";
+import { ensureDatasetForBbox, ensureLayer } from "./layer-store.mjs";
 
 const PORT = Number(process.env.PORT || 4174);
 const DATA_DIR = path.resolve(process.cwd(), "data");
@@ -425,39 +426,18 @@ const STATIC_CONTENT_TYPES = {
   ".mbtiles": "application/octet-stream",
 };
 
-/**
- * Sert un fichier de `dist/`. Toute route inconnue retombe sur index.html
- * (application monopage). Renvoie false si l'application n'est pas construite,
- * afin que le serveur puisse répondre 404 comme avant.
- */
-async function serveStatic(requestUrl, res) {
-  let indexStat;
+/** Répond avec un fichier du disque, ou false s'il est absent. */
+async function sendFile(filePath, res) {
   try {
-    indexStat = await stat(path.join(DIST_DIR, "index.html"));
+    const info = await stat(filePath);
+    if (!info.isFile()) return false;
   } catch {
     return false;
   }
-  if (!indexStat.isFile()) return false;
-
-  const decoded = decodeURIComponent(requestUrl.pathname);
-  // path.join normalise les « .. » : on vérifie ensuite que la cible reste dans dist/.
-  const candidate = path.join(DIST_DIR, decoded);
-  const relative = path.relative(DIST_DIR, candidate);
-  const insideDist = relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
-
-  let filePath = path.join(DIST_DIR, "index.html");
-  if (insideDist) {
-    try {
-      const candidateStat = await stat(candidate);
-      if (candidateStat.isFile()) filePath = candidate;
-    } catch {
-      // fichier absent : on retombe sur index.html (routes de l'application)
-    }
-  }
-
   try {
     const body = await readFile(filePath);
-    const type = STATIC_CONTENT_TYPES[path.extname(filePath).toLowerCase()] || "application/octet-stream";
+    const type =
+      STATIC_CONTENT_TYPES[path.extname(filePath).toLowerCase()] || "application/octet-stream";
     res.writeHead(200, { "Content-Type": type });
     res.end(body);
   } catch (error) {
@@ -465,6 +445,61 @@ async function serveStatic(requestUrl, res) {
     res.end(`Lecture impossible: ${error?.message || "erreur inconnue"}`);
   }
   return true;
+}
+
+/** Empêche de sortir du dossier autorisé via des « .. » encodés. */
+function resolveInside(rootDir, relativePath) {
+  const candidate = path.join(rootDir, decodeURIComponent(relativePath));
+  const relative = path.relative(rootDir, candidate);
+  const inside = relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+  return inside ? candidate : null;
+}
+
+/**
+ * Sert les couches et référentiels depuis `public/data`.
+ *
+ * Ce dossier n'est volontairement pas recopié dans `dist/` (plusieurs gigaoctets)
+ * mais le navigateur y accède quand même pour les petits fichiers, comme le
+ * référentiel des cultures Assolia. Une route /data inconnue renvoie un 404 :
+ * elle ne doit surtout pas retomber sur la page HTML, sinon l'application
+ * essaierait d'analyser du HTML comme du CSV.
+ */
+async function servePublicData(requestUrl, res) {
+  const relative = decodeURIComponent(requestUrl.pathname.replace(/^\/data\/?/, ""));
+  if (!relative) return false;
+  const filePath = resolveInside(PUBLIC_DATA_DIR, relative);
+  if (!filePath) return false;
+  if (await sendFile(filePath, res)) return true;
+
+  // Absent du disque : la couche est peut-être publiée et téléchargeable.
+  const parsed = path.parse(relative);
+  try {
+    const downloaded = await ensureLayer(parsed.dir || ".", parsed.base);
+    return downloaded ? sendFile(downloaded, res) : false;
+  } catch (error) {
+    res.writeHead(503, { "Content-Type": "text/plain; charset=utf-8" });
+    res.end(`Téléchargement impossible: ${error?.message || "erreur réseau"}`);
+    return true;
+  }
+}
+
+/**
+ * Sert un fichier de `dist/`. Toute route inconnue retombe sur index.html
+ * (application monopage). Renvoie false si l'application n'est pas construite,
+ * afin que le serveur puisse répondre 404 comme avant.
+ */
+async function serveStatic(requestUrl, res) {
+  const indexPath = path.join(DIST_DIR, "index.html");
+  try {
+    if (!(await stat(indexPath)).isFile()) return false;
+  } catch {
+    return false;
+  }
+
+  const candidate = resolveInside(DIST_DIR, requestUrl.pathname);
+  if (candidate && (await sendFile(candidate, res))) return true;
+  // Fichier absent : on retombe sur index.html (routes de l'application).
+  return sendFile(indexPath, res);
 }
 
 const server = http.createServer(async (req, res) => {
@@ -578,7 +613,25 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    const filePath = path.join(SOILMAP_DEP_DIR, `code_insee_${code}.gpkg`);
+    // La couche du département est téléchargée au premier usage si elle manque.
+    let filePath;
+    try {
+      filePath = await ensureLayer("soilmap_dep", `code_insee_${code}.gpkg`);
+    } catch (error) {
+      res.writeHead(503);
+      res.end(
+        JSON.stringify({
+          error: `Téléchargement de la carte des sols du département ${code} impossible : ${error?.message || "erreur réseau"}`,
+        })
+      );
+      return;
+    }
+    if (!filePath) {
+      res.writeHead(404);
+      res.end(JSON.stringify({ error: `Aucune carte des sols pour le département ${code}.` }));
+      return;
+    }
+
     try {
       const collection = await queryGeoPackageByBbox({
         filePath,
@@ -622,7 +675,24 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    const filePath = path.join(TOPONYMIE_DIR, fileName);
+    let filePath;
+    try {
+      filePath = await ensureLayer("TOPONYMIE", fileName);
+    } catch (error) {
+      res.writeHead(503);
+      res.end(
+        JSON.stringify({
+          error: `Téléchargement de la toponymie ${region} impossible : ${error?.message || "erreur réseau"}`,
+        })
+      );
+      return;
+    }
+    if (!filePath) {
+      res.writeHead(404);
+      res.end(JSON.stringify({ error: `Aucune toponymie disponible pour la région ${region}.` }));
+      return;
+    }
+
     try {
       const collection = await queryGeoPackageByBbox({
         filePath,
@@ -668,6 +738,9 @@ const server = http.createServer(async (req, res) => {
     }
 
     try {
+      // Le parcellaire roumain est découpé par région : on ne récupère que les
+      // régions qui croisent l'emprise affichée, pas les 2,3 Go du jeu complet.
+      await ensureDatasetForBbox("rpg-romania", bbox);
       const collection = queryRpgRomaniaByBbox({
         dirPath: RPG_ROMANIA_DIR,
         bbox,
@@ -824,9 +897,16 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // Hors /api : application compilée si elle est disponible. Une route /api
-  // inconnue reste un 404 franc, elle ne doit pas renvoyer la page HTML.
   if (!requestUrl.pathname.startsWith("/api/") && (req.method === "GET" || req.method === "HEAD")) {
+    // Couches et référentiels : servis depuis public/data, jamais depuis dist/.
+    if (requestUrl.pathname.startsWith("/data/")) {
+      if (await servePublicData(requestUrl, res)) return;
+      res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+      res.end("Couche introuvable");
+      return;
+    }
+    // Sinon : application compilée si elle est disponible. Une route /api
+    // inconnue reste un 404 franc, elle ne doit pas renvoyer la page HTML.
     if (await serveStatic(requestUrl, res)) return;
   }
 

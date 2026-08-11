@@ -87,9 +87,35 @@ Certaines couches IGN nécessitent une clé GeoPlateforme. Créez un fichier
 Sans clé, les couches ouvertes (OpenStreetMap, OpenTopoMap, satellite ESRI)
 restent disponibles.
 
-Les couches locales volumineuses (carte des sols, toponymie, RPG Roumanie) se
-placent dans `public/data/` ; elles sont facultatives et l'application
-fonctionne sans elles.
+## Couches cartographiques
+
+Les couches locales (carte des sols par département, toponymie par région,
+parcellaire roumain) pèsent 3,4 Go au total. Elles ne sont **pas** versionnées :
+elles sont publiées dans les Releases GitHub et téléchargées à la demande.
+
+Concrètement, une installation neuve pèse quelques mégaoctets. La première fois
+qu'un utilisateur affiche la carte des sols sur un département, le serveur local
+récupère le fichier correspondant (~8 Mo) et le range dans `public/data/` ; les
+fois suivantes, c'est instantané et hors ligne. Le parcellaire roumain est
+filtré par emprise : seules les régions visibles à l'écran sont récupérées.
+
+Le fichier `data-layers.json`, lui, est versionné : il décrit chaque couche
+(URL, taille, emprise) et sert d'annuaire au téléchargement.
+
+Pour republier les couches après les avoir mises à jour :
+
+```bash
+npm run publish:layers            # envoie ce qui manque, puis régénère le manifeste
+npm run publish:layers -- --dry-run
+npm run publish:layers -- --dataset soilmap
+```
+
+La commande est idempotente et s'appuie sur la [CLI GitHub](https://cli.github.com/)
+(`gh auth login` au préalable). Les couches déjà en ligne sont ignorées.
+
+Une installation hors ligne reste possible : il suffit de copier à la main les
+fichiers voulus dans `public/data/`, l'application les utilise tels quels sans
+rien télécharger.
 
 ## Qualité
 
