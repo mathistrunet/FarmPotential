@@ -799,6 +799,10 @@ function ParcelleMatchViewContent({
   if (!open) return null;
 
   return (
+    // Trois bandes : un en-tête fixe, un corps qui défile, un pied collant.
+    // Sans cela, la grille de cartes — qui ne peut pas descendre sous sa hauteur
+    // minimale — repoussait le tableau et le bouton de validation hors de
+    // l'écran, sans barre de défilement pour aller les chercher.
     <div
       style={{
         position: "fixed",
@@ -807,10 +811,12 @@ function ParcelleMatchViewContent({
         zIndex: 40,
         display: "flex",
         flexDirection: "column",
+        overflow: "hidden",
       }}
     >
       <div
         style={{
+          flex: "0 0 auto",
           padding: "16px 20px",
           borderBottom: "1px solid #e2e8f0",
           background: "#fff",
@@ -844,8 +850,9 @@ function ParcelleMatchViewContent({
         </button>
       </div>
 
+      <div style={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto" }}>
       <div style={{ padding: "12px 20px" }}>
-        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+        <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
           <label style={{ fontSize: 12, color: "#166534", fontWeight: 600 }}>
             Année conservée (gauche)
             <select
@@ -924,13 +931,15 @@ function ParcelleMatchViewContent({
         )}
       </div>
 
+      {/* Les cartes prennent une part bornée de la hauteur : au-delà, elles
+          chassaient le tableau et la validation du champ visible. */}
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "1fr 1fr",
+          gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
           gap: 16,
           padding: "0 20px 16px",
-          flex: 1,
+          height: "clamp(240px, 42vh, 520px)",
         }}
       >
         <div
@@ -953,7 +962,7 @@ function ParcelleMatchViewContent({
           >
             Parcelles conservées — {leftYear ?? "—"}
           </div>
-          <div ref={leftContainerRef} style={{ flex: 1, minHeight: 320 }} />
+          <div ref={leftContainerRef} style={{ flex: 1, minHeight: 0 }} />
         </div>
         <div
           style={{
@@ -975,7 +984,7 @@ function ParcelleMatchViewContent({
           >
             Parcelles disparaissant — {rightYear ?? "—"}
           </div>
-          <div ref={rightContainerRef} style={{ flex: 1, minHeight: 320 }} />
+          <div ref={rightContainerRef} style={{ flex: 1, minHeight: 0 }} />
         </div>
       </div>
 
@@ -992,7 +1001,7 @@ function ParcelleMatchViewContent({
             Tableau des correspondances
           </div>
           <div style={{ maxHeight: 240, overflow: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 640 }}>
               <thead>
                 <tr style={{ textAlign: "left", fontSize: 12, color: "#64748b" }}>
                   <th style={{ padding: "6px 8px" }}>N° {leftYear ?? "—"}</th>
@@ -1069,35 +1078,59 @@ function ParcelleMatchViewContent({
               </tbody>
             </table>
           </div>
-          <div
+        </div>
+      </div>
+      </div>
+
+      {/* Pied collant : la validation reste atteignable quelle que soit la
+          hauteur de fenêtre, sans avoir à faire défiler jusqu'en bas. */}
+      <div
+        style={{
+          flex: "0 0 auto",
+          borderTop: "1px solid #e2e8f0",
+          background: "#fff",
+          padding: "10px 20px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+          flexWrap: "wrap",
+        }}
+      >
+        <div style={{ fontSize: 12, color: "#64748b" }}>
+          {validatedAt
+            ? `Dernière validation : ${validatedAt.toLocaleTimeString("fr-FR")}`
+            : "Validez pour enregistrer les correspondances proposées."}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <button
+            type="button"
+            onClick={onClose}
             style={{
-              marginTop: 10,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 8,
+              padding: "8px 14px",
+              borderRadius: 8,
+              border: "1px solid #cbd5f5",
+              background: "#eef2ff",
+              cursor: "pointer",
             }}
           >
-            <div style={{ fontSize: 12, color: "#64748b" }}>
-              {validatedAt
-                ? `Dernière validation : ${validatedAt.toLocaleTimeString("fr-FR")}`
-                : "Validez pour enregistrer les correspondances proposées."}
-            </div>
-            <button
-              type="button"
-              onClick={handleValidate}
-              style={{
-                padding: "6px 12px",
-                borderRadius: 8,
-                border: "1px solid #0f172a",
-                background: "#0f172a",
-                color: "#fff",
-                cursor: "pointer",
-              }}
-            >
-              Valider les correspondances
-            </button>
-          </div>
+            Retour
+          </button>
+          <button
+            type="button"
+            onClick={handleValidate}
+            style={{
+              padding: "8px 14px",
+              borderRadius: 8,
+              border: "1px solid #0f172a",
+              background: "#0f172a",
+              color: "#fff",
+              cursor: "pointer",
+              fontWeight: 600,
+            }}
+          >
+            Valider les correspondances
+          </button>
         </div>
       </div>
     </div>

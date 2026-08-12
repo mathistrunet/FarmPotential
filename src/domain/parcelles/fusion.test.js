@@ -1,15 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   applyCorrespondencesAndMerge,
-  DEFAULT_PRECEDENT_N1_FIELD,
-  DEFAULT_PRECEDENT_N2_FIELD,
   getOldYearCulture,
   getOldYearPrevious,
-  getTargetPreviousFieldN1,
   buildParcellesByYearFromFeatures,
 } from "./fusion";
+import { getCultureColumn, readCultureValue } from "./cultureColumns";
 
-// ─── Helper ─────────────────────────────────────────────────────────────────
+// ─── Helpers ────────────────────────────────────────────────────────────────
 
 function feature(id, year, extra = {}) {
   return {
@@ -20,17 +18,26 @@ function feature(id, year, extra = {}) {
   };
 }
 
-// ─── Constantes ──────────────────────────────────────────────────────────────
+/**
+ * Lit une colonne comme le fait le tableau : par tous ses alias. Une assertion
+ * sur une clé précise passerait à côté d'une valeur rangée sous un alias voisin,
+ * ce qui est précisément le défaut que ces tests surveillent.
+ */
+const colonne = (props, id) => readCultureValue(props, getCultureColumn(id)) || null;
 
-describe("DEFAULT_PRECEDENT_N1_FIELD", () => {
-  it('vaut "cultureN1" (lu par ParcelleEditor comme colonne N-1)', () => {
-    expect(DEFAULT_PRECEDENT_N1_FIELD).toBe("cultureN1");
+/** Fusionne une parcelle ancienne dans une parcelle conservée. */
+const fusionner = (oldFeature, newFeature, oldYear, newYear) =>
+  applyCorrespondencesAndMerge({
+    parcellesByYear: {
+      [oldYear]: { type: "FeatureCollection", features: [oldFeature] },
+      [newYear]: { type: "FeatureCollection", features: [newFeature] },
+    },
+    oldYear,
+    newYear,
+    correspondancesValidated: { [oldFeature.id]: newFeature.id },
+    dropOldYear: true,
+    onWarning: () => {},
   });
-
-  it('DEFAULT_PRECEDENT_N2_FIELD vaut "precedent_N2"', () => {
-    expect(DEFAULT_PRECEDENT_N2_FIELD).toBe("precedent_N2");
-  });
-});
 
 // ─── getOldYearCulture ────────────────────────────────────────────────────────
 
@@ -68,20 +75,6 @@ describe("getOldYearPrevious", () => {
   });
 });
 
-// ─── getTargetPreviousFieldN1 ─────────────────────────────────────────────────
-
-describe("getTargetPreviousFieldN1", () => {
-  it('retourne DEFAULT_PRECEDENT_N1_FIELD si pas de clé N-1 existante', () => {
-    expect(getTargetPreviousFieldN1(feature("f", 2024, {}))).toBe("cultureN1");
-  });
-
-  it("préserve une clé N-1 existante dans les props", () => {
-    expect(
-      getTargetPreviousFieldN1(feature("f", 2024, { cultureN_1: "" }))
-    ).toBe("cultureN_1");
-  });
-});
-
 // ─── buildParcellesByYearFromFeatures ─────────────────────────────────────────
 
 describe("buildParcellesByYearFromFeatures", () => {
@@ -108,9 +101,9 @@ describe("buildParcellesByYearFromFeatures", () => {
 // ─── applyCorrespondencesAndMerge ─────────────────────────────────────────────
 
 describe("applyCorrespondencesAndMerge — dropOldYear=true", () => {
-  it("vide l'année ancienne et propage la culture dans cultureN1", () => {
-    const oldMatched = feature("old-1", 2023, { culture: "BLE" });
-    const oldUnmatched = feature("old-2", 2023, { culture: "ORG" });
+  it("vide l'année ancienne et verse la culture dans la même colonne", () => {
+    const oldMatched = feature("old-1", 2023, { cultureN_1: "BLE" });
+    const oldUnmatched = feature("old-2", 2023, { cultureN_1: "ORG" });
     const recent = feature("new-1", 2024, { culture: "MAI" });
 
     const result = applyCorrespondencesAndMerge({
@@ -122,38 +115,115 @@ describe("applyCorrespondencesAndMerge — dropOldYear=true", () => {
       newYear: 2024,
       correspondancesValidated: { "old-1": "new-1" },
       dropOldYear: true,
-    });
-
-    expect(result.parcellesByYear[2023].features).toEqual([]);
-    expect(result.parcellesByYear[2024].features).toHaveLength(1);
-    // culture ancienne → cultureN1 (affiché par ParcelleEditor comme colonne N-1)
-    expect(result.parcellesByYear[2024].features[0].properties.cultureN1).toBe("BLE");
-    // culture récente conservée
-    expect(result.parcellesByYear[2024].features[0].properties.culture).toBe("MAI");
-  });
-});
-
-describe("applyCorrespondencesAndMerge — propagation culture offset=1", () => {
-  it("préserve cultureN1 quand l'ancienne feature vient d'un import offset=1", () => {
-    // Import offset=1 : la culture est directement dans cultureN1, pas dans culture
-    const oldMatched = feature("old-1", 2023, { cultureN1: "FEV" });
-    const recent = feature("new-1", 2024, { culture: "MAI" });
-
-    const result = applyCorrespondencesAndMerge({
-      parcellesByYear: {
-        2023: { type: "FeatureCollection", features: [oldMatched] },
-        2024: { type: "FeatureCollection", features: [recent] },
-      },
-      oldYear: 2023,
-      newYear: 2024,
-      correspondancesValidated: { "old-1": "new-1" },
-      dropOldYear: true,
+      onWarning: () => {},
     });
 
     const merged = result.parcellesByYear[2024].features[0].properties;
-    // mergeParcelleProperties copie cultureN1 de l'ancienne (la récente n'en a pas)
-    expect(merged.cultureN1).toBe("FEV");
-    expect(merged.culture).toBe("MAI");
+    expect(result.parcellesByYear[2023].features).toEqual([]);
+    expect(result.parcellesByYear[2024].features).toHaveLength(1);
+    expect(colonne(merged, "prev1")).toBe("BLE");
+    expect(colonne(merged, "current")).toBe("MAI");
+  });
+});
+
+describe("applyCorrespondencesAndMerge — les colonnes ne bougent pas", () => {
+  it("laisse en N-1 une culture rangée en N-1 avant la comparaison", () => {
+    // Cas signalé en usage : un parcellaire importé en N-2, déplacé en N-1 à la
+    // main, puis comparé — les cultures repartaient en N-2.
+    const ancienne = feature("old-1", 2024, { cultureN_1: "BTH" });
+    const conservee = feature("new-1", 2025, { cultureN: "MIS" });
+
+    const merged = fusionner(ancienne, conservee, 2024, 2025)
+      .parcellesByYear[2025].features[0].properties;
+
+    expect(colonne(merged, "current")).toBe("MIS");
+    expect(colonne(merged, "prev1")).toBe("BTH");
+    expect(colonne(merged, "prev2")).toBeNull();
+  });
+
+  it("conserve chaque colonne à sa place, quel que soit l'écart d'années", () => {
+    const ancienne = feature("old-1", 2022, {
+      cultureN_1: "BTH",
+      cultureN_2: "ORH",
+      cultureN_3: "TRN",
+    });
+    const conservee = feature("new-1", 2025, { cultureN: "MIS" });
+
+    const merged = fusionner(ancienne, conservee, 2022, 2025)
+      .parcellesByYear[2025].features[0].properties;
+
+    expect(colonne(merged, "prev1")).toBe("BTH");
+    expect(colonne(merged, "prev2")).toBe("ORH");
+    expect(colonne(merged, "prev3")).toBe("TRN");
+    expect(colonne(merged, "prev4")).toBeNull();
+  });
+
+  it("ne laisse pas deux valeurs différentes sous deux alias d'une même colonne", () => {
+    // L'ancienne range son N-1 sous l'alias Télépac, la conservée n'a rien :
+    // la valeur doit ressortir sous toutes les clés canoniques, sans doublon.
+    const ancienne = feature("old-1", 2024, { cultureN1: "BTH", culture_prec2: "ORH" });
+    const conservee = feature("new-1", 2025, { cultureN: "MIS" });
+
+    const merged = fusionner(ancienne, conservee, 2024, 2025)
+      .parcellesByYear[2025].features[0].properties;
+
+    getCultureColumn("prev1").readKeys.forEach((key) => {
+      if (merged[key] != null) expect(merged[key]).toBe("BTH");
+    });
+    getCultureColumn("prev2").readKeys.forEach((key) => {
+      if (merged[key] != null) expect(merged[key]).toBe("ORH");
+    });
+  });
+
+  it("n'écrit pas dans une clé morte comme precedent_N2", () => {
+    const ancienne = feature("old-1", 2024, { cultureN1: "ORH" });
+    const conservee = feature("new-1", 2025, { cultureN: "MIS" });
+
+    const merged = fusionner(ancienne, conservee, 2024, 2025)
+      .parcellesByYear[2025].features[0].properties;
+
+    expect(merged.precedent_N2).toBeUndefined();
+    expect(colonne(merged, "prev1")).toBe("ORH");
+  });
+
+  it("accepte de garder l'année la plus ancienne", () => {
+    const ancienne = feature("old-1", 2025, { cultureN_1: "MIS" });
+    const conservee = feature("new-1", 2022, { cultureN: "BTH" });
+
+    const merged = fusionner(ancienne, conservee, 2025, 2022)
+      .parcellesByYear[2022].features[0].properties;
+
+    expect(colonne(merged, "current")).toBe("BTH");
+    expect(colonne(merged, "prev1")).toBe("MIS");
+  });
+
+  it("refuse de fusionner une année avec elle-même", () => {
+    const result = applyCorrespondencesAndMerge({
+      parcellesByYear: {
+        2024: {
+          type: "FeatureCollection",
+          features: [feature("old-1", 2024, {}), feature("new-1", 2024, {})],
+        },
+      },
+      oldYear: 2024,
+      newYear: 2024,
+      correspondancesValidated: { "old-1": "new-1" },
+      dropOldYear: true,
+      onWarning: () => {},
+    });
+
+    expect(result.error).toBeTruthy();
+  });
+
+  it("hérite des attributs non culturaux absents de la parcelle conservée", () => {
+    const ancienne = feature("old-1", 2024, { cultureN_1: "BTH", type_sol: "Argilo-calcaire" });
+    const conservee = feature("new-1", 2025, { cultureN: "MIS" });
+
+    const merged = fusionner(ancienne, conservee, 2024, 2025)
+      .parcellesByYear[2025].features[0].properties;
+
+    expect(merged.type_sol).toBe("Argilo-calcaire");
+    expect(merged.annee).toBe(2025);
   });
 });
 
@@ -270,23 +340,34 @@ describe("applyCorrespondencesAndMerge — correspondances vides", () => {
   });
 });
 
-describe("applyCorrespondencesAndMerge — propagation de cultureN1 existante", () => {
-  it("ne remplace pas cultureN1 si la feature récente en a déjà une", () => {
-    // La nouvelle feature a déjà une valeur en N-1 → ne pas écraser
-    const oldFeature = feature("old-1", 2023, { culture: "BLE" });
+describe("applyCorrespondencesAndMerge — colonne destination déjà renseignée", () => {
+  it("garde la valeur de la parcelle conservée", () => {
+    const oldFeature = feature("old-1", 2023, { cultureN_1: "BLE" });
     const newFeature = feature("new-1", 2024, { culture: "MAI", cultureN1: "DEJA" });
 
-    const result = applyCorrespondencesAndMerge({
+    const merged = fusionner(oldFeature, newFeature, 2023, 2024)
+      .parcellesByYear[2024].features[0].properties;
+
+    expect(colonne(merged, "prev1")).toBe("DEJA");
+  });
+
+  it("signale la valeur non reportée pour que rien ne disparaisse en silence", () => {
+    const alertes = [];
+    applyCorrespondencesAndMerge({
       parcellesByYear: {
-        2023: { type: "FeatureCollection", features: [oldFeature] },
-        2024: { type: "FeatureCollection", features: [newFeature] },
+        2023: { type: "FeatureCollection", features: [feature("old-1", 2023, { cultureN_1: "BLE" })] },
+        2024: {
+          type: "FeatureCollection",
+          features: [feature("new-1", 2024, { culture: "MAI", cultureN1: "DEJA" })],
+        },
       },
       oldYear: 2023,
       newYear: 2024,
       correspondancesValidated: { "old-1": "new-1" },
       dropOldYear: true,
+      onWarning: (message, meta) => alertes.push({ message, meta }),
     });
 
-    expect(result.parcellesByYear[2024].features[0].properties.cultureN1).toBe("DEJA");
+    expect(alertes.some((entry) => entry.meta?.ignoree === "BLE")).toBe(true);
   });
 });

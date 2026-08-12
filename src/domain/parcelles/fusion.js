@@ -1,80 +1,42 @@
 import { getFeatureKey } from "../../utils/parcelleMatching.js";
+import {
+  CULTURE_COLUMNS,
+  getCultureColumn,
+  readCulturePrecision,
+  readCultureValue,
+  setCulture,
+} from "./cultureColumns.js";
 
-export const PRECEDENT_N1_FIELDS = [
-  "precedent",
-  "Precedent",
-  "PRECEDENT",
-  "precedent_culture",
-  "precedentCulture",
-  "culture_prec",
-  "culturePrec",
-  "cultureN_1",
-  "cultureN1",
-  "cultureN-1",
-];
+// ---------------------------------------------------------------------------
+// Fusion de deux millésimes
+//
+// Convention : les colonnes N+1 … N-6 sont communes à tout le parcellaire, pas
+// propres à chaque parcelle. C'est l'utilisateur qui range chaque millésime dans
+// la bonne colonne, à l'import ou avec « Déplacer cultures » ; la comparaison ne
+// fait que verser les colonnes de la parcelle qui disparaît dans celles de la
+// parcelle conservée, **sans rien décaler**. Une culture placée en N-1 avant la
+// comparaison reste en N-1 après.
+//
+// Ce point a été corrigé deux fois. Le code d'origine mélangeait une recopie
+// brute des propriétés (sans décalage) et une écriture de la culture ancienne en
+// N-1 (avec décalage) : la même colonne recevait deux valeurs d'années
+// différentes sous deux alias distincts. La correction suivante a tout décalé de
+// l'écart entre les millésimes, ce qui déplaçait en N-2 une culture rangée en
+// N-1 à la main. Seule la règle « aucun décalage » respecte le rangement choisi.
+//
+// Colonne déjà renseignée dans la parcelle conservée : elle est gardée, la
+// valeur de la parcelle qui disparaît est signalée au lieu d'écraser une saisie.
+// ---------------------------------------------------------------------------
 
-export const PRECEDENT_N2_FIELDS = [
-  "precedent_N2",
-  "precedentN2",
-  "precedent_n2",
-  "cultureN_2",
-  "cultureN2",
-  "cultureN-2",
-];
-
-export const DEFAULT_PRECEDENT_N2_FIELD = "precedent_N2";
-export const DEFAULT_PRECEDENT_N1_FIELD = "cultureN1";
-
-const CULTURE_FIELDS = [
-  "culture",
-  "Culture",
-  "CULTURE",
-  "cultureN",
-  "cultureN_0",
-  "cultureN0",
-  "code_culture",
-  "codeCulture",
-  "code",
-];
+/** Toutes les clés de culture et de précision, quel que soit l'alias. */
+const CULTURE_PROPERTY_KEYS = new Set(
+  CULTURE_COLUMNS.flatMap((col) => [...col.readKeys, ...col.precisionReadKeys])
+);
 
 const normalizeValue = (value) => {
   if (value == null) return null;
   const text = String(value).trim();
   return text.length ? text : null;
-};
-
-const resolvePropertyKey = (properties, key) => {
-  if (!properties || !key) return null;
-  if (Object.prototype.hasOwnProperty.call(properties, key)) {
-    return normalizeValue(properties[key]);
-  }
-  const lowered = String(key).toLowerCase();
-  const matched = Object.keys(properties).find(
-    (prop) => prop.toLowerCase() === lowered
-  );
-  if (!matched) return null;
-  return normalizeValue(properties[matched]);
-};
-
-const findExistingPropertyKey = (properties, fields) => {
-  if (!properties) return null;
-  for (const field of fields) {
-    if (Object.prototype.hasOwnProperty.call(properties, field)) return field;
-    const lowered = field.toLowerCase();
-    const matched = Object.keys(properties).find(
-      (prop) => prop.toLowerCase() === lowered
-    );
-    if (matched) return matched;
-  }
-  return null;
-};
-
-const findFirstValue = (properties, fields) => {
-  for (const field of fields) {
-    const value = resolvePropertyKey(properties, field);
-    if (value != null) return value;
-  }
-  return null;
 };
 
 const isEmptyValue = (value) => {
@@ -83,8 +45,18 @@ const isEmptyValue = (value) => {
   return false;
 };
 
+/**
+ * Fusionne les attributs NON culturaux : la parcelle conservée garde les siens,
+ * l'ancienne ne sert qu'à combler les trous (nom, îlot, type de sol…).
+ * Les colonnes de cultures sont volontairement exclues : elles sont replacées
+ * ensuite, décalées du bon nombre d'années.
+ */
 const mergeParcelleProperties = (newProps, oldProps) => {
-  const merged = { ...(oldProps || {}) };
+  const merged = {};
+  Object.entries(oldProps || {}).forEach(([key, value]) => {
+    if (CULTURE_PROPERTY_KEYS.has(key)) return;
+    merged[key] = value;
+  });
   Object.entries(newProps || {}).forEach(([key, value]) => {
     if (isEmptyValue(value)) {
       if (!Object.prototype.hasOwnProperty.call(merged, key)) {
@@ -119,41 +91,61 @@ export const buildParcellesByYearFromFeatures = (features) => {
   return grouped;
 };
 
+/** Culture de l'année de la parcelle (colonne N), `null` si absente. */
+export const getOldYearCulture = (oldFeature) =>
+  normalizeValue(readCultureValue(oldFeature?.properties, getCultureColumn("current")));
+
+/** Antécédent le plus récent de la parcelle (N-1, à défaut N-2). */
 export const getOldYearPrevious = (oldFeature) => {
-  const properties = oldFeature?.properties || null;
-  if (!properties) return null;
+  const props = oldFeature?.properties;
   return (
-    findFirstValue(properties, PRECEDENT_N1_FIELDS) ??
-    findFirstValue(properties, PRECEDENT_N2_FIELDS)
+    normalizeValue(readCultureValue(props, getCultureColumn("prev1"))) ??
+    normalizeValue(readCultureValue(props, getCultureColumn("prev2")))
   );
 };
 
-export const getOldYearCulture = (oldFeature) => {
-  const properties = oldFeature?.properties || null;
-  if (!properties) return null;
-  return findFirstValue(properties, CULTURE_FIELDS);
-};
-
-export const getTargetPreviousField = (newFeature) => {
-  const properties = newFeature?.properties || null;
-  return (
-    findExistingPropertyKey(properties, PRECEDENT_N2_FIELDS) ||
-    DEFAULT_PRECEDENT_N2_FIELD
-  );
-};
-
-export const getTargetPreviousFieldN1 = (newFeature) => {
-  const properties = newFeature?.properties || null;
-  return (
-    findExistingPropertyKey(properties, PRECEDENT_N1_FIELDS) ||
-    DEFAULT_PRECEDENT_N1_FIELD
-  );
-};
-
+/** Valeur de précédent à afficher dans une infobulle de carte. */
 export const resolvePreviousDisplayValue = (properties) =>
-  findFirstValue(properties, PRECEDENT_N2_FIELDS) ??
-  findFirstValue(properties, PRECEDENT_N1_FIELDS);
+  normalizeValue(readCultureValue(properties, getCultureColumn("prev1"))) ??
+  normalizeValue(readCultureValue(properties, getCultureColumn("prev2")));
 
+/**
+ * Verse les colonnes de cultures de `oldProps` dans `baseProps`, colonne pour
+ * colonne : N reste en N, N-1 reste en N-1. Une colonne déjà renseignée dans la
+ * parcelle conservée n'est pas touchée, le conflit est signalé.
+ */
+const transferCultureHistory = (baseProps, oldProps, warn, context) => {
+  let merged = baseProps;
+  CULTURE_COLUMNS.forEach((column) => {
+    const value = readCultureValue(oldProps, column);
+    if (!value) return;
+
+    const existing = readCultureValue(merged, column);
+    if (existing) {
+      if (existing !== value) {
+        warn("Fusion millésimes : colonne déjà renseignée, valeur non reportée.", {
+          ...context,
+          colonne: column.label,
+          conservee: existing,
+          ignoree: value,
+        });
+      }
+      return;
+    }
+    merged = setCulture(merged, column, value, readCulturePrecision(oldProps, column));
+  });
+  return merged;
+};
+
+/**
+ * Applique les correspondances validées : chaque parcelle de `oldYear` verse ses
+ * colonnes de cultures dans la parcelle de `newYear` qui lui est associée, puis
+ * disparaît. Les colonnes ne bougent pas d'un cran.
+ *
+ * Retourne `{ parcellesByYear, removedOldKeys, updatedNewByKey, error }`.
+ * `error` est renseigné — et rien n'est modifié — si les deux années sont la
+ * même, cas où il n'y a rien à fusionner.
+ */
 export const applyCorrespondencesAndMerge = ({
   parcellesByYear,
   oldYear,
@@ -168,6 +160,15 @@ export const applyCorrespondencesAndMerge = ({
   const newCollection = current?.[newYear];
   if (!oldCollection || !newCollection) {
     return { parcellesByYear: current };
+  }
+
+  // Aucune contrainte d'ordre entre les deux années : les colonnes ne sont pas
+  // décalées, fusionner un millésime plus récent dans un plus ancien reste
+  // cohérent. Seule la fusion d'une année avec elle-même n'a pas de sens.
+  if (String(oldYear) === String(newYear)) {
+    const error = "L'année conservée et l'année qui disparaît sont identiques.";
+    warn(`Fusion millésimes : ${error}`, { oldYear, newYear });
+    return { parcellesByYear: current, error };
   }
 
   const oldFeatures = Array.isArray(oldCollection.features) ? oldCollection.features : [];
@@ -203,29 +204,23 @@ export const applyCorrespondencesAndMerge = ({
     }
     newKeySources.set(newKey, oldKey);
 
-    const oldCulture = getOldYearCulture(oldFeature);
-    const oldPrevious = getOldYearPrevious(oldFeature, oldYear, newYear);
-    const mergedProperties = mergeParcelleProperties(
-      newFeature.properties || {},
-      oldFeature.properties || {}
-    );
-    if (oldCulture != null) {
-      const targetField = getTargetPreviousFieldN1(newFeature);
-      if (resolvePropertyKey(mergedProperties, targetField) == null) {
-        mergedProperties[targetField] = oldCulture;
-      }
-    }
-    if (oldPrevious != null) {
-      const targetField = getTargetPreviousField(newFeature, oldYear, newYear);
-      if (resolvePropertyKey(mergedProperties, targetField) == null) {
-        mergedProperties[targetField] = oldPrevious;
-      }
-    }
+    const oldProps = oldFeature.properties || {};
+    // La parcelle conservée peut déjà avoir servi de cible : on repart de sa
+    // version fusionnée, sinon la seconde fusion écraserait la première.
+    const baseFeature = updatedNew.get(String(newKey)) ?? newFeature;
+    let mergedProperties = mergeParcelleProperties(baseFeature.properties || {}, oldProps);
+    mergedProperties = transferCultureHistory(mergedProperties, oldProps, warn, {
+      oldYear,
+      newYear,
+      oldKey,
+      newKey,
+    });
 
     updatedNew.set(String(newKey), {
       ...newFeature,
       properties: {
         ...mergedProperties,
+        annee: newFeature.properties?.annee ?? newYear,
         matchMergedFromYear: oldYear,
       },
     });
