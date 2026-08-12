@@ -37,6 +37,7 @@ import {
   getFeatureId,
 } from "../../domain/parcelles/fusion";
 import { getFeatureKey } from "../../utils/parcelleMatching";
+import { featureCollectionsEqual } from "../../utils/featureCollectionEquality";
 import {
   clearParcellesGeojson,
   saveParcellesGeojson,
@@ -193,7 +194,6 @@ export default function ParcellesEditorMap({ mapMode, onMapModeChange, onOpenGui
     selectFeatureOnMap,
     setDrawFeatures,
     mapInitError,
-    drawReady,
   } = useMapInitialization();
   const {
     parcellesCollection,
@@ -258,13 +258,16 @@ export default function ParcellesEditorMap({ mapMode, onMapModeChange, onOpenGui
   const drawLayerAppliedFiltersRef = useRef(new Map());
   const toolbarScrollRef = useRef(null);
   const [backendReady, setBackendReady] = useState(false);
-  const lastSavedPayloadRef = useRef("");
-  const lastSyncedPayloadRef = useRef("");
+  // Dernières collections poussées vers le backend et vers le store. Comparées
+  // structurellement (`featureCollectionsEqual`) et non par sérialisation : deux
+  // collections identiques produites par des codes différents ne donnent pas la
+  // même chaîne JSON, et la garde ne retenait alors jamais rien.
+  const lastSavedPayloadRef = useRef(null);
+  const lastSyncedPayloadRef = useRef(null);
   const hasHydratedRef = useRef(false);
   const isUnmountingRef = useRef(false);
   const drawSyncRef = useRef(false);
   const drawSyncEventRef = useRef(null);
-  const suppressDrawSyncRef = useRef(false);
   const emptyParcellesCollection = useMemo(
     () => ({ type: "FeatureCollection", features: [] }),
     []
@@ -463,12 +466,28 @@ export default function ParcellesEditorMap({ mapMode, onMapModeChange, onOpenGui
     }
   }, []);
 
+  /**
+   * Hydratation initiale du draw depuis le parcellaire stocké.
+   *
+   * Elle n'a lieu QU'UNE FOIS. Auparavant l'effet se redéclenchait à chaque
+   * changement du store, et le store était lui-même alimenté par l'effet
+   * inverse (`features` → store, plus bas) : les deux se réécrivaient sans fin.
+   * La garde censée arrêter le cycle comparait deux chaînes JSON construites par
+   * des codes différents — ordre des clés distinct, et propriétés ajoutées au
+   * passage par `normalizeParcellesCollection` (`__id`, `culture`, `precedent`…) —
+   * donc jamais égales. D'où une parcelle supprimée qui réapparaissait, un
+   * compteur de parcelles qui oscillait et les filtres qui clignotaient.
+   *
+   * Les remises à zéro et les imports poussent explicitement dans le draw
+   * (`setDrawFeatures`), ils n'ont pas besoin de cet effet.
+   */
   useEffect(() => {
     if (parcellesLoading) return;
+    if (hasHydratedRef.current) return;
     const nextCollection = parcellesCollection || emptyParcellesCollection;
     setDrawFeatures(nextCollection);
-    lastSavedPayloadRef.current = JSON.stringify(nextCollection);
-    lastSyncedPayloadRef.current = JSON.stringify(nextCollection);
+    lastSavedPayloadRef.current = nextCollection;
+    lastSyncedPayloadRef.current = nextCollection;
     hasHydratedRef.current = true;
     setBackendReady(true);
   }, [
@@ -499,8 +518,8 @@ export default function ParcellesEditorMap({ mapMode, onMapModeChange, onOpenGui
 
   const handleResetParcelles = useCallback(async () => {
     setDrawFeatures(emptyParcellesCollection);
-    lastSavedPayloadRef.current = JSON.stringify(emptyParcellesCollection);
-    lastSyncedPayloadRef.current = JSON.stringify(emptyParcellesCollection);
+    lastSavedPayloadRef.current = emptyParcellesCollection;
+    lastSyncedPayloadRef.current = emptyParcellesCollection;
     resetParcellesStore();
     try {
       await clearParcellesGeojson();
@@ -518,20 +537,14 @@ export default function ParcellesEditorMap({ mapMode, onMapModeChange, onOpenGui
     if (!backendReady) return;
     const controller = new AbortController();
     const timeout = setTimeout(() => {
-      const payload = {
-        type: "FeatureCollection",
-        features: features.map((feature) => ({
-          type: "Feature",
-          id: feature.id,
-          geometry: feature.geometry,
-          properties: feature.properties || {},
-        })),
-      };
-      const serialized = JSON.stringify(payload);
-      if (serialized === lastSavedPayloadRef.current) return;
+      const payload = buildCollectionFromFeatures(features);
+      // Comparaison structurelle et non textuelle : deux collections identiques
+      // sérialisées par des codes différents ne donnent pas la même chaîne, et
+      // l'enregistrement repartait alors à chaque rendu.
+      if (featureCollectionsEqual(payload, lastSavedPayloadRef.current)) return;
       saveParcellesGeojson(features, controller.signal)
         .then((collection) => {
-          lastSavedPayloadRef.current = JSON.stringify(collection);
+          lastSavedPayloadRef.current = collection;
         })
         .catch((error) => {
           const message = error instanceof Error ? error.message : "Erreur inconnue";
@@ -543,37 +556,33 @@ export default function ParcellesEditorMap({ mapMode, onMapModeChange, onOpenGui
       controller.abort();
       clearTimeout(timeout);
     };
-  }, [backendReady, features]);
+  }, [backendReady, buildCollectionFromFeatures, features]);
 
+  /**
+   * Report des parcelles vers le store. Sens unique : le store n'est jamais
+   * relu pour réalimenter le draw (voir l'effet d'hydratation plus haut), ce qui
+   * garantit qu'aucun cycle ne peut se former.
+   */
   useEffect(() => {
     if (!hasHydratedRef.current) return;
     if (isUnmountingRef.current) return;
     const payload = buildCollectionFromFeatures(features);
-    const serialized = JSON.stringify(payload);
-    if (serialized === lastSyncedPayloadRef.current) return;
+    if (featureCollectionsEqual(payload, lastSyncedPayloadRef.current)) return;
     const hasFeatures = payload.features.length > 0;
     const storeHasFeatures = (parcellesCollection?.features?.length ?? 0) > 0;
     const isFromDraw = drawSyncRef.current;
     const lastDrawEvent = drawSyncEventRef.current;
     drawSyncRef.current = false;
     drawSyncEventRef.current = null;
+    // Un passage à zéro parcelle qui ne vient ni du draw ni d'une suppression
+    // est un artefact de montage, pas une intention : on ne vide pas le store.
     if (!hasFeatures && storeHasFeatures && !isFromDraw && lastDrawEvent !== "draw.delete") {
       return;
     }
-    lastSyncedPayloadRef.current = serialized;
+    lastSyncedPayloadRef.current = payload;
     setFeatureCollection(payload);
-
-    if (!isFromDraw && drawReady) {
-      const draw = drawRef.current;
-      if (draw && typeof draw.set === "function") {
-        suppressDrawSyncRef.current = true;
-        draw.set(payload);
-      }
-    }
   }, [
     buildCollectionFromFeatures,
-    drawReady,
-    drawRef,
     features,
     parcellesCollection,
     setFeatureCollection,
@@ -593,7 +602,7 @@ export default function ParcellesEditorMap({ mapMode, onMapModeChange, onOpenGui
     }
     if (!data) return;
     const payload = buildCollectionFromFeatures(data?.features || []);
-    lastSyncedPayloadRef.current = JSON.stringify(payload);
+    lastSyncedPayloadRef.current = payload;
     setFeatureCollection(payload);
   }, [buildCollectionFromFeatures, drawRef, setFeatureCollection]);
 
@@ -601,10 +610,6 @@ export default function ParcellesEditorMap({ mapMode, onMapModeChange, onOpenGui
     const map = mapRef.current;
     if (!map) return;
     const markDrawSync = (event) => {
-      if (suppressDrawSyncRef.current) {
-        suppressDrawSyncRef.current = false;
-        return;
-      }
       drawSyncRef.current = true;
       drawSyncEventRef.current = event?.type || "draw.update";
     };
@@ -915,6 +920,26 @@ export default function ParcellesEditorMap({ mapMode, onMapModeChange, onOpenGui
     const keptYear = leftYearValue;
     const disappearingYear = rightYearValue;
 
+    // Ce qui n'est associé à rien est supprimé sans être fusionné : on l'annonce
+    // avant, l'opération n'ayant pas de retour arrière.
+    const matchedKeys = new Set(
+      rows.map((row) => String(row?.disappearingKey || "")).filter(Boolean)
+    );
+    const disappearingFeatures =
+      buildParcellesByYearFromFeatures(features || [])[disappearingYear]?.features || [];
+    const orphanCount = disappearingFeatures.filter(
+      (feature, index) => !matchedKeys.has(String(getFeatureKey(feature, index)))
+    ).length;
+    if (orphanCount > 0) {
+      const suite = orphanCount > 1 ? "s" : "";
+      const confirme = window.confirm(
+        `${orphanCount} parcelle${suite} de ${disappearingYear} n'${orphanCount > 1 ? "ont" : "a"} aucune correspondance : ` +
+          `elle${suite} ser${orphanCount > 1 ? "ont" : "a"} supprimée${suite} sans que ses cultures soient reportées.\n\n` +
+          "Continuer ?"
+      );
+      if (!confirme) return false;
+    }
+
     const correspondancesValidated = {};
     const matchesPayload = rows.flatMap((row) => {
       if (!row?.disappearingKey || !row?.keptKey) return [];
@@ -938,6 +963,7 @@ export default function ParcellesEditorMap({ mapMode, onMapModeChange, onOpenGui
           parcellesByYear: mergedParcellesByYear,
           removedOldKeys,
           updatedNewByKey,
+          error,
         } =
           applyCorrespondencesAndMerge({
             parcellesByYear,
@@ -946,6 +972,18 @@ export default function ParcellesEditorMap({ mapMode, onMapModeChange, onOpenGui
             correspondancesValidated,
             dropOldYear: true,
           });
+
+        if (error) return next;
+
+        // Les clés de correspondance sont calculées sur l'index au sein de
+        // l'année, pas de la liste complète : pour une parcelle sans `id`, un
+        // index global donnerait une clé qui ne correspondrait à rien.
+        const keyByFeature = new Map();
+        Object.values(parcellesByYear).forEach((collection) => {
+          (collection?.features || []).forEach((feature, index) => {
+            keyByFeature.set(feature, getFeatureKey(feature, index));
+          });
+        });
 
         const mergedById = new Map();
         const removedOldKeySet = removedOldKeys ?? new Set();
@@ -960,7 +998,7 @@ export default function ParcellesEditorMap({ mapMode, onMapModeChange, onOpenGui
 
         return next
           .map((feature, index) => {
-            const featureKey = getFeatureKey(feature, index);
+            const featureKey = keyByFeature.get(feature) ?? getFeatureKey(feature, index);
             if (removedOldKeySet.has(String(featureKey))) {
               return null;
             }
@@ -1231,13 +1269,19 @@ export default function ParcellesEditorMap({ mapMode, onMapModeChange, onOpenGui
                   <h2 className="fp-empty__title">Aucun parcellaire chargé</h2>
                   <p className="fp-hint">
                     Commencez par importer votre parcellaire, ou dessinez directement vos
-                    parcelles sur la carte. Le format est détecté automatiquement et rien
-                    n'est envoyé sur Internet.
+                    parcelles sur la carte. Le format est détecté automatiquement et votre
+                    fichier est lu sur votre poste, sans être envoyé nulle part. Les fonds
+                    de carte, le RPG, la toponymie IGN et le type de sol, eux, interrogent
+                    des services en ligne.
                   </p>
 
                   <div className="fp-format-list">
                     {IMPORT_FORMATS.map((format) => (
-                      <span key={format.id} className="fp-badge" title={format.description}>
+                      <span
+                        key={format.id}
+                        className="fp-badge"
+                        title={[format.description, format.limites].filter(Boolean).join("\n")}
+                      >
                         {format.label}
                       </span>
                     ))}
@@ -1458,6 +1502,52 @@ export default function ParcellesEditorMap({ mapMode, onMapModeChange, onOpenGui
             <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "12px 16px 20px" }}>
               {activeTab === "parcelles" && (
                 <>
+                  {/* Filtres d'affichage : ils commandent la carte et le tableau
+                      ensemble, et donc la portée des actions en série — décaler
+                      les cultures d'un millésime ne doit pas toucher les autres.
+                      La barre reste en place dès qu'il y a une parcelle : la faire
+                      dépendre du nombre d'années la faisait apparaître et
+                      disparaître au gré des états transitoires. */}
+                  {features.length > 0 && (
+                    <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
+                      <label style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 6 }}>
+                        Année
+                        <select
+                          value={parcelleYearFilter}
+                          onChange={(event) => setParcelleYearFilter(event.target.value)}
+                          style={{ padding: "4px 6px", border: "1px solid #d1d5db", borderRadius: 6, fontSize: 12 }}
+                        >
+                          <option value="all">Toutes ({features.length})</option>
+                          {yearOptions.years.map((year) => (
+                            <option key={year} value={String(year)}>{year}</option>
+                          ))}
+                          {yearOptions.hasUnknown ? <option value="unknown">Sans année</option> : null}
+                        </select>
+                      </label>
+                      {groupOptions.groups.length > 0 && (
+                        <label style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 6 }}>
+                          Groupe
+                          <select
+                            value={parcelleGroupFilter}
+                            onChange={(event) => setParcelleGroupFilter(event.target.value)}
+                            style={{ padding: "4px 6px", border: "1px solid #d1d5db", borderRadius: 6, fontSize: 12 }}
+                          >
+                            <option value="all">Tous</option>
+                            {groupOptions.groups.map((group) => (
+                              <option key={group} value={group}>{group}</option>
+                            ))}
+                            {groupOptions.hasUngrouped ? <option value="ungrouped">Sans groupe</option> : null}
+                          </select>
+                        </label>
+                      )}
+                      {visibleFeatures.length !== features.length ? (
+                        <span style={{ fontSize: 12, color: "#b45309" }}>
+                          {visibleFeatures.length} / {features.length} parcelles affichées
+                        </span>
+                      ) : null}
+                    </div>
+                  )}
+
                   <ParcelleEditor
                     features={features}
                     visibleFeatures={visibleFeatures}

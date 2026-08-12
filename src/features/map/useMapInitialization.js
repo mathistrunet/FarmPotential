@@ -6,6 +6,7 @@ import "@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css";
 import MultipleSelectionMode from "./multipleSelectionMode.js";
 
 import { useRasterLayers } from "./useRasterLayers";
+import { readPolygonsFromDraw } from "./drawFeatures";
 import { buildError, ERROR_CODES } from "../../utils/errors";
 
 if (typeof window !== "undefined") window.mapboxgl = maplibregl;
@@ -32,54 +33,60 @@ const YEAR_COLOR_PALETTE = [
 const DEFAULT_POLYGON_FILL = "#18A0FB";
 const DEFAULT_POLYGON_LINE = "#0066CC";
 
+
 export function useMapInitialization() {
   const mapRef = useRef(null);
   const drawRef = useRef(null);
   const pendingFeaturesRef = useRef(null);
   const drawListenersRef = useRef(null);
   const [features, setFeaturesState] = useState([]);
+  // Miroir synchrone de `features`. Il sert à calculer une mise à jour
+  // fonctionnelle *hors* de l'updater React : `draw.set` est un effet de bord, et
+  // un updater doit rester pur — React l'invoque deux fois en StrictMode, ce qui
+  // poussait deux fois dans Mapbox Draw et laissait le drapeau de garde dans un
+  // état incohérent. Le miroir permet aussi d'enchaîner plusieurs mises à jour
+  // dans le même tick sans perdre la précédente.
+  const featuresRef = useRef([]);
   const [selectedId, setSelectedId] = useState(null);
   const [mapInitError, setMapInitError] = useState(null);
   const [drawReady, setDrawReady] = useState(false);
   const syncingDrawRef = useRef(false);
   const ensureRaster = useRasterLayers();
 
+  const applyFeatures = useCallback((list) => {
+    const safeList = Array.isArray(list) ? list : [];
+    featuresRef.current = safeList;
+    setFeaturesState(safeList);
+  }, []);
+
   const syncFeaturesFromDraw = useCallback((drawInstance) => {
     const draw = drawInstance || drawRef.current;
     if (!draw || syncingDrawRef.current) return;
     syncingDrawRef.current = true;
     try {
-      const data = draw.getAll();
-      const polys = (data && data.features ? data.features : [])
-        .filter((feature) => feature.geometry?.type === "Polygon")
-        .map((feature) => ({
-          ...feature,
-          properties: feature.properties || {},
-        }));
-      setFeaturesState(polys);
+      applyFeatures(readPolygonsFromDraw(draw));
     } finally {
       syncingDrawRef.current = false;
     }
-  }, []);
+  }, [applyFeatures]);
 
   const setFeatures = useCallback((nextValue) => {
-    setFeaturesState((prev) => {
-      const next = typeof nextValue === "function" ? nextValue(prev) : nextValue;
-      const safeNext = Array.isArray(next) ? next : [];
+    const previous = featuresRef.current;
+    const next = typeof nextValue === "function" ? nextValue(previous) : nextValue;
+    const safeNext = Array.isArray(next) ? next : [];
 
-      const draw = drawRef.current;
-      if (draw && !syncingDrawRef.current) {
-        syncingDrawRef.current = true;
-        try {
-          draw.set({ type: "FeatureCollection", features: safeNext });
-        } finally {
-          syncingDrawRef.current = false;
-        }
+    const draw = drawRef.current;
+    if (draw && !syncingDrawRef.current) {
+      syncingDrawRef.current = true;
+      try {
+        draw.set({ type: "FeatureCollection", features: safeNext });
+      } finally {
+        syncingDrawRef.current = false;
       }
+    }
 
-      return safeNext;
-    });
-  }, []);
+    applyFeatures(safeNext);
+  }, [applyFeatures]);
 
   const setDrawFeatures = useCallback(
     (collection) => {
@@ -494,11 +501,7 @@ useEffect(() => {
 
       const updateList = () => {
         if (syncingDrawRef.current) return;
-        const data = draw.getAll();
-        const polys = (data && data.features ? data.features : [])
-          .filter((f) => f.geometry?.type === "Polygon")
-          .map((f) => ({ ...f, properties: f.properties || {} }));
-        setFeaturesState(polys);
+        applyFeatures(readPolygonsFromDraw(draw));
       };
 
       if (pendingFeaturesRef.current) {
@@ -568,7 +571,7 @@ useEffect(() => {
         // ignore
       }
     };
-  }, [ensureRaster, syncFeaturesFromDraw]);
+  }, [applyFeatures, ensureRaster, syncFeaturesFromDraw]);
 
   return {
     mapRef,
