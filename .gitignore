@@ -34,3 +34,10 @@ dist-ssr
 data/layer-update-check.json
 data/layer-state.json
 FarmPotential.exe.obsolete
+
+# État de travail local : le parcellaire en cours et les caches de sol sont
+# propres au poste et contiennent les coordonnées des parcelles de l'utilisateur.
+# Le serveur les recrée vides au démarrage — ils n'ont rien à faire dans le dépôt.
+data/parcelles.geojson
+data/parcel-soilgrids-cache.json
+data/parcel-wrb-cache.json

@@ -22,43 +22,62 @@ export const FORMAT_KML = "kml";
 export const FORMAT_KMZ = "kmz";
 export const FORMAT_GEOPACKAGE = "gpkg";
 
-/** Formats proposés à l'utilisateur (guide, écran d'accueil, boîte d'import). */
+/**
+ * Formats proposés à l'utilisateur (guide, écran d'accueil, boîte d'import).
+ *
+ * Les descriptions énoncent aussi ce qui n'est PAS repris : une limite tue
+ * moins de temps qu'un import qui aboutit à un parcellaire incomplet sans que
+ * rien ne le signale.
+ *
+ * Règle commune à tous les formats : seules les surfaces sont conservées
+ * (polygones et multipolygones), les points et lignes sont écartés.
+ */
 export const IMPORT_FORMATS = [
   {
     id: FORMAT_TELEPAC_XML,
     label: "XML Télépac",
     extensions: [".xml"],
     description: "Export de déclaration PAC (Télépac / MesParcelles).",
+    limites: "Îlots et parcelles, avec leur culture déclarée.",
   },
   {
     id: FORMAT_SHAPEFILE_ZIP,
     label: "Shapefile",
     extensions: [".zip"],
     description: "Archive .zip contenant .shp, .dbf, .shx et .prj (ou dossier non zippé).",
+    limites:
+      "Lambert-93, Stéréo70 et Web Mercator sont reprojetés en WGS84 ; sans .prj, la projection est devinée d'après les coordonnées.",
   },
   {
     id: FORMAT_GEOJSON,
     label: "GeoJSON",
     extensions: [".geojson", ".json"],
     description: "FeatureCollection GeoJSON, en WGS84 ou en projection métrique.",
+    limites: "Une Feature seule ou une géométrie nue sont également acceptées.",
   },
   {
     id: FORMAT_KML,
     label: "KML / KMZ",
     extensions: [".kml", ".kmz"],
     description: "Tracés Google Earth et exports d'outils de conseil.",
+    limites:
+      "Seuls les repères contenant un polygone sont repris ; les attributs viennent du nom et des ExtendedData.",
   },
   {
     id: FORMAT_GEOPACKAGE,
     label: "GeoPackage",
     extensions: [".gpkg"],
     description: "Base GeoPackage contenant une couche de parcelles.",
+    limites: "Une seule couche est lue : la première table géométrique du fichier.",
   },
   {
     id: FORMAT_CSV,
     label: "CSV",
     extensions: [".csv"],
-    description: "Tableau de parcelles avec une colonne de géométrie (WKT / GeoJSON).",
+    description:
+      "Tableau de parcelles avec une colonne de géométrie (Geometrie, geometry, geom, the_geom, wkt).",
+    limites:
+      "La cellule accepte « lon,lat lon,lat… », du WKT ou une géométrie GeoJSON. Seul le contour extérieur du premier polygone est repris.",
   },
 ];
 

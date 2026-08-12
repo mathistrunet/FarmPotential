@@ -9,6 +9,7 @@ import {
 } from "../utils/cultureLabels";
 import { buildError, ERROR_CODES } from "../utils/errors";
 import { withBasePath } from "../utils/publicBase";
+import { getCultureColumn, readCultureValue } from "../domain/parcelles/cultureColumns";
 
 const CSV_HEADERS = [
   "Secteur",
@@ -226,12 +227,21 @@ function parseSurfaceValue(raw) {
   return Number.isNaN(parsed) ? null : parsed;
 }
 
-function parseGeometry(raw) {
-  const text = raw == null ? "" : String(raw).trim();
-  if (!text) return null;
+/** Ferme l'anneau et écarte ce qui ne forme pas une surface. */
+function finalizeRing(ring) {
+  if (!Array.isArray(ring) || ring.length < 3) return null;
+  const [firstLon, firstLat] = ring[0];
+  const [lastLon, lastLat] = ring[ring.length - 1];
+  if (firstLon !== lastLon || firstLat !== lastLat) {
+    ring.push([firstLon, firstLat]);
+  }
+  return ring;
+}
+
+/** Format Assolia natif : « lon,lat lon,lat … ». */
+function parseRingFromPairs(text) {
   const ring = [];
-  const pairs = text.split(/\s+/);
-  for (const pair of pairs) {
+  for (const pair of text.split(/\s+/)) {
     const [lonStr, latStr] = pair.split(",");
     if (!lonStr || !latStr) continue;
     const lon = parseFloat(lonStr);
@@ -239,13 +249,82 @@ function parseGeometry(raw) {
     if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue;
     ring.push([lon, lat]);
   }
-  if (ring.length < 3) return null;
-  const [firstLon, firstLat] = ring[0];
-  const [lastLon, lastLat] = ring[ring.length - 1];
-  if (firstLon !== lastLon || firstLat !== lastLat) {
-    ring.push([firstLon, firstLat]);
+  return finalizeRing(ring);
+}
+
+/** POLYGON((x y, x y…)) et MULTIPOLYGON(((…))) — seul l'anneau extérieur est retenu. */
+function parseRingFromWkt(text) {
+  const upper = text.toUpperCase();
+  if (!upper.startsWith("POLYGON") && !upper.startsWith("MULTIPOLYGON")) return null;
+  const premier = text.slice(text.indexOf("(")).match(/\(\s*(-?\d[^()]*)\)/);
+  if (!premier) return null;
+  const ring = [];
+  for (const couple of premier[1].split(",")) {
+    const [lonStr, latStr] = couple.trim().split(/\s+/);
+    const lon = parseFloat(lonStr);
+    const lat = parseFloat(latStr);
+    if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue;
+    ring.push([lon, lat]);
   }
-  return ring;
+  return finalizeRing(ring);
+}
+
+/** Géométrie GeoJSON, ou Feature enveloppant une géométrie. */
+function parseRingFromGeoJson(text) {
+  if (!text.startsWith("{")) return null;
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  const geometry = parsed?.type === "Feature" ? parsed.geometry : parsed;
+  const coords = geometry?.coordinates;
+  if (geometry?.type === "Polygon" && Array.isArray(coords?.[0])) {
+    return finalizeRing([...coords[0]]);
+  }
+  if (geometry?.type === "MultiPolygon" && Array.isArray(coords?.[0]?.[0])) {
+    return finalizeRing([...coords[0][0]]);
+  }
+  return null;
+}
+
+/**
+ * Anneau extérieur d'une cellule de géométrie.
+ *
+ * Trois écritures acceptées : le format Assolia natif (« lon,lat lon,lat… »),
+ * le WKT et la géométrie GeoJSON. L'écran d'accueil annonce WKT et GeoJSON
+ * depuis toujours, mais seul le format Assolia était lu : un CSV produit par un
+ * SIG s'importait sans lever d'erreur et sans créer la moindre parcelle.
+ */
+function parseGeometry(raw) {
+  const text = raw == null ? "" : String(raw).trim();
+  if (!text) return null;
+  return (
+    parseRingFromGeoJson(text) ??
+    parseRingFromWkt(text) ??
+    parseRingFromPairs(text)
+  );
+}
+
+// Intitulés reconnus pour la colonne de géométrie, après normalisation
+// (minuscules, sans accent ni séparateur).
+const GEOMETRY_COLUMN_KEYS = [
+  "geometrie",
+  "geometry",
+  "geom",
+  "thegeom",
+  "wkt",
+  "geojson",
+  "geometriewkt",
+];
+
+function readGeometryCell(map) {
+  for (const key of GEOMETRY_COLUMN_KEYS) {
+    const value = map.get(key);
+    if (value != null && String(value).trim() !== "") return value;
+  }
+  return null;
 }
 
 function formatGeometry(feature) {
@@ -264,15 +343,13 @@ function normalizeRowMap(row) {
   return map;
 }
 
-// Clés de repli pour les cultures précédentes N-1..N-4, alignées sur l'affichage de
-// ParcelleEditor. Les imports Télépac/shapefile stockent le précédent dans
-// culture_prec*/CULT_PREC* (et non cultureN_x), il faut donc les lire aussi à l'export.
-const CULTURE_PREV_KEYS = [
-  ["cultureN_1", "cultureN1", "culture_prec", "CULT_PREC"],
-  ["cultureN_2", "cultureN2", "culture_prec2", "CULT_PREC2"],
-  ["cultureN_3", "cultureN3", "culture_prec3", "CULT_PREC3"],
-  ["cultureN_4", "cultureN4", "culture_prec4", "CULT_PREC4"],
-];
+// Clés de repli pour les cultures précédentes N-1..N-4. Elles proviennent de la
+// description unique des colonnes : les imports Télépac/shapefile rangent le
+// précédent sous des alias variés (culture_prec, cultureN1, precedent…), et
+// l'export doit voir exactement ce que le tableau affiche.
+const CULTURE_PREV_KEYS = ["prev1", "prev2", "prev3", "prev4"].map(
+  (id) => getCultureColumn(id).readKeys
+);
 
 // Retourne la première valeur non vide parmi une liste de clés de propriété.
 function firstNonEmptyProp(props, keys) {
@@ -362,14 +439,7 @@ export async function buildParcellesCsv(
     const typeSol =
       props.type_sol ?? props.typeSol ?? props.type_de_sol ?? props.sol ?? "";
     const irrigable = firstNonEmptyProp(props, IRRIGABLE_KEYS);
-    const CULTURE_N_KEYS = ["culture", "Culture", "CULTURE", "cultureN", "cultureN_0", "cultureN0", "code_culture", "codeCulture", "code"];
-    const cultureNRaw = (() => {
-      for (const k of CULTURE_N_KEYS) {
-        const v = props[k];
-        if (v != null && String(v).trim()) return String(v).trim();
-      }
-      return "";
-    })();
+    const cultureNRaw = readCultureValue(props, getCultureColumn("current"));
     const cultureNValue = cultureNRaw ? (labelFromCode(cultureNRaw) || cultureNRaw) : "";
     const cultureNCode = cultureNRaw ? getMetacodeFromValue(cultureNRaw) : "";
     const precN = getPrecisionByYearIndex(props, 0);
@@ -467,7 +537,7 @@ export async function parseParcellesCsvToFeatures(file, options = {}) {
     const cultureN2 = parseCultureValue(map.get("culturen2"), structureLookup);
     const cultureN3 = parseCultureValue(map.get("culturen3"), structureLookup);
     const cultureN4 = parseCultureValue(map.get("culturen4"), structureLookup);
-    const ring = parseGeometry(map.get("geometrie"));
+    const ring = parseGeometry(readGeometryCell(map));
     if (!ring) continue;
 
     const cultureProps = buildCultureProps(
