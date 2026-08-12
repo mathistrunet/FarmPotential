@@ -11,6 +11,14 @@ import {
 import { featureAreaM2 } from "../utils/geometry";
 import { fetchRpgGeoJSON, getCultureLabel, getMapBoundsCRS84 } from "../services/rpg";
 import { RPG_MIN_ZOOM } from "../Front/useRpgLayer";
+import {
+  CULTURE_COLUMNS,
+  clearCulture,
+  hasCultureValue,
+  readCulturePrecision,
+  readCultureValue,
+  setCulture,
+} from "../domain/parcelles/cultureColumns";
 
 
 
@@ -94,60 +102,6 @@ function splitIlotParcelle(rawValue) {
   return { ilot, numero };
 }
 
-const CULTURE_COLUMNS = [
-  {
-    id: "next1",
-    label: "Culture N+1",
-    targetKeys: ["cultureN_plus1", "cultureN+1", "cultureN_+1"],
-  },
-  {
-    id: "current",
-    label: "Culture N",
-    targetKeys: ["cultureN", "cultureN_0", "cultureN0", "culture", "code", "code_culture", "CP_CULTU"],
-  },
-  {
-    id: "prev1",
-    label: "Culture N-1",
-    targetKeys: ["cultureN_1", "cultureN1", "culture_prec", "CULT_PREC"],
-  },
-  {
-    id: "prev2",
-    label: "Culture N-2",
-    targetKeys: ["cultureN_2", "cultureN2", "culture_prec2", "CULT_PREC2"],
-  },
-  {
-    id: "prev3",
-    label: "Culture N-3",
-    targetKeys: ["cultureN_3", "cultureN3", "culture_prec3", "CULT_PREC3"],
-  },
-  {
-    id: "prev4",
-    label: "Culture N-4",
-    targetKeys: ["cultureN_4", "cultureN4", "culture_prec4", "CULT_PREC4"],
-  },
-  {
-    id: "prev5",
-    label: "Culture N-5",
-    targetKeys: ["cultureN_5", "cultureN5", "culture_prec5", "CULT_PREC5"],
-  },
-  {
-    id: "prev6",
-    label: "Culture N-6",
-    targetKeys: ["cultureN_6", "cultureN6", "culture_prec6", "CULT_PREC6"],
-  },
-];
-
-const PRECISION_KEYS = {
-  next1: "precision_n_plus1",
-  current: "precision",
-  prev1: "precision_n1",
-  prev2: "precision_n2",
-  prev3: "precision_n3",
-  prev4: "precision_n4",
-  prev5: "precision_n5",
-  prev6: "precision_n6",
-};
-
 const ADVANCED_COLUMNS = [
   { id: "production_semences", label: "Production semences", type: "bool" },
   { id: "production_fermiers", label: "Production fermiers", type: "bool" },
@@ -165,22 +119,29 @@ const buildEmptyTypedState = () =>
   }, {});
 
 const RPG_AVAILABLE_YEARS = [2024, 2023, 2022, 2021, 2020, 2019, 2018];
-const CULTURE_COLUMN_OFFSETS = {
-  next1: 1,
-  current: 0,
-  prev1: -1,
-  prev2: -2,
-  prev3: -3,
-  prev4: -4,
-  prev5: -5,
-  prev6: -6,
-};
-const RPG_BASE_YEAR_FOR_N = new Date().getFullYear();
 
-const getRpgYearForColumn = (columnId) => {
-  const offset = CULTURE_COLUMN_OFFSETS[columnId];
-  if (offset == null) return null;
-  return RPG_BASE_YEAR_FOR_N + offset;
+/**
+ * Année de campagne représentée par la colonne « Culture N ».
+ *
+ * Elle est lue sur les parcelles (`annee`) et non sur l'horloge : un parcellaire
+ * 2024 ouvert en 2026 doit interroger le RPG 2024 pour sa colonne N. Sans cela,
+ * le bouton « Remplir » des colonnes N et N-1 renvoyait systématiquement
+ * « aucune donnée RPG » puisqu'il visait des millésimes non encore publiés.
+ */
+const resolveBaseYearForN = (features) => {
+  let latest = null;
+  (features || []).forEach((feature) => {
+    const year = Number(feature?.properties?.annee);
+    if (!Number.isFinite(year)) return;
+    if (latest == null || year > latest) latest = year;
+  });
+  return latest ?? new Date().getFullYear();
+};
+
+const getRpgYearForColumn = (columnId, baseYear) => {
+  const column = CULTURE_COLUMNS.find((col) => col.id === columnId);
+  if (!column) return null;
+  return baseYear + column.offset;
 };
 
 function pointInRing(point, ring) {
@@ -456,7 +417,7 @@ const TableRow = React.memo(function TableRow({
           <input
             list={`cultures-col-${col.id}`}
             value={typedByColId[col.id] ?? ""}
-            onChange={(e) => onUpdateCulture(col.id, idKey, e.target.value, col.targetKeys, PRECISION_KEYS[col.id])}
+            onChange={(e) => onUpdateCulture(col.id, idKey, e.target.value)}
             onClick={(e) => e.stopPropagation()}
             style={inputStyle}
           />
@@ -509,6 +470,7 @@ const TableRow = React.memo(function TableRow({
 // ---------------------------------------------------------------------------
 export default function ParcelleEditor({
   features,
+  visibleFeatures = null,
   setFeatures,
   selectedId,
   onSelect,
@@ -569,6 +531,26 @@ export default function ParcelleEditor({
   const [moveKeepSource, setMoveKeepSource] = useState(false);
   const [moveOverwriteDest, setMoveOverwriteDest] = useState(true);
 
+  /**
+   * Lignes affichées, avec leur identifiant de ligne.
+   *
+   * L'identifiant reste calculé sur la liste complète : il sert de clé de cache
+   * pour `typed` et de cible de sélection, il ne doit donc pas bouger quand un
+   * filtre réduit l'affichage. Les filtres de la carte (millésime, groupe)
+   * s'appliquent ici aussi — sans quoi le tableau montrait tous les millésimes
+   * à la fois et les actions en série portaient sur des parcelles hors écran.
+   */
+  const rows = useMemo(() => {
+    const all = (features || []).map((feature, index) => ({
+      feature,
+      idKey: String(feature?.id ?? index),
+    }));
+    if (!Array.isArray(visibleFeatures)) return all;
+    const visibles = new Set(visibleFeatures);
+    return all.filter((row) => visibles.has(row.feature));
+  }, [features, visibleFeatures]);
+
+  const visibleIdKeys = useMemo(() => new Set(rows.map((row) => row.idKey)), [rows]);
 
   const cultureOptions = useMemo(() => {
     const list = [];
@@ -589,12 +571,9 @@ export default function ParcelleEditor({
     return map;
   }, [cultureOptions]);
 
-  const resolveCultureDisplay = useCallback((props, keys, precisionKey) => {
-    const raw = keys
-      .map((key) => props?.[key])
-      .find((value) => value != null && String(value).trim() !== "");
-    if (raw == null) return "";
-    const textValue = String(raw).trim();
+  const resolveCultureDisplay = useCallback((props, column) => {
+    const textValue = readCultureValue(props, column);
+    if (!textValue) return "";
     const lookup = displayLookup.get(textValue.toLowerCase());
     if (lookup) {
       return lookup.display;
@@ -606,7 +585,7 @@ export default function ParcelleEditor({
     const code = codeFromValue || splitFromLabel.code;
     if (code) {
       const candidate =
-        splitFromValue.precision || splitFromLabel.precision || (precisionKey ? props?.[precisionKey] : "");
+        splitFromValue.precision || splitFromLabel.precision || readCulturePrecision(props, column);
       const precision = resolvePrecisionForCode(code, candidate);
       const label = labelFromCode(code, precision) || labelFromCode(code);
       return label || code;
@@ -673,7 +652,7 @@ export default function ParcelleEditor({
         const idKey = ids[idx];
         const props = f.properties || {};
         CULTURE_COLUMNS.forEach((col) => {
-          next[col.id][idKey] = resolveCultureDisplay(props, col.targetKeys, PRECISION_KEYS[col.id]);
+          next[col.id][idKey] = resolveCultureDisplay(props, col);
         });
       });
       return next;
@@ -720,49 +699,40 @@ export default function ParcelleEditor({
     });
   }, [setFeatures]);
 
-  const updateCultureField = useCallback((colId, idKey, rawValue, targetKeys, precisionKey) => {
-    const value = rawValue ?? "";
-    const trimmed = value.trim();
-    let display = value;
+  /**
+   * Saisie d'une cellule de culture.
+   *
+   * Toute frappe est écrite dans la parcelle, y compris un libellé libre absent
+   * du codebook. Auparavant seuls un code reconnu ou une suite de 2 à 10
+   * caractères alphanumériques étaient enregistrés : la cellule affichait
+   * « Luzerne porte-graine » alors que la parcelle restait vide, et la colonne
+   * ressortait vide à l'export. Le pire cas venait des états intermédiaires —
+   * taper « Blé » écrivait « BL » au deuxième caractère, puis plus rien, laissant
+   * ce résidu dans la parcelle.
+   */
+  const updateCultureField = useCallback((colId, idKey, rawValue) => {
+    const column = CULTURE_COLUMNS.find((col) => col.id === colId);
+    if (!column) return;
+    const trimmed = (rawValue ?? "").trim();
+    let display = rawValue ?? "";
 
     if (trimmed === "") {
-      updateFeatureByIdKey(idKey, (props) => {
-        const next = { ...props };
-        targetKeys.forEach((key) => { if (key in next) delete next[key]; });
-        if (precisionKey && precisionKey in next) delete next[precisionKey];
-        return next;
-      });
+      updateFeatureByIdKey(idKey, (props) => clearCulture(props, column));
       display = "";
     } else {
       const parsed = parseCultureInput(trimmed);
       if (parsed.code) {
-        updateFeatureByIdKey(idKey, (props) => {
-          const next = { ...props };
-          targetKeys.forEach((key) => { next[key] = parsed.code; });
-          if (precisionKey) {
-            if (parsed.precision) {
-              next[precisionKey] = parsed.precision;
-            } else {
-              const fallback = resolvePrecisionForCode(parsed.code, "");
-              if (fallback) {
-                next[precisionKey] = fallback;
-              } else if (precisionKey in next) {
-                delete next[precisionKey];
-              }
-            }
-          }
-          return next;
-        });
+        const precision = parsed.precision || resolvePrecisionForCode(parsed.code, "");
+        updateFeatureByIdKey(idKey, (props) => setCulture(props, column, parsed.code, precision));
         display = parsed.display;
       } else if (/^[A-Za-z0-9]{2,10}$/.test(trimmed)) {
         const upper = trimmed.toUpperCase();
-        updateFeatureByIdKey(idKey, (props) => {
-          const next = { ...props };
-          targetKeys.forEach((key) => { next[key] = upper; });
-          if (precisionKey && precisionKey in next) delete next[precisionKey];
-          return next;
-        });
+        updateFeatureByIdKey(idKey, (props) => setCulture(props, column, upper));
         display = upper;
+      } else {
+        // Libellé libre : conservé tel quel plutôt que perdu.
+        updateFeatureByIdKey(idKey, (props) => setCulture(props, column, trimmed));
+        display = rawValue ?? "";
       }
     }
 
@@ -773,7 +743,7 @@ export default function ParcelleEditor({
   }, [updateFeatureByIdKey, parseCultureInput]);
 
   const fillCultureFromRpg = async (column) => {
-    const targetYear = getRpgYearForColumn(column.id);
+    const targetYear = getRpgYearForColumn(column.id, resolveBaseYearForN(features));
     if (!targetYear) {
       alert("Annee RPG inconnue pour cette colonne.");
       return;
@@ -806,8 +776,11 @@ export default function ParcelleEditor({
       }
 
       const rpgIndex = buildRpgIndex(rpgFeatures);
-      const nextFeatures = features.map((feature) => {
+      const nextFeatures = features.map((feature, index) => {
         if (!feature?.geometry) return feature;
+        // Le remplissage suit l'affichage : une parcelle masquée par un filtre
+        // ne doit pas être modifiée à l'insu de l'utilisateur.
+        if (!visibleIdKeys.has(String(feature.id ?? index))) return feature;
         const center = centroid(feature)?.geometry?.coordinates;
         if (!center || !Array.isArray(center)) return feature;
 
@@ -828,19 +801,11 @@ export default function ParcelleEditor({
         const resolvedCode = split.code || resolvedKey;
         if (!resolvedCode) return feature;
 
-        const updatedProps = { ...(feature.properties || {}) };
-        column.targetKeys.forEach((key) => {
-          updatedProps[key] = resolvedCode;
-        });
-        const precisionKey = PRECISION_KEYS[column.id];
-        if (precisionKey) {
-          const resolvedPrecision = resolvePrecisionForCode(resolvedCode, split.precision);
-          if (resolvedPrecision) {
-            updatedProps[precisionKey] = resolvedPrecision;
-          }
-        }
-
-        return { ...feature, properties: updatedProps };
+        const resolvedPrecision = resolvePrecisionForCode(resolvedCode, split.precision);
+        return {
+          ...feature,
+          properties: setCulture(feature.properties, column, resolvedCode, resolvedPrecision),
+        };
       });
 
       setFeatures(nextFeatures);
@@ -850,12 +815,8 @@ export default function ParcelleEditor({
         nextFeatures.forEach((feature, idx) => {
           const idKey = String(feature.id ?? idx);
           const props = feature.properties || {};
-          const raw = column.targetKeys
-            .map((key) => props?.[key])
-            .find((val) => val != null && String(val).trim() !== "");
-          if (raw == null) return;
-          const display = resolveCultureDisplay(props, column.targetKeys, PRECISION_KEYS[column.id]);
-          next[column.id][idKey] = display;
+          if (!hasCultureValue(props, column)) return;
+          next[column.id][idKey] = resolveCultureDisplay(props, column);
         });
         return next;
       });
@@ -891,53 +852,75 @@ export default function ParcelleEditor({
     );
   }, [generalInfo, setFeatures]);
 
+  /**
+   * Applique le déplacement/la suppression d'une colonne de cultures à une
+   * parcelle. Fonction pure, testable et partagée avec le compteur du dialogue.
+   *
+   * Deux règles pour ne jamais détruire une donnée qui n'était pas visée :
+   *  - la source est lue sous tous ses alias, sinon une culture importée sous
+   *    `cultureN1` ou `culture_prec` passait pour absente et la colonne
+   *    destination était vidée « au nom » d'une source vide ;
+   *  - une source vide laisse la destination intacte. Effacer reste possible,
+   *    mais seulement en le demandant explicitement (destination « Aucune »).
+   */
+  const moveCulturesOnProps = useCallback((props, srcDef, destDef) => {
+    const srcValue = readCultureValue(props, srcDef);
+    let next = props;
+
+    if (destDef && srcValue) {
+      const destOccupied = hasCultureValue(next, destDef);
+      if (moveOverwriteDest || !destOccupied) {
+        next = setCulture(next, destDef, srcValue, readCulturePrecision(props, srcDef));
+      }
+    }
+
+    if (!moveKeepSource) {
+      next = clearCulture(next, srcDef);
+    }
+
+    return next;
+  }, [moveKeepSource, moveOverwriteDest]);
+
+  /** Nombre de parcelles affichées que l'opération modifierait réellement. */
+  const moveCulturesImpact = useMemo(() => {
+    const srcDef = CULTURE_COLUMNS.find((c) => c.id === moveSrcCol);
+    if (!srcDef) return { total: rows.length, touched: 0 };
+    const destDef = moveDestCol ? CULTURE_COLUMNS.find((c) => c.id === moveDestCol) : null;
+    let touched = 0;
+    rows.forEach(({ feature }) => {
+      const props = feature?.properties || {};
+      const next = moveCulturesOnProps(props, srcDef, destDef);
+      const changed = CULTURE_COLUMNS.some(
+        (col) => readCultureValue(props, col) !== readCultureValue(next, col)
+      );
+      if (changed) touched += 1;
+    });
+    return { total: rows.length, touched };
+  }, [rows, moveSrcCol, moveDestCol, moveCulturesOnProps]);
+
   const applyMoveCultures = () => {
     const srcDef = CULTURE_COLUMNS.find((c) => c.id === moveSrcCol);
     const destDef = moveDestCol ? CULTURE_COLUMNS.find((c) => c.id === moveDestCol) : null;
     if (!srcDef) return;
 
     setFeatures((prev) =>
-      prev.map((feature) => {
-        const props = { ...(feature.properties || {}) };
-        const srcKey = srcDef.targetKeys[0];
-        const srcPrecKey = PRECISION_KEYS[srcDef.id];
-        const srcValue = props[srcKey];
-        const srcPrec = props[srcPrecKey];
-
-        if (destDef) {
-          const destKey = destDef.targetKeys[0];
-          const destPrecKey = PRECISION_KEYS[destDef.id];
-          const destHasValue = props[destKey] != null && String(props[destKey]).trim() !== "";
-          if (moveOverwriteDest || !destHasValue) {
-            if (srcValue != null && String(srcValue).trim() !== "") {
-              props[destKey] = srcValue;
-              destDef.targetKeys.slice(1).forEach((k) => { props[k] = srcValue; });
-              if (srcPrec != null) props[destPrecKey] = srcPrec;
-              else delete props[destPrecKey];
-            } else {
-              destDef.targetKeys.forEach((k) => { delete props[k]; });
-              delete props[destPrecKey];
-            }
-          }
-        }
-
-        if (!moveKeepSource) {
-          srcDef.targetKeys.forEach((k) => { delete props[k]; });
-          delete props[srcPrecKey];
-        }
-
-        return { ...feature, properties: props };
+      prev.map((feature, index) => {
+        // L'opération porte sur les lignes affichées : avec un filtre de
+        // millésime actif, décaler 2025 ne doit pas décaler aussi 2024.
+        if (!visibleIdKeys.has(String(feature?.id ?? index))) return feature;
+        const props = feature?.properties || {};
+        const nextProps = moveCulturesOnProps(props, srcDef, destDef);
+        if (nextProps === props) return feature;
+        return { ...feature, properties: nextProps };
       })
     );
 
+    // Le cache d'affichage des colonnes touchées est invalidé, l'effet de
+    // reconstruction le recalcule depuis les propriétés à jour.
     setTyped((prev) => {
       const next = { ...prev };
-      if (!moveKeepSource) {
-        next[srcDef.id] = {};
-      }
-      if (destDef) {
-        next[destDef.id] = {};
-      }
+      if (!moveKeepSource) next[srcDef.id] = {};
+      if (destDef) next[destDef.id] = {};
       return next;
     });
 
@@ -1008,6 +991,20 @@ export default function ParcelleEditor({
           {!destIsDifferent && (
             <div style={{ fontSize: 12, color: "#dc2626" }}>La colonne source et destination doivent être différentes.</div>
           )}
+
+          {/* Portée annoncée avant d'agir : l'opération est en série et sans
+              retour arrière, l'utilisateur doit voir ce qu'elle touche. */}
+          <div style={{ fontSize: 12, color: "#374151", background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 6, padding: "8px 10px" }}>
+            {moveCulturesImpact.touched} parcelle{moveCulturesImpact.touched > 1 ? "s" : ""} modifiée
+            {moveCulturesImpact.touched > 1 ? "s" : ""} sur les {moveCulturesImpact.total} affichée
+            {moveCulturesImpact.total > 1 ? "s" : ""}.
+            {moveDestCol ? (
+              <div style={{ marginTop: 4, color: "#6b7280" }}>
+                Les parcelles sans valeur en « {CULTURE_COLUMNS.find((c) => c.id === moveSrcCol)?.label} »
+                gardent leur colonne destination inchangée.
+              </div>
+            ) : null}
+          </div>
 
           <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 4 }}>
             <button
@@ -1257,8 +1254,7 @@ export default function ParcelleEditor({
             </thead>
 
             <tbody>
-              {features.map((f, idx) => {
-                const idKey = String(f.id ?? idx);
+              {rows.map(({ feature: f, idKey }, idx) => {
                 return (
                   <TableRow
                     key={idKey}

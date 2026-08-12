@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import Modal from "../components/Modal";
 import { buildTelepacXML } from "../services/telepacXml";
-import { buildParcellesCsv } from "../services/parcellesCsv";
+import { buildParcellesCsv, loadAssoliaStructureNames } from "../services/parcellesCsv";
 import { buildParcelShapefileZip } from "../services/parcelleShapefile";
 
 const iconStyle = { width: 17, height: 17, display: "inline-block", verticalAlign: "-3px" };
@@ -61,22 +61,30 @@ const inputStyle = {
   fontWeight: 400,
 };
 
+// Chaque description dit ce que le fichier contient ET ce qu'il laisse de côté :
+// les colonnes du tableau ne tiennent pas toutes dans chaque format de sortie, et
+// s'en apercevoir après coup coûte cher.
 const EXPORT_CHOICES = [
   {
     id: "csv",
     title: "CSV Assolia",
     description:
-      "Assolement complet (cultures N à N-4, surfaces, type de sol) prêt à importer dans Assolia.",
+      "Nom, surface, conduite AB, irrigabilité, type de sol, cultures N à N-4 et contour.",
+    limites: "N+1, N-5 et N-6 ne font pas partie du format Assolia et ne sont pas exportés.",
   },
   {
     id: "xml",
     title: "XML Télépac",
-    description: "Fichier de déclaration au format Télépac, à partir d'une colonne de culture.",
+    description: "Fichier de déclaration, alimenté par la colonne de culture de votre choix.",
+    limites: "Une seule année de culture par fichier ; l'historique n'y figure pas.",
   },
   {
     id: "shp",
     title: "Shapefile (.zip)",
-    description: "Contours et attributs pour un SIG (QGIS, ArcGIS) ou un outil tiers.",
+    description:
+      "Contours en Lambert-93 pour un SIG, avec exploitation, campagne, nom, surface et type de sol.",
+    limites:
+      "Le format DBF n'emporte que les cultures N et N-1 ; conduite AB et irrigabilité n'y figurent pas.",
   },
 ];
 
@@ -113,6 +121,11 @@ function ChoiceModal({ onClose, onSelect }) {
             <span className="fp-hint" style={{ fontWeight: 400 }}>
               {choice.description}
             </span>
+            {choice.limites ? (
+              <span className="fp-hint" style={{ fontWeight: 400, color: "var(--c-warn, #b45309)" }}>
+                {choice.limites}
+              </span>
+            ) : null}
           </button>
         ))}
       </div>
@@ -133,6 +146,48 @@ function CsvModal({
   missingSoilFill = "",
   onMissingSoilFillChange,
 }) {
+  // Structures cibles proposées par l'export Assolia. La liste est chargée à
+  // l'ouverture ; en cas d'échec on garde le champ utilisable en saisie libre
+  // plutôt que de bloquer l'export.
+  const [structureNames, setStructureNames] = useState([]);
+  const [structuresError, setStructuresError] = useState("");
+  const [structuresChargement, setStructuresChargement] = useState(true);
+
+  useEffect(() => {
+    let annule = false;
+    setStructuresChargement(true);
+    loadAssoliaStructureNames()
+      .then((names) => {
+        if (annule) return;
+        const liste = Array.isArray(names) ? names : [];
+        setStructureNames(liste);
+        // Un référentiel lisible mais sans aucune structure est un problème de
+        // contenu, pas de réseau : il mérite le même signalement.
+        setStructuresError(
+          liste.length ? "" : "Le référentiel des cultures ne contient aucune structure."
+        );
+      })
+      .catch((error) => {
+        if (annule) return;
+        console.warn("[CSV_STRUCTURES_INDISPONIBLES]", error);
+        setStructuresError(error?.message || "Référentiel des cultures introuvable.");
+      })
+      .finally(() => {
+        if (!annule) setStructuresChargement(false);
+      });
+    return () => {
+      annule = true;
+    };
+  }, []);
+
+  // Une structure enregistrée dans une session précédente peut ne plus figurer
+  // dans la liste : on l'y ajoute pour ne pas la perdre silencieusement.
+  const structureOptions = useMemo(() => {
+    const courante = String(values.structureName || "").trim();
+    if (!courante || structureNames.includes(courante)) return structureNames;
+    return [courante, ...structureNames];
+  }, [structureNames, values.structureName]);
+
   return (
     <Modal
       open
@@ -196,16 +251,42 @@ function CsvModal({
           />
         </label>
         <label style={labelStyle}>
-          Nom de la structure
-          <input
-            type="text"
-            value={values.structureName}
-            onChange={(event) => onChange({ ...values, structureName: event.target.value })}
-            style={inputStyle}
-            placeholder="Ex : Assolia"
-          />
+          Structure cible
+          {structuresError ? (
+            <input
+              type="text"
+              value={values.structureName}
+              onChange={(event) => onChange({ ...values, structureName: event.target.value })}
+              style={inputStyle}
+              placeholder="Ex : Assolia"
+            />
+          ) : (
+            <select
+              value={values.structureName}
+              onChange={(event) => onChange({ ...values, structureName: event.target.value })}
+              style={inputStyle}
+              disabled={structuresChargement}
+            >
+              <option value="">Aucune structure cible</option>
+              {structureOptions.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          )}
           <span className="fp-hint" style={{ fontWeight: 400 }}>
-            Laissez vide pour conserver les libellés de culture tels quels.
+            {structuresError ? (
+              <span style={{ color: "var(--c-warn, #b45309)" }}>
+                Liste indisponible, saisissez le nom à la main. {structuresError}
+              </span>
+            ) : structuresChargement ? (
+              "Lecture du référentiel des cultures…"
+            ) : values.structureName ? (
+              "Les cultures sont converties vers l'assolement de cette structure ; celles qui n'y figurent pas ressortent en « Autre assolé »."
+            ) : (
+              `Sans structure cible, les libellés de culture sont exportés tels quels. ${structureNames.length} structures disponibles.`
+            )}
           </span>
         </label>
 

@@ -433,7 +433,14 @@ export default function ImportParcellaireButton({
                   <span className="fp-badge fp-badge--accent" style={{ minWidth: 96 }}>
                     {format.label}
                   </span>
-                  <span className="fp-hint">{format.description}</span>
+                  <span className="fp-hint">
+                    {format.description}
+                    {format.limites ? (
+                      <span style={{ display: "block", color: "var(--c-text-faint)" }}>
+                        {format.limites}
+                      </span>
+                    ) : null}
+                  </span>
                 </div>
               ))}
             </div>

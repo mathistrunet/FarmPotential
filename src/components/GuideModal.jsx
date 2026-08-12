@@ -28,10 +28,10 @@ const STEPS = [
     title: "3 · Renseigner les informations",
     text: (
       <>
-        Le panneau de droite liste vos parcelles. En vue <strong>Fiches</strong> vous
-        remplissez une parcelle à la fois, en vue <strong>Tableau</strong> vous saisissez en
-        série (nom, surface, conduite AB, cultures N à N-6, type de sol). Les cultures se
-        saisissent par nom ou par code Télépac, avec autocomplétion.
+        Le panneau de droite liste vos parcelles dans un tableau : vous y saisissez en
+        série le nom, la conduite AB, l&apos;irrigabilité, les cultures N+1 à N-6 et le type
+        de sol. Les cultures se saisissent par nom ou par code Télépac, avec autocomplétion.
+        Le bouton <strong>Colonnes</strong> masque celles dont vous n&apos;avez pas besoin.
       </>
     ),
   },
@@ -39,10 +39,13 @@ const STEPS = [
     title: "4 · Exporter le résultat",
     text: (
       <>
-        <strong>Exporter</strong> propose trois sorties : le <strong>CSV Assolia</strong>{" "}
-        (assolement prêt à importer), le <strong>XML Télépac</strong> (fichier de
-        déclaration) et le <strong>shapefile</strong> (.zip pour un SIG). Une fenêtre
-        demande les quelques informations nécessaires avant le téléchargement.
+        <strong>Exporter</strong> propose trois sorties. Le <strong>CSV Assolia</strong>{" "}
+        emporte les cultures N à N-4, la surface, la conduite AB, l&apos;irrigabilité et le
+        type de sol — N+1, N-5 et N-6 ne font pas partie du format. Le{" "}
+        <strong>XML Télépac</strong> ne contient qu&apos;une seule année, celle de la colonne
+        que vous désignez. Le <strong>shapefile</strong> (.zip, Lambert-93) n&apos;emporte
+        que les cultures N et N-1, sans conduite AB ni irrigabilité. Une fenêtre demande les
+        informations nécessaires avant le téléchargement.
       </>
     ),
   },
@@ -127,7 +130,7 @@ const TIPS = [
   },
   {
     label: "Plusieurs millésimes",
-    text: "Importez plusieurs fichiers d'années différentes : chaque parcelle porte son année. Le filtre « Année » du panneau et l'outil « Associer les parcelles » permettent de faire correspondre les millésimes.",
+    text: "Importez plusieurs fichiers d'années différentes : chaque parcelle porte son année. Le filtre « Année » du panneau restreint la carte, le tableau et les actions en série à un seul millésime. « Comparer deux millésimes » associe les parcelles d'une année à l'autre : l'année conservée doit être la plus récente, et l'historique de l'année qui disparaît est décalé du nombre d'années qui les sépare.",
   },
   {
     label: "Fonds de carte",
@@ -243,7 +246,14 @@ export default function GuideModal({ open, onClose }) {
                       {format.extensions.join(", ")}
                     </div>
                   </th>
-                  <td style={guideCellStyle}>{format.description}</td>
+                  <td style={guideCellStyle}>
+                    {format.description}
+                    {format.limites ? (
+                      <div style={{ color: "var(--c-text-faint)", marginTop: 3 }}>
+                        {format.limites}
+                      </div>
+                    ) : null}
+                  </td>
                 </tr>
               ))}
             </tbody>

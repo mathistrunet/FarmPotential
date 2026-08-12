@@ -476,6 +476,13 @@ async function servePublicData(requestUrl, res) {
   if (!filePath) return false;
   if (await sendFile(filePath, res)) return true;
 
+  // Repli sur les référentiels versionnés du dépôt (`data/`). Ils sont légers et
+  // suivis par Git : sur un poste neuf, ou sans accès aux Releases GitHub, le
+  // référentiel des cultures Assolia reste ainsi disponible et l'export CSV
+  // conserve sa correspondance de structures.
+  const versionne = resolveInside(DATA_DIR, relative);
+  if (versionne && (await sendFile(versionne, res))) return true;
+
   // Absent du disque : la couche est peut-être publiée et téléchargeable.
   const parsed = path.parse(relative);
   try {
