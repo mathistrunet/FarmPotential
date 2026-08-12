@@ -101,25 +101,62 @@ function getMetacodeFromValue(raw) {
   return "";
 }
 
+/**
+ * Emplacements essayés pour le référentiel des cultures Assolia.
+ *
+ * `withBasePath` produit une URL relative quand l'application est construite avec
+ * `base: "./"` : elle se résout alors contre l'adresse de la page, ce qui échoue
+ * dès que celle-ci porte un segment de chemin. On retente donc en absolu, puis
+ * sur la copie versionnée du dépôt que le serveur local sait servir. Sans cela,
+ * un seul emplacement manquant privait l'export CSV de toute la correspondance
+ * de structures — et la liste des structures restait vide sans explication.
+ */
+const ASSOLIA_CULTURES_URLS = [
+  ASSOLIA_CULTURES_PATH,
+  "/data/assolia_cultures_export.csv",
+  "data/assolia_cultures_export.csv",
+];
+
+const parseAssoliaCsv = (text) =>
+  parse(text, {
+    columns: true,
+    delimiter: ";",
+    relax_quotes: true,
+    skip_empty_lines: true,
+    bom: true,
+    trim: true,
+  });
+
+async function fetchAssoliaCulturesText() {
+  const echecs = [];
+  for (const url of ASSOLIA_CULTURES_URLS) {
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        echecs.push(`${url} → HTTP ${response.status}`);
+        continue;
+      }
+      const text = await response.text();
+      // Une route inconnue peut retomber sur index.html : on refuse le HTML,
+      // sinon l'analyse CSV réussirait sur une page web et rendrait zéro structure.
+      if (/^\s*<(?:!doctype|html)/i.test(text)) {
+        echecs.push(`${url} → page HTML au lieu du CSV`);
+        continue;
+      }
+      return text;
+    } catch (error) {
+      echecs.push(`${url} → ${error?.message || "échec réseau"}`);
+    }
+  }
+  throw new Error(
+    `Chargement du référentiel cultures impossible (${echecs.join(" ; ")}).`
+  );
+}
+
 async function loadAssoliaCulturesExport() {
   if (!assoliaCulturesPromise) {
-    assoliaCulturesPromise = fetch(ASSOLIA_CULTURES_PATH)
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error("Chargement du référentiel cultures impossible.");
-        }
-        return response.text();
-      })
-      .then((text) =>
-        parse(text, {
-          columns: true,
-          delimiter: ";",
-          relax_quotes: true,
-          skip_empty_lines: true,
-          bom: true,
-          trim: true,
-        })
-      )
+    assoliaCulturesPromise = fetchAssoliaCulturesText()
+      .then(parseAssoliaCsv)
       .catch((error) => {
         assoliaCulturesPromise = null; // permet une nouvelle tentative au prochain appel
         throw error;

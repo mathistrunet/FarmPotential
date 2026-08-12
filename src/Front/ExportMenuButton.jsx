@@ -150,18 +150,30 @@ function CsvModal({
   // l'ouverture ; en cas d'échec on garde le champ utilisable en saisie libre
   // plutôt que de bloquer l'export.
   const [structureNames, setStructureNames] = useState([]);
-  const [structuresError, setStructuresError] = useState(false);
+  const [structuresError, setStructuresError] = useState("");
+  const [structuresChargement, setStructuresChargement] = useState(true);
 
   useEffect(() => {
     let annule = false;
+    setStructuresChargement(true);
     loadAssoliaStructureNames()
       .then((names) => {
-        if (!annule) setStructureNames(Array.isArray(names) ? names : []);
+        if (annule) return;
+        const liste = Array.isArray(names) ? names : [];
+        setStructureNames(liste);
+        // Un référentiel lisible mais sans aucune structure est un problème de
+        // contenu, pas de réseau : il mérite le même signalement.
+        setStructuresError(
+          liste.length ? "" : "Le référentiel des cultures ne contient aucune structure."
+        );
       })
       .catch((error) => {
         if (annule) return;
         console.warn("[CSV_STRUCTURES_INDISPONIBLES]", error);
-        setStructuresError(true);
+        setStructuresError(error?.message || "Référentiel des cultures introuvable.");
+      })
+      .finally(() => {
+        if (!annule) setStructuresChargement(false);
       });
     return () => {
       annule = true;
@@ -253,6 +265,7 @@ function CsvModal({
               value={values.structureName}
               onChange={(event) => onChange({ ...values, structureName: event.target.value })}
               style={inputStyle}
+              disabled={structuresChargement}
             >
               <option value="">Aucune structure cible</option>
               {structureOptions.map((name) => (
@@ -263,11 +276,17 @@ function CsvModal({
             </select>
           )}
           <span className="fp-hint" style={{ fontWeight: 400 }}>
-            {structuresError
-              ? "Liste des structures indisponible : saisissez le nom à la main."
-              : values.structureName
-                ? "Les cultures sont converties vers l'assolement de cette structure ; celles qui n'y figurent pas ressortent en « Autre assolé »."
-                : "Sans structure cible, les libellés de culture sont exportés tels quels."}
+            {structuresError ? (
+              <span style={{ color: "var(--c-warn, #b45309)" }}>
+                Liste indisponible, saisissez le nom à la main. {structuresError}
+              </span>
+            ) : structuresChargement ? (
+              "Lecture du référentiel des cultures…"
+            ) : values.structureName ? (
+              "Les cultures sont converties vers l'assolement de cette structure ; celles qui n'y figurent pas ressortent en « Autre assolé »."
+            ) : (
+              `Sans structure cible, les libellés de culture sont exportés tels quels. ${structureNames.length} structures disponibles.`
+            )}
           </span>
         </label>
 
